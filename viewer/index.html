@@ -185,12 +185,21 @@ const EV = {
   rivalry:      { icon: '⚔', major: false, re: /rivalry: (\w+) lost (\d+) followers to (\w+)/, vi: m => `${m[1]} mất ${m[2]} người theo về tay ${m[3]}`, en: m => `${m[1]} lost ${m[2]} followers to ${m[3]}` },
   merger:       { icon: '🤝', major: false, re: /(\w+) and (\d+) followers went over to (\w+)/, vi: m => `${m[1]} cùng ${m[2]} người theo về dưới trướng ${m[3]}`, en: m => `${m[1]} and ${m[2]} followers went over to ${m[3]}` },
   innovation:   { icon: '💡', major: false, re: /innovation: (\w+) \(t(\d+): ([^)]*)\) by lineage (\d+)/, vi: m => `Phát minh ${m[1]} (bậc ${m[2]}: ${m[3]}) của dòng họ ${m[4]}`, en: m => `Innovation ${m[1]} (tier ${m[2]}: ${m[3]}) by lineage ${m[4]}` },
-  adopted:      { icon: '📖', major: false, re: /(\w+) \(t(\d+): ([^)]*)\) is now known by half/, vi: m => `Nửa dân số đã biết ${m[1]} (${m[3]})`, en: m => `Half the people now know ${m[1]} (${m[3]})` },
+  adopted:      { icon: '📖', major: false, re: /^(\w+)(?: = (.+?) -> (\w+))? \(t(\d+): ([^)]*)\) is now known by half/, vi: m => m[2] ? `Nửa dân số đã biết làm ${slotVi(m[3])} ${m[1]}: ${m[2]} (${m[5]})` : `Nửa dân số đã biết ${m[1]} (${m[5]})`, en: m => m[2] ? `Half the people can now make the ${m[3]} ${m[1]}: ${m[2]} (${m[5]})` : `Half the people now know ${m[1]} (${m[5]})` },
   famine:       { icon: '🥀', major: false, re: /famine: (\d+) starved \((\d+)%/, vi: m => `Nạn đói: ${num(m[1])} chết đói (${m[2]}% dân mỗi 1000 tick)`, en: m => `Famine: ${num(m[1])} starved (${m[2]}% per 1000 ticks)` },
   war:          { icon: '🔥', major: false, re: /war: (\d+) killed in (\d+) attacks \((\d+)%/, vi: m => `Chiến tranh: ${num(m[1])} bị giết trong ${num(m[2])} trận (${m[3]}%)`, en: m => `War: ${num(m[1])} killed in ${num(m[2])} attacks (${m[3]}%)` },
   plague:       { icon: '☣', major: true, re: /plague: a sickness appears/, vi: () => 'Dịch bệnh bùng phát', en: () => 'A plague breaks out', sub: { vi: () => 'bệnh lây theo tiếp xúc, làng đông chịu nặng nhất', en: () => 'spreads by contact; crowded villages suffer most' } },
   plague_toll:  { icon: '☣', major: false, re: /plague toll: (\d+) dead of sickness, (\d+) infected/, vi: m => `Dịch: ${num(m[1])} chết, ${num(m[2])} nhiễm`, en: m => `Plague: ${num(m[1])} dead, ${num(m[2])} infected` },
   raids:        { icon: '🔥', major: false, re: /raids: (\d+) fields burned/, vi: m => `Cướp bóc: ${m[1]} ruộng bị đốt`, en: m => `Raids: ${m[1]} fields burned` },
+  craft:        { icon: '🔨', major: false, re: /crafted: (\w+) = (.+?) -> (\w+) \(t(\d+): ([^)]*)\) by lineage (\d+)/, vi: m => `Chế tạo ${m[1]}: ${m[2]} → ${slotVi(m[3])} (${m[5]})`, en: m => `Made ${m[1]}: ${m[2]} → ${m[3]} (${m[5]})`, sub: { vi: m => `dòng họ ${m[6]}`, en: m => `lineage ${m[6]}` } },
+  first_tool:   { icon: '🪓', major: true, re: /first tool: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Công cụ đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} makes the first tool`, sub: { vi: () => 'thứ để đào và chặt, làm từ vật liệu họ nhặt được', en: m => m[2] } },
+  first_weapon: { icon: '🗡', major: true, re: /first weapon: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Vũ khí đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} makes the first weapon`, sub: { vi: () => 'thứ được làm ra để gây thương tích', en: m => m[2] } },
+  first_armour: { icon: '🛡', major: true, re: /first armour: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Tấm chắn đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} makes the first shield`, sub: { vi: () => 'thứ để nấp sau', en: m => m[2] } },
+  first_boat:   { icon: '🛶', major: true, re: /first boat: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Thuyền đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} makes the first boat`, sub: { vi: () => 'thứ nổi được và chở được', en: m => m[2] } },
+  first_vessel: { icon: '🏺', major: true, re: /first vessel: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Bình chứa đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} makes the first vessel`, sub: { vi: () => 'thứ giữ và cất được', en: m => m[2] } },
+  first_fire:   { icon: '🔥', major: true, re: /first fire: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Dòng họ ${m[1]} tạo ra lửa`, en: m => `Lineage ${m[1]} makes fire`, sub: { vi: () => 'đánh ra từ đá; nấu chín, sưởi ấm, và mở ra cách nung', en: m => m[2] } },
+  first_shelter:{ icon: '🏠', major: true, re: /first shelter: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Nơi trú đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} builds the first shelter`, sub: { vi: () => 'tường và mái, dựng nơi họ ở lại', en: m => m[2] } },
+  first_house_burned: { icon: '🔥', major: false, re: /first house burned/, vi: () => 'Nhà bị đốt lần đầu', en: () => 'The first house is burned' },
   first_sail:   { icon: '⛵', major: true, re: /first boat: lineage (\d+) sets out to sea at \((\d+), (\d+)\)/, vi: m => `Chuyến ra khơi đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} sets out to sea for the first time`, sub: { vi: () => 'thuyền là phát minh của họ, biển không còn là biên giới', en: () => 'boats are their invention; the sea is no longer a border' } },
   first_burn:   { icon: '🔥', major: true, re: /first fields burned/, vi: () => 'Ruộng bị đốt lần đầu', en: () => 'The first fields are burned', sub: { vi: () => 'kẻ cướp được trang bị tốt đã học cách đốt làng', en: () => 'well-armed raiders have learned to torch villages' } },
   drought:      { icon: '☀', major: false, re: /drought: rains fail for (\d+)/, vi: m => `Hạn hán: mưa ngừng ${m[1]} tick`, en: m => `Drought: rains fail for ${m[1]} ticks` },
@@ -281,6 +290,8 @@ function parseEvents(text) {
     return { tick, kind, text: txt, x: m ? +m[1] : null, y: m ? +m[2] : null };
   });
 }
+const SLOT_VI = { tool: 'công cụ', weapon: 'vũ khí', armour: 'tấm chắn', boat: 'thuyền', vessel: 'bình chứa', fire: 'lửa', shelter: 'nơi trú' };
+function slotVi(s) { return SLOT_VI[s] || s; }
 function guessKind(txt) { for (const k in EV) if (EV[k].re.test(txt)) return k; return 'other'; }
 
 async function boot(bytes, meta, evText) {
@@ -289,6 +300,7 @@ async function boot(bytes, meta, evText) {
   if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'AISV' || dv.getUint32(4, true) < 3) { $('loadmsg').textContent = t('badfile') + ' (v3+)'; return; }
   state.W = dv.getUint16(8, true); state.H = dv.getUint16(10, true); state.maxFood = dv.getFloat32(12, true);
   state.version = dv.getUint32(4, true); state.water = null; state.dataStart = 16;
+  state.nLayers = state.version >= 5 ? 4 : 3; state.agentBytes = state.version >= 5 ? 23 : 22;
   if (state.version >= 4) { const n = dv.getUint32(16, true); state.water = new Uint8Array(state.W * state.H); for (let i = 0; i < state.W * state.H; i++) state.water[i] = (bytes[20 + (i >> 3)] >> (i & 7)) & 1; state.dataStart = 20 + n; }
   state.meta = meta || { names: {}, eras: T.en.eras };
   state.frames = []; indexFrames();
@@ -312,8 +324,8 @@ function indexFrames() {
       soil: dv.getFloat32(start + 14, true), climate: dv.getFloat32(start + 18, true), obedience: dv.getFloat32(start + 22, true),
       known: dv.getFloat32(start + 26, true), season: dv.getFloat32(start + 30, true), layers: [] };
     let o = start + 34;
-    for (let L = 0; L < 3; L++) { const n = dv.getUint32(o, true); f.layers.push([o + 4, n]); o += 4 + n; }
-    f.agents = o; f.storesOff = o + f.pop * 22;
+    for (let L = 0; L < state.nLayers; L++) { const n = dv.getUint32(o, true); f.layers.push([o + 4, n]); o += 4 + n; }
+    f.agents = o; f.storesOff = o + f.pop * state.agentBytes;
     state.frames.push(f); off = end;
   }
 }
@@ -329,8 +341,8 @@ function layersOf(idx) {
   if (c.idx === idx) return c.layers;
   let from;
   if (c.idx >= 0 && c.idx < idx && idx - c.idx < 16 && !state.frames.slice(c.idx + 1, idx + 1).some(f => f.key)) from = c.idx + 1;
-  else { let k = idx; while (k > 0 && !state.frames[k].key) k--; from = k; c.layers = [new Uint8Array(n), new Uint8Array(n), new Uint8Array(n)]; }
-  for (let i = from; i <= idx; i++) { const f = state.frames[i]; for (let L = 0; L < 3; L++) rleInto(c.layers[L], state.bytes, f.layers[L][0], f.layers[L][1], !f.key); }
+  else { let k = idx; while (k > 0 && !state.frames[k].key) k--; from = k; c.layers = Array.from({ length: state.nLayers }, () => new Uint8Array(n)); }
+  for (let i = from; i <= idx; i++) { const f = state.frames[i]; for (let L = 0; L < state.nLayers; L++) rleInto(c.layers[L], state.bytes, f.layers[L][0], f.layers[L][1], !f.key); }
   c.idx = idx; return c.layers;
 }
 function agentsOf(idx) {
@@ -338,12 +350,12 @@ function agentsOf(idx) {
   const f = state.frames[idx], b = state.bytes, dv = new DataView(b.buffer, b.byteOffset); const n = f.pop;
   const a = { n, id: new Uint32Array(n), x: new Float32Array(n), y: new Float32Array(n), lineage: new Uint16Array(n), name: new Uint32Array(n),
     followers: new Uint16Array(n), flags: new Uint8Array(n), energy: new Uint8Array(n), mdx: new Int8Array(n), mdy: new Int8Array(n),
-    under: new Uint8Array(n), action: new Uint8Array(n), index: new Map(), stores: [] };
-  let o = f.agents;
-  for (let i = 0; i < n; i++, o += 22) {
+    under: new Uint8Array(n), action: new Uint8Array(n), gear: new Uint8Array(n), index: new Map(), stores: [] };
+  let o = f.agents; const AB = state.agentBytes;
+  for (let i = 0; i < n; i++, o += AB) {
     a.id[i] = dv.getUint32(o, true); a.x[i] = dv.getUint16(o + 4, true) / 64; a.y[i] = dv.getUint16(o + 6, true) / 64;
     a.lineage[i] = dv.getUint16(o + 8, true); a.name[i] = dv.getUint32(o + 10, true); a.followers[i] = dv.getUint16(o + 14, true);
-    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21];
+    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21]; a.gear[i] = AB >= 23 ? b[o + 22] : 0;
     a.index.set(a.id[i], i);
   }
   o = f.storesOff;
@@ -627,7 +639,7 @@ function initPixi() {
     houseTex = ['house_green', 'house_red', 'house_green2', 'house_orange', 'house_purple', 'house_blue'].map(n => propTexture(n)).filter(Boolean).map(t => t[0]);
     cloudTex = []; for (let k = 0; k < 6; k++) { const t = propTexture('cloud_' + k); if (t) cloudTex.push(t[0]); }
     animalTex = {}; for (const n of ['chicken', 'cow', 'pig', 'sheep', 'duck']) animalTex[n] = propTexture(n);
-    for (const n of ['expression_alerted', 'expression_attack', 'expression_chat', 'expression_confused', 'expression_love', 'expression_stress', 'expression_working', 'indicator']) { const t = propTexture(n); if (t) uiTex[n] = t[0]; }
+    for (const n of ['expression_alerted', 'expression_attack', 'expression_chat', 'expression_confused', 'expression_love', 'expression_stress', 'expression_working', 'indicator', 'axe', 'sword', 'basket', 'shovel', 'pickaxe', 'water', 'hammer']) { const t = propTexture(n); if (t) uiTex[n] = t[0]; }
     uiTex.greenbar = []; for (let k = 0; k < 7; k++) { const t = propTexture('greenbar_0' + k); if (t) uiTex.greenbar.push(t[0]); }
     cropTex = {}; for (const c of ['wheat', 'carrot', 'pumpkin', 'cabbage', 'potato', 'beetroot', 'cauliflower', 'kale']) { const st = []; for (let k = 0; k < 6; k++) { const r = S.pm[`${c}_${k}`]; st.push(r || null); } if (st.every(Boolean)) cropTex[c] = st; }
     tileTexCache.clear();
@@ -879,11 +891,29 @@ function draw(force) {
   if (force || state.lastPropsFrame !== idx) {
     state.lastPropsFrame = idx;
     for (const L of [storeLayer, fxLayer, labelLayer, animLayer]) L.removeChildren().forEach(c => c.destroy({ children: true })); animSprites = [];
-    // villages where people have settled: one house per 7x7 block with at least eight settled agents
+    const built = state.nLayers >= 4 ? layersOf(idx)[3] : null;
+    if (built) {
+      // Shelters the people made: wood-like, stone-like or fired, small or strong.
+      const W = state.W, H = state.H; let n = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const v = built[y * W + x]; if (!v || n > 6000) continue; n++;
+        const look = ((v - 1) % 3) + 1, strong = v > 3;
+        let tex, sc;
+        if (sunny) {
+          const pick = hash(x, y, 21);
+          tex = look === 1 ? houseTex[pick < 0.5 ? 0 : 2] : look === 2 ? houseTex[pick < 0.5 ? 1 : 3] : houseTex[pick < 0.5 ? 4 : 5];
+          sc = strong ? 0.75 : 0.5;
+        } else { tex = propTex.house; sc = strong ? 0.5 : 0.35; }
+        if (!tex) continue;
+        const h = new PIXI.Sprite(tex); h.anchor.set(0.5, 1); h.scale.set(sc); h.position.set(x * TILE + TILE / 2, y * TILE + TILE + 4); storeLayer.addChild(h);
+        if (sunny && strong && look === 3 && fireTex.length && hash(x, y, 22) < 0.3) addAnim(fireTex, x * TILE + TILE / 2 + 18, y * TILE + TILE + 2, 1, x + y);
+      }
+    }
+    // villages where people have settled (older streams without a buildings layer): one house per 7x7 block
     const blocks = new Map();
     for (let i = 0; i < A.n; i++) if (A.flags[i] & 4) { const k = Math.floor(A.y[i] / 7) * 1000 + Math.floor(A.x[i] / 7); blocks.set(k, (blocks.get(k) || 0) + 1); }
     for (const [k, n] of blocks) {
-      if (n < 8) continue; const bx = k % 1000, by = Math.floor(k / 1000);
+      if (n < 8 || built) continue; const bx = k % 1000, by = Math.floor(k / 1000);
       const hx = bx * 7 * TILE + TILE * (1.5 + hash(bx, by, 5) * 4), hy = by * 7 * TILE + TILE * (2 + hash(bx, by, 6) * 4);
       if (sunny) {
         const h = new PIXI.Sprite(houseTex[Math.floor(hash(bx, by, 7) * houseTex.length)]); h.anchor.set(0.5, 1); h.scale.set(0.85); h.position.set(hx, hy); storeLayer.addChild(h);
@@ -911,6 +941,16 @@ function draw(force) {
     }
     // attack swings and love bubbles (the pack's characters swing their own sword, so only the fallback needs a slash)
     if (!sunny) for (let i = 0; i < A.n; i++) if (A.action[i] === 1) { const sl = new PIXI.Sprite(slashTex); sl.anchor.set(0.5, 0.5); sl.position.set(A.x[i] * TILE + TILE / 2 + (A.mdx[i] < 0 ? -10 : 10), A.y[i] * TILE + 4); sl.scale.set(A.mdx[i] < 0 ? -1 : 1, 1); sl.alpha = 0.9; fxLayer.addChild(sl); }
+    if (sunny && state.cam.zoom >= 5 && uiTex.axe) {
+      // What people carry: a tool, a weapon, a vessel, a fire.
+      let n = 0; const icons = [uiTex.axe, uiTex.sword, null, null, uiTex.basket, null];
+      for (let i = 0; i < A.n && n < 600; i++) {
+        const g = A.gear[i]; if (!g) continue;
+        let k = 0;
+        for (let b = 0; b < 6; b++) { if (!(g & (1 << b)) || !icons[b]) continue; const ic = new PIXI.Sprite(icons[b]); ic.anchor.set(0.5, 1); ic.scale.set(0.6); ic.position.set(A.x[i] * TILE + TILE / 2 - 8 + k * 7, A.y[i] * TILE - 4); fxLayer.addChild(ic); k++; n++; }
+        if ((g & 32) && fireTex.length) { const f = addAnim(fireTex, A.x[i] * TILE + TILE / 2 + 9, A.y[i] * TILE + TILE, 0.7, i); f.alpha = 0.9; }
+      }
+    }
     if (sunny && state.cam.zoom >= 3 && uiTex.expression_love) { let n = 0; for (let i = 0; i < A.n && n < 400; i++) if (A.action[i] === 3) { const b = new PIXI.Sprite(uiTex.expression_love); b.anchor.set(0.5, 1); b.position.set(A.x[i] * TILE + TILE / 2 + 6, A.y[i] * TILE - 2); fxLayer.addChild(b); n++; } }
     const leaders = []; for (let i = 0; i < A.n; i++) if (A.flags[i] & 2) leaders.push(i);
     leaders.sort((a, b) => A.followers[b] - A.followers[a]);
@@ -989,7 +1029,7 @@ function renderEventList() {
   const box = $('events'); box.innerHTML = '';
   for (const [i, e] of state.events.entries()) {
     const d = describeEvent(e); const el = document.createElement('div');
-    el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience','first_sail'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
+    el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','first_house_burned','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience','first_sail','craft','first_tool','first_weapon','first_armour','first_boat','first_vessel','first_fire','first_shelter'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
     el.dataset.i = i; el.innerHTML = `<span class="ic">${d.icon}</span><span><span class="t">${e.tick}</span>${d.text.replace(/</g, '&lt;')}${d.sub ? ' <span style="color:var(--muted)">· ' + d.sub + '</span>' : ''}</span>`;
     if (e.x != null) el.onclick = () => { flyTo(e.x, e.y); state.follow = null; state.frame = frameAt(e.tick); state.sub = 0; syncButtons(); draw(true); };
     box.appendChild(el);

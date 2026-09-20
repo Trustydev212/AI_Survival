@@ -5,9 +5,9 @@ use crate::orders::{Order, N_ORDER};
 use crate::rng::Rng;
 
 pub const N_MEM: usize = 4;
-pub const N_IN: usize = 76;
+pub const N_IN: usize = 90;
 pub const N_HID: usize = 16;
-pub const N_ACT: usize = 5;
+pub const N_ACT: usize = 6;
 // move_x, move_y, go/stay, action scores, memory, order scores, order direction
 pub const N_OUT: usize = 3 + N_ACT + N_MEM + N_ORDER + 2;
 const O_MEM: usize = 3 + N_ACT;
@@ -24,10 +24,12 @@ pub enum Action {
     Share = 2,
     Reproduce = 3,
     Rest = 4,
+    /// Work what you carry: make a known thing, or try something new.
+    Craft = 5,
 }
 
 impl Action {
-    pub const ALL: [Action; N_ACT] = [Action::Gather, Action::Attack, Action::Share, Action::Reproduce, Action::Rest];
+    pub const ALL: [Action; N_ACT] = [Action::Gather, Action::Attack, Action::Share, Action::Reproduce, Action::Rest, Action::Craft];
     pub fn name(self) -> &'static str {
         match self {
             Action::Gather => "gather",
@@ -35,6 +37,7 @@ impl Action {
             Action::Share => "share",
             Action::Reproduce => "repro",
             Action::Rest => "rest",
+            Action::Craft => "craft",
         }
     }
 }

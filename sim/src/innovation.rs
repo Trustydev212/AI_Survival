@@ -1,9 +1,15 @@
 //! Open-ended innovations. Nothing here is named after human history: each world
-//! generates its own discoveries from its seed. An innovation is a bundle of effects,
-//! biased toward what its discoverer was doing, and it always carries a price.
+//! generates its own discoveries from its seed.
+//!
+//! Two kinds exist. A **practice** is an idea: a bundle of social or agricultural
+//! effects biased toward what its discoverer was doing, always with a price. A **craft**
+//! is a thing: a recipe found by working materials (see craft.rs), whose effects follow
+//! from the physics of what it is made of. Knowing a craft is not the same as holding
+//! it: the thing must be made, from materials, and it wears out.
 
 use crate::agent::name_of;
 use crate::brain::Action;
+use crate::craft::{self, Craft, Ing, Process, Slot, MAT_NAMES, N_MAT, N_PROP};
 use crate::rng::Rng;
 
 /// Effect dimensions. Positive is better except METABOLISM and SOIL, where positive hurts.
@@ -18,11 +24,14 @@ pub const E_INVENT: usize = 7; // discovery rate
 pub const E_SHARE: usize = 8; // amount given when sharing
 pub const E_SOIL: usize = 9; // extra soil exhaustion per harvest (+ is worse)
 pub const E_SEA: usize = 10; // seafaring: boats once it passes the threshold in config
-pub const N_EFFECT: usize = 11;
+pub const E_STORE: usize = 11; // carrying capacity
+pub const E_SHELTER: usize = 12; // warmth and walls where one lives
+pub const N_EFFECT: usize = 13;
 pub const EFFECT_NAMES: [&str; N_EFFECT] =
-    ["gather", "metabolism", "attack", "defense", "farm", "resist", "teach", "invent", "share", "soil", "sea"];
+    ["gather", "metabolism", "attack", "defense", "farm", "resist", "teach", "invent", "share", "soil", "sea", "store", "shelter"];
 
-pub const MAX_INNOVATIONS: usize = 64;
+/// Knowledge is a u128 bitset, so a world holds at most this many innovations.
+pub const MAX_INNOVATIONS: usize = 128;
 
 #[derive(Clone)]
 pub struct Innovation {
@@ -31,57 +40,59 @@ pub struct Innovation {
     pub effects: [f32; N_EFFECT],
     pub born_tick: u64,
     pub lineage: u32,
+    /// Some for a made thing, None for a practice.
+    pub craft: Option<Craft>,
 }
 
 impl Innovation {
-    /// Generate a new innovation. `doing` biases which benefit appears; `tier` scales it.
-    /// `coastal` discoverers (within a few cells of the sea) sometimes find ways onto the water instead.
-    #[allow(clippy::too_many_arguments)]
-    pub fn generate(rng: &mut Rng, id: usize, tier: u8, doing: Action, settled: bool, sick: bool, coastal: bool, tick: u64, lineage: u32) -> Innovation {
+    /// A practice: an idea about farming, health, teaching, sharing or invention.
+    /// `doing` biases which benefit appears; `tier` scales it. Tools and weapons are
+    /// not ideas; they have to be made (see `crafted`).
+    pub fn practice(rng: &mut Rng, id: usize, tier: u8, doing: Action, settled: bool, sick: bool, tick: u64, lineage: u32) -> Option<Innovation> {
         let mut effects = [0.0f32; N_EFFECT];
         let scale = 0.15 * (tier as f32).powf(0.8);
         let magnitude = |rng: &mut Rng| scale * (0.7 + 0.6 * rng.f32());
 
-        // Primary benefit follows the work being done.
         let pool: &[usize] = match doing {
-            Action::Gather if settled => &[E_FARM, E_FARM, E_GATHER, E_DEFENSE, E_SOIL, E_SOIL],
-            Action::Gather => &[E_GATHER, E_GATHER, E_METABOLISM, E_FARM],
-            Action::Attack => &[E_ATTACK, E_ATTACK, E_DEFENSE],
+            Action::Gather if settled => &[E_FARM, E_FARM, E_RESIST, E_SOIL],
+            Action::Gather => &[E_FARM, E_RESIST],
             Action::Share => &[E_TEACH, E_SHARE, E_INVENT],
             Action::Reproduce => &[E_RESIST, E_SHARE],
-            Action::Rest if sick => &[E_RESIST, E_RESIST, E_METABOLISM],
-            Action::Rest => &[E_METABOLISM, E_DEFENSE, E_INVENT, E_RESIST],
+            Action::Rest if sick => &[E_RESIST, E_RESIST],
+            Action::Rest => &[E_INVENT, E_TEACH, E_RESIST],
+            Action::Attack | Action::Craft => return None,
         };
-        let mut primary = pool[rng.range(pool.len())];
-        if coastal && rng.f32() < 0.35 {
-            primary = E_SEA;
-        }
+        let primary = pool[rng.range(pool.len())];
         let m = magnitude(rng);
-        // Metabolism and soil are costs, so a benefit there is a reduction.
-        effects[primary] += if primary == E_METABOLISM || primary == E_SOIL { -m } else { m };
-
-        // Sometimes a second, smaller benefit.
+        effects[primary] += if primary == E_SOIL { -m } else { m };
         if rng.f32() < 0.3 {
-            let all = [E_GATHER, E_ATTACK, E_DEFENSE, E_FARM, E_RESIST, E_TEACH, E_INVENT, E_SHARE];
+            let all = [E_FARM, E_RESIST, E_TEACH, E_INVENT, E_SHARE];
             let d = all[rng.range(all.len())];
             effects[d] += magnitude(rng) * 0.5;
         }
-
-        // Every innovation has a price: it burns more energy, or it wears the land.
+        // Every idea has a price: it burns more energy, or it wears the land.
         let price = m * (0.4 + 0.6 * rng.f32());
-        let land_biased = matches!(primary, E_GATHER | E_FARM);
-        let p_soil_price = if primary == E_SOIL || primary == E_SEA { 0.0 } else if land_biased { 0.75 } else { 0.35 };
+        let p_soil_price = if primary == E_SOIL { 0.0 } else if primary == E_FARM { 0.75 } else { 0.35 };
         if rng.f32() < p_soil_price {
             effects[E_SOIL] += price;
         } else {
             effects[E_METABOLISM] += price;
         }
-
-        Innovation { name: name_of(1_000_000 + id as u32), tier, effects, born_tick: tick, lineage }
+        Some(Innovation { name: name_of(1_000_000 + id as u32), tier, effects, born_tick: tick, lineage, craft: None })
     }
 
-    /// Short label like "Kesh (t2: +farm .21, +soil .12)".
-    pub fn describe(&self) -> String {
+    /// A made thing, from a process applied to parts whose properties are given.
+    #[allow(clippy::too_many_arguments)]
+    pub fn crafted(id: usize, process: Process, parts: &[Ing], part_props: &[[f32; N_PROP]], props: [f32; N_PROP], depth: u8, cost: [u8; N_MAT], tick: u64, lineage: u32) -> Innovation {
+        let (effects, slot, _) = craft::effects_of(&props, parts.len(), craft::bodies_in(part_props));
+        let mut ps = [craft::NO_ING; 3];
+        ps[..parts.len()].copy_from_slice(parts);
+        let c = Craft { process, parts: ps, n_parts: parts.len() as u8, props, slot, life: craft::life_of(&props, slot), cost, depth };
+        Innovation { name: name_of(1_000_000 + id as u32), tier: craft::tier_of(&props, depth), effects, born_tick: tick, lineage, craft: Some(c) }
+    }
+
+    /// Effects as text: "+farm 0.21, +soil 0.12".
+    pub fn effects_text(&self) -> String {
         let mut parts = Vec::new();
         for d in 0..N_EFFECT {
             let v = self.effects[d];
@@ -89,20 +100,54 @@ impl Innovation {
                 parts.push(format!("{}{} {:.2}", if v > 0.0 { "+" } else { "-" }, EFFECT_NAMES[d], v.abs()));
             }
         }
-        format!("{} (t{}: {})", self.name, self.tier, parts.join(", "))
+        parts.join(", ")
+    }
+
+    /// Short label like "Kesh (t2: +farm .21, +soil .12)" or
+    /// "Kesh = bind(sharpen(stone), wood, fibre) -> tool (+gather .35, +metabolism .1)".
+    pub fn describe(&self, registry: &[Innovation]) -> String {
+        match &self.craft {
+            None => format!("{} (t{}: {})", self.name, self.tier, self.effects_text()),
+            Some(c) => {
+                let named = |ing: Ing| ing_name(ing, registry);
+                let parts = &c.parts[..c.n_parts as usize];
+                format!("{} = {} -> {} (t{}: {})", self.name, craft::recipe_text(c.process, parts, &named), slot_name(c.slot), self.tier, self.effects_text())
+            }
+        }
     }
 }
 
-/// Sum the effects of every innovation an agent knows.
-pub fn capabilities(known: u64, registry: &[Innovation]) -> [f32; N_EFFECT] {
+pub fn slot_name(s: Slot) -> &'static str {
+    craft::SLOT_NAMES[s as usize]
+}
+
+/// The name of an ingredient: a raw material, or a made thing's recipe spelled out.
+pub fn ing_name(ing: Ing, registry: &[Innovation]) -> String {
+    let i = ing as usize;
+    if i < N_MAT {
+        return MAT_NAMES[i].to_string();
+    }
+    match registry.get(i - N_MAT) {
+        Some(inn) => match &inn.craft {
+            Some(c) => craft::recipe_text(c.process, &c.parts[..c.n_parts as usize], &|p| ing_name(p, registry)),
+            None => inn.name.clone(),
+        },
+        None => "?".to_string(),
+    }
+}
+
+/// Sum the effects of every practice an agent knows. Crafts count only when held (gear).
+pub fn capabilities(known: u128, registry: &[Innovation]) -> [f32; N_EFFECT] {
     let mut caps = [0.0f32; N_EFFECT];
     let mut bits = known;
     while bits != 0 {
         let i = bits.trailing_zeros() as usize;
         bits &= bits - 1;
         if let Some(inn) = registry.get(i) {
-            for d in 0..N_EFFECT {
-                caps[d] += inn.effects[d];
+            if inn.craft.is_none() {
+                for d in 0..N_EFFECT {
+                    caps[d] += inn.effects[d];
+                }
             }
         }
     }

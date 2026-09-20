@@ -3,6 +3,8 @@
 use crate::agent::*;
 use crate::brain::{Action, Genome, N_IN, N_MEM};
 use crate::config::Config;
+use crate::craft::{self, Ing, Process, Slot, M_BONE, NO_ING, N_MAT, N_PROP, N_SLOT};
+use crate::world::Building;
 use crate::events::EventLog;
 use crate::innovation::*;
 use crate::orders::{Order, N_ORDER};
@@ -36,7 +38,11 @@ pub struct Sim {
     followers: Vec<u16>,
     /// Followers lost this window, by (old leader name, new leader name).
     pub defected: std::collections::HashMap<(u32, u32), u32>,
-    learned: Vec<(u32, u64)>,
+    learned: Vec<(u32, u128)>,
+    /// Recipe signature (process, sorted parts) -> innovation index, so the same thing is never registered twice.
+    recipes: std::collections::HashMap<(u8, [Ing; 3]), u16>,
+    /// Registry indices freed by forgotten recipes.
+    free_slots: Vec<u16>,
     infected: Vec<u32>,
     apprentice: Vec<(u32, [f32; N_SKILL])>,
     imitations: Vec<(u32, u32)>,
@@ -72,6 +78,8 @@ impl Sim {
             followers: Vec::new(),
             defected: std::collections::HashMap::new(),
             learned: Vec::new(),
+            recipes: std::collections::HashMap::new(),
+            free_slots: Vec::new(),
             infected: Vec::new(),
             apprentice: Vec::new(),
             imitations: Vec::new(),
@@ -165,6 +173,10 @@ impl Sim {
             profile: [0.0; N_PROFILE],
             known: 0,
             caps: [0.0; N_EFFECT],
+            mats: [0; N_MAT],
+            gear: [Gear::NONE; N_SLOT],
+            sheltered: 0.0,
+            can_make: false,
             afloat: false,
             still: 0,
             emotion: [0.0; N_EMO],
@@ -201,6 +213,8 @@ impl Sim {
         self.weather();
         let season = self.world.season(self.tick);
         self.world.regrow(season);
+        self.world.regrow_mats();
+        self.world.age_buildings();
         if self.tick % self.cfg.region_refresh == 0 {
             self.regions.refresh(&self.world, &self.agents, self.cfg.wrap);
         }
@@ -215,6 +229,9 @@ impl Sim {
         let t4 = std::time::Instant::now();
         self.metabolise_and_die();
         self.immigrate();
+        if self.tick % 500 == 250 {
+            self.retire_forgotten();
+        }
         let t5 = std::time::Instant::now();
         let p = &mut self.profile;
         p[0] += (t1 - t0).as_secs_f64();
@@ -285,6 +302,9 @@ impl Sim {
             self.world.for_region(cx, cy, 15, |w, i| {
                 w.food[i] = 0.0;
                 w.cultivation[i] *= 0.5;
+                if w.buildings[i].is_some_and(|b| b.flammable) {
+                    w.buildings[i] = None;
+                }
             });
             self.strike_agents(cx as f32, cy as f32, 15.0, 15.0);
             self.window.wildfires += 1;
@@ -558,6 +578,11 @@ impl Sim {
                 }
             }
 
+            // Where one stands: is there a roof here?
+            {
+                let (x, y) = (self.agents[i].x, self.agents[i].y);
+                self.agents[i].sheltered = self.world.shelter_at(x, y);
+            }
             // Movement (costed in metabolise). Marching together is cheaper than wandering.
             {
                 let a = &self.agents[i];
@@ -611,11 +636,23 @@ impl Sim {
                     } else {
                         self.world.harvest(ax, ay, rate, drain, cfg.wrap)
                     };
+                    // Whatever lies around comes along: a unit of each material with a chance scaled by how much is there.
+                    if !afloat {
+                        let cell = self.world.idx(ax, ay);
+                        let (cap, p_pick) = (cfg.mat_cap, cfg.p_pickup);
+                        for k in 0..N_MAT {
+                            let here = self.world.mats[cell][k];
+                            if here >= 0.1 && self.agents[i].mats[k] < cap && self.rng.f32() < p_pick * here {
+                                self.agents[i].mats[k] += 1;
+                                self.world.mats[cell][k] -= 0.1;
+                            }
+                        }
+                    }
                     let a = &mut self.agents[i];
                     a.train(SK_GATHER, cfg.skill_gain);
                     a.energy += take;
                     if a.energy > cfg.max_energy {
-                        a.inventory = (a.inventory + a.energy - cfg.max_energy).min(cfg.inv_cap);
+                        a.inventory = (a.inventory + a.energy - cfg.max_energy).min(inv_cap(cfg, a));
                         a.energy = cfg.max_energy;
                     }
                     self.tend_if_settled(i);
@@ -677,6 +714,10 @@ impl Sim {
                         self.window.births += 1;
                     }
                 }
+                Action::Craft => {
+                    self.agents[i].energy -= self.cfg.craft_cost;
+                    self.craft(i);
+                }
                 Action::Rest => {
                     self.tend_if_settled(i);
                     // Rationing under a conserve order: organised idleness costs less.
@@ -686,9 +727,42 @@ impl Sim {
                 }
             }
 
+            // Things wear with use. A fire burns down whether or not it is tended.
+            {
+                let wear = self.cfg.wear;
+                let attacked = self.agents[i].attacked_timer > 0;
+                let afloat = self.agents[i].afloat;
+                let a = &mut self.agents[i];
+                let mut changed = false;
+                for (slot, g) in a.gear.iter_mut().enumerate() {
+                    if !g.is_some() {
+                        continue;
+                    }
+                    let used = match slot {
+                        s if s == Slot::Tool as usize => (d.action == Action::Gather && !afloat) as u8 as f32,
+                        s if s == Slot::Weapon as usize => (d.action == Action::Attack) as u8 as f32,
+                        s if s == Slot::Armour as usize => attacked as u8 as f32,
+                        s if s == Slot::Boat as usize => afloat as u8 as f32,
+                        s if s == Slot::Vessel as usize => 0.15,
+                        _ => 1.0,
+                    };
+                    g.life -= used * wear;
+                    if g.life <= 0.0 {
+                        *g = Gear::NONE;
+                        changed = true;
+                    }
+                }
+                if changed {
+                    refresh_caps(a, &self.innovations);
+                }
+            }
+            if d.action == Action::Craft || (self.tick + self.agents[i].id as u64) % 16 == 0 {
+                self.agents[i].can_make = self.makeable(i).is_some();
+            }
+
             // Invention: any work can spark it; what you were doing shapes what you find.
             let p = self.invent_p(&self.agents[i]);
-            if self.innovations.len() < MAX_INNOVATIONS && self.rng.f32() < p {
+            if (self.innovations.len() < MAX_INNOVATIONS || !self.free_slots.is_empty()) && self.rng.f32() < p {
                 self.discover(i, d.action);
             }
         }
@@ -717,7 +791,7 @@ impl Sim {
     fn strength(&self, a: &Agent, defending: bool) -> f32 {
         let mut s = a.energy + 20.0 * a.skill[SK_FIGHT] + 30.0 * a.caps[E_ATTACK];
         if defending && a.still >= self.cfg.settle_ticks {
-            s += 30.0 * a.caps[E_DEFENSE];
+            s += 30.0 * a.caps[E_DEFENSE] + 25.0 * a.sheltered;
         }
         // A raid called and answered: everyone striking on the same word hits harder.
         if !defending && a.obeyed && a.under == Some(Order::Raid) {
@@ -766,6 +840,16 @@ impl Sim {
                 let v = &self.agents[j];
                 (v.x, v.y, v.still >= cfg.settle_ticks, v.caps[E_DEFENSE] >= 0.4)
             };
+            if raider && v_settled {
+                let cell = self.world.idx(vx, vy);
+                if let Some(b) = self.world.buildings[cell] {
+                    if b.flammable && self.rng.f32() < 0.4 {
+                        self.world.buildings[cell] = None;
+                        self.window.burned += 1;
+                        self.events.fire(self.tick, "first_house_burned", "first house burned by raiders".to_string());
+                    }
+                }
+            }
             if raider && v_settled && !v_walled {
                 let lost = self.world.burn(vx, vy, cfg.wrap);
                 if lost > 0.5 {
@@ -790,9 +874,9 @@ impl Sim {
             }
             let a = &mut self.agents[i];
             a.energy += stolen + cfg.attack_damage * mult * 0.5;
-            a.inventory = (a.inventory + looted).min(cfg.inv_cap);
+            a.inventory = (a.inventory + looted).min(inv_cap(cfg, a));
             if a.energy > cfg.max_energy {
-                a.inventory = (a.inventory + a.energy - cfg.max_energy).min(cfg.inv_cap);
+                a.inventory = (a.inventory + a.energy - cfg.max_energy).min(inv_cap(cfg, a));
                 a.energy = cfg.max_energy;
             }
             a.feel(JOY, 0.1);
@@ -834,7 +918,7 @@ impl Sim {
             g.prestige += 0.05;
         }
         let t = &mut self.agents[j];
-        t.inventory = (t.inventory + give).min(cfg.inv_cap);
+        t.inventory = (t.inventory + give).min(inv_cap(cfg, t));
         t.feel(JOY, 0.2);
         t.feel(BOND, 0.2);
         self.window.shares += 1;
@@ -843,7 +927,7 @@ impl Sim {
     /// Everything that passes between neighbours: knowledge, skill, habits and disease.
     fn contact(&mut self) {
         let n = self.decisions.len(); // agents present in the spatial hash this tick
-        let all_known: u64 = if self.innovations.len() >= 64 { u64::MAX } else { (1u64 << self.innovations.len()) - 1 };
+        let all_known: u128 = if self.innovations.len() >= 128 { u128::MAX } else { (1u128 << self.innovations.len()) - 1 };
         self.learned.clear();
         self.infected.clear();
         self.apprentice.clear();
@@ -907,7 +991,7 @@ impl Sim {
         for &(i, bits) in &self.learned {
             let a = &mut self.agents[i as usize];
             a.known |= bits;
-            a.caps = capabilities(a.known, &self.innovations);
+            refresh_caps(a, &self.innovations);
             self.window.learned += bits.count_ones();
         }
         for &i in &self.infected {
@@ -941,7 +1025,7 @@ impl Sim {
         let mut luck_parts: Vec<(u32, u32)> = Vec::new();
         if threads == 1 || total < 2 * CHUNK {
             for (c, slice) in self.agents.chunks_mut(CHUNK).enumerate() {
-                let (h, l) = metabolise_chunk(c, slice, n, seed, cfg, decisions);
+                let (h, l) = metabolise_chunk(c, slice, n, seed, cfg, decisions, winter);
                 hungry_parts.push(h);
                 luck_parts.push(l);
             }
@@ -958,7 +1042,7 @@ impl Sim {
                         }
                         let mut g = slots[c].lock().unwrap();
                         let slice = g.0.take().unwrap();
-                        let (h, l) = metabolise_chunk(c, slice, n, seed, cfg, decisions);
+                        let (h, l) = metabolise_chunk(c, slice, n, seed, cfg, decisions, winter);
                         g.1 = h;
                         g.2 = l;
                     });
@@ -1008,9 +1092,15 @@ impl Sim {
         }
         let mut fallen: Vec<(u32, u16, u32)> = Vec::new();
         let w = &mut self.window;
+        let world = &mut self.world;
         self.agents.retain(|a| {
             if a.name != 0 && a.followers >= 40 && (a.energy <= 0.0 || a.age > cfg.max_age) {
                 fallen.push((a.name, a.followers, a.lineage));
+            }
+            if a.energy <= 0.0 || a.age > cfg.max_age {
+                // Bones stay where people fall.
+                let cell = world.idx(a.x, a.y);
+                world.mats[cell][M_BONE] = (world.mats[cell][M_BONE] + 0.3).min(1.0);
             }
             if a.energy <= 0.0 {
                 if a.attacked_timer > 0 {
@@ -1051,35 +1141,346 @@ impl Sim {
         }
     }
 
-    /// Is there sea within `reach` cells along the four axes?
-    fn near_sea(&self, x: f32, y: f32, reach: i32) -> bool {
-        let geo = Geo { wrap: self.cfg.wrap };
-        for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
-            for step in 0..=reach {
-                let px = geo.place(x + (dx * step) as f32, self.cfg.width);
-                let py = geo.place(y + (dy * step) as f32, self.cfg.height);
-                if self.world.is_water(px, py) {
-                    return true;
+    /// A recipe nobody living knows, nobody holds, no building stands on and no other recipe
+    /// needs is lost: its place in the registry is freed for something new. Practices are
+    /// never retired (they are cheap to keep and shape the era count).
+    fn retire_forgotten(&mut self) {
+        if self.innovations.len() < MAX_INNOVATIONS / 2 {
+            return;
+        }
+        let mut alive = 0u128;
+        for a in &self.agents {
+            alive |= a.known;
+            for g in a.gear.iter() {
+                if g.is_some() {
+                    alive |= 1u128 << g.item;
                 }
             }
         }
-        false
+        for b in self.world.buildings.iter().flatten() {
+            alive |= 1u128 << b.item;
+        }
+        for inn in &self.innovations {
+            if let Some(c) = &inn.craft {
+                for &part in &c.parts[..c.n_parts as usize] {
+                    if part as usize >= N_MAT {
+                        alive |= 1u128 << (part as usize - N_MAT);
+                    }
+                }
+            }
+        }
+        let mut freed = Vec::new();
+        for (idx, inn) in self.innovations.iter_mut().enumerate() {
+            if inn.craft.is_some() && alive & (1u128 << idx) == 0 && !inn.name.is_empty() {
+                freed.push(idx);
+            }
+        }
+        for &idx in &freed {
+            let inn = &mut self.innovations[idx];
+            if let Some(c) = &inn.craft {
+                let mut sig = [NO_ING; 3];
+                sig[..c.n_parts as usize].copy_from_slice(&c.parts[..c.n_parts as usize]);
+                self.recipes.remove(&(c.process as u8, sig));
+            }
+            inn.name.clear(); // a hole: reused by the next discovery
+            self.free_slots.push(idx as u16);
+        }
+        if !freed.is_empty() {
+            self.window.forgotten_recipes += freed.len() as u32;
+        }
+    }
+
+    /// Where the next innovation goes: a freed hole first, else the end of the registry.
+    fn next_slot(&mut self) -> Option<usize> {
+        if let Some(idx) = self.free_slots.pop() {
+            return Some(idx as usize);
+        }
+        if self.innovations.len() < MAX_INNOVATIONS {
+            Some(self.innovations.len())
+        } else {
+            None
+        }
+    }
+
+    /// Properties of an ingredient: a raw material or a made thing.
+    fn ing_props(&self, ing: Ing) -> Option<[f32; N_PROP]> {
+        let k = ing as usize;
+        if k < N_MAT {
+            return Some(craft::RAW[k]);
+        }
+        self.innovations.get(k - N_MAT).and_then(|inn| inn.craft.as_ref().map(|c| c.props))
+    }
+
+    /// Raw materials needed to make innovation `idx` from what agent `i` carries, or None
+    /// if some part is neither held nor makeable (its recipe unknown).
+    fn needs(&self, i: usize, idx: usize, depth: u8) -> Option<[u8; N_MAT]> {
+        if depth > 4 {
+            return None;
+        }
+        let c = self.innovations.get(idx)?.craft.as_ref()?;
+        let a = &self.agents[i];
+        let mut need = [0u8; N_MAT];
+        for &part in &c.parts[..c.n_parts as usize] {
+            let k = part as usize;
+            if k < N_MAT {
+                need[k] = need[k].saturating_add(1);
+            } else {
+                let sub = (k - N_MAT) as u16;
+                if a.gear.iter().any(|g| g.item == sub) {
+                    continue;
+                }
+                if a.known & (1u128 << (k - N_MAT)) == 0 {
+                    return None;
+                }
+                let n = self.needs(i, k - N_MAT, depth + 1)?;
+                for m in 0..N_MAT {
+                    need[m] = need[m].saturating_add(n[m]);
+                }
+            }
+        }
+        Some(need)
+    }
+
+    fn can_afford(&self, i: usize, idx: usize) -> bool {
+        match self.needs(i, idx, 0) {
+            Some(need) => (0..N_MAT).all(|m| self.agents[i].mats[m] >= need[m]),
+            None => false,
+        }
+    }
+
+    /// The most useful known thing this agent lacks and could make now.
+    fn makeable(&self, i: usize) -> Option<usize> {
+        let a = &self.agents[i];
+        let (x, y) = (a.x, a.y);
+        let mut best: Option<(usize, f32)> = None;
+        let mut bits = a.known;
+        while bits != 0 {
+            let idx = bits.trailing_zeros() as usize;
+            bits &= bits - 1;
+            let Some(inn) = self.innovations.get(idx) else { continue };
+            let Some(c) = inn.craft.as_ref() else { continue };
+            if c.slot == Slot::Shelter {
+                if a.still < 50 || self.world.is_water(x, y) || self.world.shelter_at(x, y) >= inn.effects[E_SHELTER] {
+                    continue;
+                }
+            } else {
+                let g = a.gear[c.slot as usize];
+                if g.is_some() {
+                    let held = self.innovations[g.item as usize].effects.iter().map(|v| v.abs()).sum::<f32>();
+                    let this = inn.effects.iter().map(|v| v.abs()).sum::<f32>();
+                    let worn = g.life < 0.25 * self.innovations[g.item as usize].craft.as_ref().map_or(1.0, |c| c.life);
+                    if !worn && this <= held {
+                        continue;
+                    }
+                }
+            }
+            if !self.can_afford(i, idx) {
+                continue;
+            }
+            let score = inn.effects.iter().map(|v| v.abs()).sum::<f32>();
+            if best.is_none_or(|b| score > b.1) {
+                best = Some((idx, score));
+            }
+        }
+        best.map(|b| b.0)
+    }
+
+    /// Work what you carry: make the best known thing you lack, or try something new.
+    fn craft(&mut self, i: usize) {
+        self.window.craft_tries += 1;
+        if let Some(idx) = self.makeable(i) {
+            self.make(i, idx);
+            return;
+        }
+        // Experiment. Fire is a process only for those who have a fire in hand.
+        let has_fire = self.agents[i].gear[Slot::Fire as usize].is_some();
+        let procs: Vec<Process> = Process::ALL.iter().copied().filter(|p| *p != Process::Fire || has_fire).collect();
+        let process = procs[self.rng.range(procs.len())];
+        let (lo, hi) = process.arity();
+        let k = lo + self.rng.range(hi - lo + 1);
+        // The pool: raw materials in the bag and things in hand (never the fire itself).
+        let mut pool: Vec<(Ing, u8)> = Vec::new();
+        {
+            let a = &self.agents[i];
+            for m in 0..N_MAT {
+                if a.mats[m] > 0 {
+                    pool.push((m as Ing, a.mats[m]));
+                }
+            }
+            for (s, g) in a.gear.iter().enumerate() {
+                if g.is_some() && s != Slot::Fire as usize {
+                    pool.push((N_MAT as Ing + g.item, 1));
+                }
+            }
+        }
+        if pool.is_empty() {
+            return;
+        }
+        let mut parts: Vec<Ing> = Vec::with_capacity(k);
+        for _ in 0..k {
+            let (ing, _) = pool[self.rng.range(pool.len())];
+            parts.push(ing);
+        }
+        for &(ing, avail) in &pool {
+            if parts.iter().filter(|p| **p == ing).count() as u8 > avail {
+                return; // not enough of it
+            }
+        }
+        parts.sort_unstable();
+        let mut sig = [NO_ING; 3];
+        sig[..parts.len()].copy_from_slice(&parts);
+        let key = (process as u8, sig);
+        if let Some(&idx) = self.recipes.get(&key) {
+            // Someone, somewhere, made this before. An independent rediscovery.
+            let idx = idx as usize;
+            let a = &mut self.agents[i];
+            if a.known & (1u128 << idx) == 0 {
+                a.known |= 1u128 << idx;
+                refresh_caps(a, &self.innovations);
+                self.window.rediscoveries += 1;
+            }
+            self.make(i, idx);
+            return;
+        }
+        let props: Vec<[f32; N_PROP]> = parts.iter().filter_map(|p| self.ing_props(*p)).collect();
+        if props.len() != parts.len() {
+            return;
+        }
+        let Some(made) = craft::compose(process, &props) else { return };
+        let (_, _, score) = craft::effects_of(&made, parts.len(), craft::bodies_in(&props));
+        if score < self.cfg.craft_min {
+            return; // nothing came of it
+        }
+        // Doing the right thing is not the same as understanding it. Insight is rare, and comes
+        // easier to the content and to those who already know how to look.
+        let insight = self.cfg.p_insight * (0.5 + 2.0 * self.agents[i].emotion[JOY]) * (1.0 + self.agents[i].caps[E_INVENT]).clamp(0.1, 2.5);
+        if self.rng.f32() >= insight {
+            return;
+        }
+        let Some(id) = self.next_slot() else { return };
+        let (lineage, x, y) = {
+            let a = &self.agents[i];
+            (a.lineage, a.x, a.y)
+        };
+        let mut depth = 1u8;
+        let mut cost = [0u8; N_MAT];
+        for &part in &parts {
+            let pk = part as usize;
+            if pk < N_MAT {
+                cost[pk] = cost[pk].saturating_add(1);
+            } else if let Some(c) = self.innovations[pk - N_MAT].craft.as_ref() {
+                depth = depth.max(c.depth + 1);
+                for m in 0..N_MAT {
+                    cost[m] = cost[m].saturating_add(c.cost[m]);
+                }
+            }
+        }
+        let inn = Innovation::crafted(id, process, &parts, &props, made, depth, cost, self.tick, lineage);
+        let slot = inn.craft.as_ref().unwrap().slot;
+        let text = format!("crafted: {} by lineage {} at ({:.0}, {:.0})", inn.describe(&self.innovations), lineage, x, y);
+        let first_key = format!("first_{}", craft::SLOT_NAMES[slot as usize]);
+        let first = !self.innovations.iter().any(|o| !o.name.is_empty() && o.craft.as_ref().is_some_and(|c| c.slot == slot));
+        if id < self.innovations.len() {
+            self.innovations[id] = inn;
+        } else {
+            self.innovations.push(inn);
+        }
+        self.recipes.insert(key, id as u16);
+        self.window.discoveries += 1;
+        self.window.crafts += 1;
+        self.events.fire(self.tick, "", text);
+        if first {
+            let what = match slot {
+                Slot::Tool => "a tool: something to dig and cut with",
+                Slot::Weapon => "a weapon: something made to hurt",
+                Slot::Armour => "a shield: something to hide behind",
+                Slot::Boat => "a boat: something that floats and carries",
+                Slot::Vessel => "a vessel: something that holds and keeps",
+                Slot::Fire => "fire: struck from stone, it cooks and warms",
+                Slot::Shelter => "a shelter: walls and a roof",
+            };
+            self.events.fire(self.tick, &first_key, format!("first {}: lineage {} made {} at ({:.0}, {:.0})", craft::SLOT_NAMES[slot as usize], lineage, what, x, y));
+        }
+        {
+            let a = &mut self.agents[i];
+            a.known |= 1u128 << id;
+            a.feel(JOY, 0.3);
+            a.prestige += 2.0;
+        }
+        self.make(i, id);
+    }
+
+    /// Make innovation `idx` for agent `i`, consuming parts (making sub-parts first) and
+    /// putting the thing in its slot, or on the ground as a shelter.
+    fn make(&mut self, i: usize, idx: usize) {
+        let Some(c) = self.innovations.get(idx).and_then(|inn| inn.craft.clone()) else { return };
+        for &part in &c.parts[..c.n_parts as usize] {
+            let k = part as usize;
+            if k < N_MAT {
+                let a = &mut self.agents[i];
+                if a.mats[k] == 0 {
+                    return;
+                }
+                a.mats[k] -= 1;
+            } else {
+                let sub = (k - N_MAT) as u16;
+                let a = &mut self.agents[i];
+                if let Some(g) = a.gear.iter_mut().find(|g| g.item == sub) {
+                    *g = Gear::NONE;
+                } else {
+                    self.make(i, k - N_MAT);
+                    let a = &mut self.agents[i];
+                    match a.gear.iter_mut().find(|g| g.item == sub) {
+                        Some(g) => *g = Gear::NONE,
+                        None => return,
+                    }
+                }
+            }
+        }
+        self.window.made += 1;
+        let effects = self.innovations[idx].effects;
+        if c.slot == Slot::Shelter {
+            let (x, y) = {
+                let a = &self.agents[i];
+                (a.x, a.y)
+            };
+            if self.world.is_water(x, y) || self.agents[i].still < 50 {
+                return; // known now, built once they stay somewhere
+            }
+            let cell = self.world.idx(x, y);
+            let shelter = effects[E_SHELTER];
+            if self.world.buildings[cell].is_none_or(|b| b.shelter < shelter) {
+                self.world.buildings[cell] = Some(Building { item: idx as u16, life: c.life, shelter, flammable: c.props[craft::P_HEAT] < 0.5 });
+                self.window.built += 1;
+            }
+            let a = &mut self.agents[i];
+            a.prestige += 0.5;
+            a.feel(JOY, 0.1);
+            return;
+        }
+        let a = &mut self.agents[i];
+        a.gear[c.slot as usize] = Gear { item: idx as u16, life: c.life };
+        a.feel(JOY, 0.05);
+        refresh_caps(a, &self.innovations);
     }
 
     /// A new innovation is born into the world and known first by its discoverer.
     fn discover(&mut self, i: usize, doing: Action) {
-        let id = self.innovations.len();
+        let Some(id) = self.next_slot() else { return };
         let (tier, settled, sick, lineage, x, y) = {
             let a = &self.agents[i];
             ((1 + a.known_count() / 4).min(6) as u8, a.still >= self.cfg.settle_ticks, a.sick > 0, a.lineage, a.x, a.y)
         };
-        let coastal = self.near_sea(x, y, 4);
-        let inn = Innovation::generate(&mut self.rng, id, tier, doing, settled, sick, coastal, self.tick, lineage);
-        let text = format!("innovation: {} by lineage {} at ({:.0}, {:.0})", inn.describe(), lineage, x, y);
-        self.innovations.push(inn);
+        let Some(inn) = Innovation::practice(&mut self.rng, id, tier, doing, settled, sick, self.tick, lineage) else { return };
+        let text = format!("innovation: {} by lineage {} at ({:.0}, {:.0})", inn.describe(&self.innovations), lineage, x, y);
+        if id < self.innovations.len() {
+            self.innovations[id] = inn;
+        } else {
+            self.innovations.push(inn);
+        }
         let a = &mut self.agents[i];
-        a.known |= 1u64 << id;
-        a.caps = capabilities(a.known, &self.innovations);
+        a.known |= 1u128 << id;
+        refresh_caps(a, &self.innovations);
         a.feel(JOY, 0.3);
         a.prestige += 2.0;
         self.window.discoveries += 1;
@@ -1351,6 +1752,19 @@ fn decide(
         input[74] = regions.water[regions.index(a.x, a.y)];
         input[75] = a.caps[E_SEA];
     }
+    // What is in hand: materials, the things held (life left), the roof overhead, and whether a
+    // known recipe could be made right now.
+    {
+        for k in 0..N_MAT {
+            input[76 + k] = a.mats[k] as f32 / cfg.mat_cap.max(1) as f32;
+        }
+        for s in 0..6 {
+            let g = a.gear[s];
+            input[82 + s] = if g.is_some() { (g.life / 400.0).min(1.5) } else { 0.0 };
+        }
+        input[88] = a.sheltered.min(1.5);
+        input[89] = a.can_make as u8 as f32;
+    }
 
         let mut t = a.genome.think(&input);
         // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
@@ -1378,7 +1792,7 @@ fn decide(
 /// What one agent picked up from its neighbours this tick.
 #[derive(Clone, Copy, Default)]
 struct Contact {
-    gained: u64,
+    gained: u128,
     caught: bool,
     skills: [f32; N_SKILL],
     model: u32,
@@ -1388,7 +1802,7 @@ struct Contact {
 /// Contacts for one fixed chunk of agents, with a chunk-local RNG so the outcome
 /// is the same whatever the thread count.
 fn contact_chunk(
-    c: usize, n: usize, seed: u64, all_known: u64, cfg: &Config, agents: &[Agent], spatial: &SpatialHash,
+    c: usize, n: usize, seed: u64, all_known: u128, cfg: &Config, agents: &[Agent], spatial: &SpatialHash,
 ) -> Vec<(u32, Contact)> {
     let geo = Geo { wrap: cfg.wrap };
     let range2 = cfg.learn_range * cfg.learn_range;
@@ -1400,7 +1814,7 @@ fn contact_chunk(
         let can_catch = a.sick == 0 && a.immune == 0;
         let wealth = a.energy + a.inventory;
         let resist = (1.0 + a.caps[E_RESIST]).max(0.2);
-        let mut gained = 0u64;
+        let mut gained = 0u128;
         let mut caught = false;
         let mut skills = [0.0f32; N_SKILL];
         let mut model = NO_LEADER;
@@ -1474,7 +1888,7 @@ fn contact_chunk(
 /// Per-agent upkeep for one fixed chunk: costs, sickness, luck, mood. Pure except for the
 /// chunk-local RNG, so the outcome never depends on the thread count.
 fn metabolise_chunk(
-    c: usize, slice: &mut [Agent], n: usize, seed: u64, cfg: &Config, decisions: &[Decision],
+    c: usize, slice: &mut [Agent], n: usize, seed: u64, cfg: &Config, decisions: &[Decision], winter: bool,
 ) -> (Vec<u32>, (u32, u32)) {
     let mut rng = Rng::new(seed ^ (c as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
     let mut hungry = Vec::new();
@@ -1496,6 +1910,9 @@ for (k, a) in slice.iter_mut().enumerate() {
             cost *= cfg.rest_factor;
         }
         cost *= (1.0 + a.caps[E_METABOLISM]).max(0.3);
+        if winter && a.sheltered > 0.0 {
+            cost *= 1.0 - cfg.shelter_warmth * a.sheltered.min(1.0);
+        }
         if a.afloat {
             cost *= cfg.sea_cost;
             if a.caps[E_SEA] < cfg.sea_threshold {
@@ -1552,4 +1969,25 @@ for (k, a) in slice.iter_mut().enumerate() {
         }
     }
     (hungry, (windfalls, accidents))
+}
+
+/// Capabilities: every practice known plus every thing held.
+pub fn refresh_caps(a: &mut Agent, registry: &[Innovation]) {
+    let mut caps = capabilities(a.known, registry);
+    for g in a.gear.iter() {
+        if g.is_some() {
+            if let Some(inn) = registry.get(g.item as usize) {
+                for d in 0..N_EFFECT {
+                    caps[d] += inn.effects[d];
+                }
+            }
+        }
+    }
+    a.caps = caps;
+}
+
+/// How much food an agent can carry: the bag, plus whatever vessel it holds.
+#[inline]
+fn inv_cap(cfg: &Config, a: &Agent) -> f32 {
+    cfg.inv_cap * (1.0 + a.caps[E_STORE]).max(0.5)
 }

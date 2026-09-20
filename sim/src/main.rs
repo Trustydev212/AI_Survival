@@ -1,6 +1,7 @@
 mod agent;
 mod brain;
 mod config;
+mod craft;
 mod events;
 mod innovation;
 mod orders;
@@ -109,7 +110,7 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
             if t % cfg.snapshot_every == 0 || sim.agents.is_empty() {
                 let (soil, obey, known) = last_metrics;
                 let era = stats::level_of(known, sim.settled_share()) as u8;
-                sn.frame(t, era, &sim.world, &sim.agents, &sim.stores.list, soil, obey, known, sim.world.season(t), cfg.settle_ticks, cfg.custom_min)
+                sn.frame(t, era, &sim.world, &sim.agents, &sim.stores.list, soil, obey, known, sim.world.season(t), cfg.settle_ticks, cfg.custom_min, &sim.innovations)
                     .expect("write snapshot frame");
                 if sn.frames % 20 == 1 {
                     let mut names: Vec<(u32, String)> = sim.hall.keys().map(|id| (*id, agent::name_of(*id))).collect();
@@ -301,9 +302,28 @@ fn summarize(sim: &sim::Sim) {
     let n = sim.agents.len().max(1) as f32;
     println!("\nInnovations of this world ({}), with share of the living who know each:", sim.innovations.len());
     for (idx, inn) in sim.innovations.iter().enumerate() {
-        let bit = 1u64 << idx;
+        if inn.name.is_empty() {
+            continue; // a recipe the world forgot
+        }
+        let bit = 1u128 << idx;
         let share = sim.agents.iter().filter(|a| a.known & bit != 0).count() as f32 / n;
-        println!("  tick {:>6}  {:>4.0}%  lineage {:>3}  {}", inn.born_tick, share * 100.0, inn.lineage, inn.describe());
+        println!("  tick {:>6}  {:>4.0}%  lineage {:>3}  {}", inn.born_tick, share * 100.0, inn.lineage, inn.describe(&sim.innovations));
+    }
+
+    {
+        let crafts = sim.innovations.iter().filter(|i| i.craft.is_some() && !i.name.is_empty()).count();
+        let mut held = [0usize; craft::N_SLOT];
+        for a in &sim.agents {
+            for (s, g) in a.gear.iter().enumerate() {
+                if g.is_some() {
+                    held[s] += 1;
+                }
+            }
+        }
+        let with_mats = sim.agents.iter().filter(|a| a.mats.iter().any(|m| *m > 0)).count();
+        println!("\nThings: {} recipes and {} practices; {} shelters standing; {} of {} carry materials.", crafts, sim.innovations.len() - crafts, sim.world.building_count(), with_mats, sim.agents.len());
+        let parts: Vec<String> = (0..craft::N_SLOT - 1).map(|s| format!("{} {}", craft::SLOT_NAMES[s], held[s])).collect();
+        println!("Held now: {}", parts.join(", "));
     }
 
     let mut hall: Vec<_> = sim.hall.iter().map(|(name, v)| (*name, *v)).collect();
@@ -313,7 +333,7 @@ fn summarize(sim: &sim::Sim) {
         println!("  {:<10} lineage {:>3}  {:>3} followers at tick {}", agent::name_of(*name), lineage, peak, tick);
     }
 
-    let noisy = ["famine", "war", "plague toll", "raids", "drought", "a year of plenty", "plague:", "flood", "wildfire", "bounty", "harsh year", "leader ", "innovation:", "lineage ", "rivalry:"];
+    let noisy = ["famine", "war", "plague toll", "raids", "drought", "a year of plenty", "plague:", "flood", "wildfire", "bounty", "harsh year", "leader ", "innovation:", "crafted:", "lineage ", "rivalry:"];
     println!("\nHistory ({} events):", sim.events.events.len());
     for e in sim.events.events.iter().filter(|e| !noisy.iter().any(|p| e.text.starts_with(p))) {
         println!("  tick {:>6}: {}", e.tick, e.text);

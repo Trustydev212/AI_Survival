@@ -116,6 +116,22 @@ pub struct Config {
     /// Fishing while afloat, as a fraction of the land gather rate (does not deplete).
     pub fish_yield: f32,
 
+    // making things
+    /// Energy spent on one craft action.
+    pub craft_cost: f32,
+    /// Units of a material an agent can carry.
+    pub mat_cap: u8,
+    /// Chance per gather action of picking up a unit of each material lying on the cell, scaled by how much is there.
+    pub p_pickup: f32,
+    /// A made thing must reach this in its best use to count as a discovery; below it the attempt is junk.
+    pub craft_min: f32,
+    /// Chance that a working experiment is actually noticed and understood (a recipe, not a fluke).
+    pub p_insight: f32,
+    /// Life lost per tick of use, as a multiple of one.
+    pub wear: f32,
+    /// Share of a shelter's strength that shields the people at home in winter (energy) and in fights.
+    pub shelter_warmth: f32,
+
     // customs
     pub custom_gain: f32,
     pub custom_decay: f32,
@@ -233,6 +249,13 @@ impl Default for Config {
             sea_cost: 1.6,
             drown_drain: 3.0,
             fish_yield: 0.6,
+            craft_cost: 1.5,
+            mat_cap: 8,
+            p_pickup: 0.35,
+            craft_min: 0.12,
+            p_insight: 0.02,
+            wear: 1.0,
+            shelter_warmth: 0.35,
 
             custom_gain: 0.01,
             custom_decay: 0.9995,
@@ -298,6 +321,13 @@ impl Config {
                 "--sea-cost" => set!(sea_cost),
                 "--drown-drain" => set!(drown_drain),
                 "--fish-yield" => set!(fish_yield),
+                "--craft-cost" => set!(craft_cost),
+                "--mat-cap" => set!(mat_cap),
+                "--p-pickup" => set!(p_pickup),
+                "--craft-min" => set!(craft_min),
+                "--p-insight" => set!(p_insight),
+                "--wear" => set!(wear),
+                "--shelter-warmth" => set!(shelter_warmth),
                 "--width" => set!(width),
                 "--height" => set!(height),
                 "--agents" => set!(agents),

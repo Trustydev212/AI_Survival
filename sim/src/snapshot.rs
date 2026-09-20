@@ -1,20 +1,23 @@
-//! Binary snapshot stream for the browser viewer (viewer/index.html). Version 4.
+//! Binary snapshot stream for the browser viewer (viewer/index.html). Version 5.
 //! Little endian throughout. The file is flushed after every frame so a viewer can
 //! follow a run while it is still being computed.
 //!
-//! header: "AISV" u32 version(4) u16 width u16 height f32 max_food
+//! header: "AISV" u32 version(5) u16 width u16 height f32 max_food
 //!         u32 len, then the sea as a bitmask (cell y*width+x is bit x%8 of byte (y*width+x)/8)
 //! frame:  u32 frame_len (bytes that follow this field)
 //!         u32 tick u8 era u8 keyframe u32 pop u32 stores
 //!         f32 soil f32 climate f32 obedience f32 mean_known f32 season
-//!         3 layers (food q0..31, cultivation q0..31, fertility q0..63), each: u32 len, then RLE pairs
+//!         4 layers (food q0..31, cultivation q0..31, fertility q0..63, buildings: 0 none, else look 1..3 + 3 if strong), each: u32 len, then RLE pairs
 //!           (value u8, run u8). A keyframe holds the layer itself; other frames hold layer XOR previous.
-//!         pop agents of 22 bytes: u32 id u16 x*64 u16 y*64 u16 lineage u32 name u16 followers
+//!         pop agents of 23 bytes: u32 id u16 x*64 u16 y*64 u16 lineage u32 name u16 followers
 //!           u8 flags u8 energy i8 mdx*100 i8 mdy*100 u8 under(0 none, 1..5 order) u8 action
+//!           u8 gear (bit per slot held: tool, weapon, armour, boat, vessel, fire)
 //!         stores of 14 bytes: u16 x*64 u16 y*64 f32 food u16 lineage u32 owner name id
 //! flags: 1 sick, 2 leader, 4 settled, 8 obeyed, 16 has custom, 32 afloat (in a boat)
 
 use crate::agent::Agent;
+use crate::craft;
+use crate::innovation::Innovation;
 use crate::store::Store;
 use crate::world::World;
 use std::io::{BufWriter, Write};
@@ -24,7 +27,7 @@ pub const KEYFRAME_EVERY: u32 = 16;
 pub struct Snapshot {
     out: BufWriter<std::fs::File>,
     pub frames: u32,
-    prev: [Vec<u8>; 3],
+    prev: [Vec<u8>; 4],
 }
 
 fn rle(out: &mut Vec<u8>, data: &[u8]) {
@@ -45,7 +48,7 @@ impl Snapshot {
     pub fn create(path: &str, world: &World) -> std::io::Result<Snapshot> {
         let mut out = BufWriter::new(std::fs::File::create(path)?);
         out.write_all(b"AISV")?;
-        out.write_all(&4u32.to_le_bytes())?;
+        out.write_all(&5u32.to_le_bytes())?;
         out.write_all(&(world.width as u16).to_le_bytes())?;
         out.write_all(&(world.height as u16).to_le_bytes())?;
         out.write_all(&world.max_food.to_le_bytes())?;
@@ -58,17 +61,17 @@ impl Snapshot {
         }
         out.write_all(&(mask.len() as u32).to_le_bytes())?;
         out.write_all(&mask)?;
-        Ok(Snapshot { out, frames: 0, prev: [vec![0; n], vec![0; n], vec![0; n]] })
+        Ok(Snapshot { out, frames: 0, prev: [vec![0; n], vec![0; n], vec![0; n], vec![0; n]] })
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn frame(
         &mut self, tick: u64, era: u8, world: &World, agents: &[Agent], stores: &[Store], soil: f32, obedience: f32,
-        mean_known: f32, season: f32, settle_ticks: u16, custom_min: f32,
+        mean_known: f32, season: f32, settle_ticks: u16, custom_min: f32, registry: &[Innovation],
     ) -> std::io::Result<()> {
         let n = world.width * world.height;
         let key = self.frames % KEYFRAME_EVERY == 0;
-        let mut body: Vec<u8> = Vec::with_capacity(n + agents.len() * 22 + 64);
+        let mut body: Vec<u8> = Vec::with_capacity(n + agents.len() * 23 + 64);
         body.extend_from_slice(&(tick as u32).to_le_bytes());
         body.push(era);
         body.push(key as u8);
@@ -80,12 +83,19 @@ impl Snapshot {
         // Quantised layers, delta-coded against the previous frame unless this is a keyframe.
         let food_scale = 31.0 / (world.max_food * 3.0);
         let mut cur = vec![0u8; n];
-        for layer in 0..3 {
+        for layer in 0..4 {
             for i in 0..n {
                 cur[i] = match layer {
                     0 => (world.food[i] * food_scale).clamp(0.0, 31.0) as u8,
                     1 => (world.cultivation[i] * 31.0).clamp(0.0, 31.0) as u8,
-                    _ => (world.fertility[i] * 63.0).clamp(0.0, 63.0) as u8,
+                    2 => (world.fertility[i] * 63.0).clamp(0.0, 63.0) as u8,
+                    _ => match world.buildings[i] {
+                        Some(b) => {
+                            let look = registry.get(b.item as usize).and_then(|inn| inn.craft.as_ref()).map_or(2, |c| craft::look_of(&c.props));
+                            look + if b.shelter >= 0.7 { 3 } else { 0 }
+                        }
+                        None => 0,
+                    },
                 };
             }
             let mut packed = Vec::with_capacity(n / 8);
@@ -132,6 +142,13 @@ impl Snapshot {
             body.push((a.mdy * 100.0).clamp(-127.0, 127.0) as i8 as u8);
             body.push(a.under.map_or(0, |o| o as u8 + 1));
             body.push(a.last_action as u8);
+            let mut gear = 0u8;
+            for (k, g) in a.gear.iter().enumerate().take(6) {
+                if g.is_some() {
+                    gear |= 1 << k;
+                }
+            }
+            body.push(gear);
         }
         for s in stores {
             body.extend_from_slice(&((s.x * 64.0) as u16).to_le_bytes());

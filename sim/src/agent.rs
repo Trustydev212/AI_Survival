@@ -1,4 +1,5 @@
 use crate::brain::{Action, Genome, N_ACT, N_MEM};
+use crate::craft::{N_MAT, N_SLOT, NO_ITEM};
 use crate::innovation::N_EFFECT;
 use crate::orders::Order;
 
@@ -48,6 +49,19 @@ pub fn name_of(id: u32) -> String {
     out
 }
 
+#[derive(Clone, Copy)]
+pub struct Gear {
+    pub item: u16,
+    pub life: f32,
+}
+impl Gear {
+    pub const NONE: Gear = Gear { item: NO_ITEM, life: 0.0 };
+    #[inline]
+    pub fn is_some(&self) -> bool {
+        self.item != NO_ITEM
+    }
+}
+
 #[derive(Clone)]
 pub struct Agent {
     /// Unique for the whole run, so a viewer can follow one life across frames.
@@ -67,10 +81,18 @@ pub struct Agent {
     pub children: u16,
     /// Exponentially decayed history of what this agent actually does.
     pub profile: [f32; N_PROFILE],
-    /// Bitset of known innovations, indexed into the world's registry.
-    pub known: u64,
-    /// Summed effects of everything known; refreshed whenever `known` changes.
+    /// Bitset of known innovations (practices and recipes), indexed into the world's registry.
+    pub known: u128,
+    /// Summed effects of every practice known plus everything held; refreshed on change.
     pub caps: [f32; N_EFFECT],
+    /// Raw materials carried, in units.
+    pub mats: [u8; N_MAT],
+    /// Things held, one per slot: innovation index and remaining life. Shelter is never held.
+    pub gear: [Gear; N_SLOT],
+    /// Shelter strength of the cell this agent stands on, sampled when it acts.
+    pub sheltered: f32,
+    /// Whether a known recipe could be made right now from what is carried (a hint to the brain).
+    pub can_make: bool,
     /// Consecutive ticks spent still. Farming only works when settled.
     pub still: u16,
     pub emotion: [f32; N_EMO],

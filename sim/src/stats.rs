@@ -20,6 +20,13 @@ pub struct Window {
     pub immigrants: u32,
     /// Times an agent moved from land onto the sea this window.
     pub voyages: u32,
+    pub craft_tries: u32,
+    /// New things registered, things made, shelters raised, recipes found again independently.
+    pub crafts: u32,
+    pub made: u32,
+    pub built: u32,
+    pub rediscoveries: u32,
+    pub forgotten_recipes: u32,
     pub actions: [u32; N_ACT],
     pub discoveries: u32,
     pub learned: u32,
@@ -96,7 +103,8 @@ pub struct Metrics {
 pub const ERA_NAMES: [&str; 8] = ["wild", "kindled", "rooted", "woven", "layered", "soaring", "radiant", "beyond"];
 
 pub fn level_of(mean_known: f32, settled: f32) -> usize {
-    let mut level = (mean_known / 2.0).floor() as usize;
+    // Recipes made knowledge plentiful (a tool-using world knows dozens of things per head), so the scale is wider than it was.
+    let mut level = (mean_known / 5.0).floor() as usize;
     if settled >= 0.3 {
         level += 1;
     }

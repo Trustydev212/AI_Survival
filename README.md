@@ -51,6 +51,11 @@ Với Sunnyside, cách vẽ như sau:
   hoang. Mỗi bộ autotile 15 tile của pack trả lời cùng một bảng mặt nạ 8 hướng (đủ, bốn cạnh, bốn góc trong,
   bốn góc ngoài chéo), viewer suy ra tile từ mặt nạ và tự chọn tile gần nhất cho hình dạng pack không có.
 - **Thuyền**: ai đang trên biển ngồi trong thuyền thúng của pack (4 khung nhấp nhô), bóng dưới chân tắt đi.
+- **Nơi trú** vẽ từ lớp nhà cửa của snapshot, đúng ô người ta dựng: nhà mái xanh cho khung gỗ, mái đỏ và cam
+  cho đá, đất sét, xương, mái tím và lam cho thứ đã nung; nhà chắc (sức trú từ 0,7) vẽ to hơn, nhà nung chắc
+  có lửa trại bên cạnh. **Đồ vật** hiện khi phóng đủ gần: rìu cho công cụ, kiếm cho vũ khí, giỏ cho bình
+  chứa, ngọn lửa cho ai đang giữ lửa. Sử ký ghi từng công thức ("buộc(mài(đá), gỗ, sợi) → công cụ") và
+  lần đầu mỗi loại đồ vật xuất hiện trong thế giới.
 - **Nhân vật** 80x48 với hoạt ảnh thật của pack: chạy khi di chuyển, vung kiếm khi tấn công, cuốc đất khi
   thu hoạch, khuân đồ khi chia sẻ, ôm nhau khi sinh sản, ôm bụng khi đói, ngã xuống và hoá thành đầu lâu
   khi chết (tối đa 300 hoạt ảnh chết cùng lúc). Tóc, áo và quần yếm cùng nhuộm màu phe (kiểu tóc theo dòng họ), dưới chân là
@@ -78,8 +83,9 @@ của pack; nhân vật là Gabe và Mani 24x24 với 7 khung chạy.
 - Thanh thời gian tô màu thời đại và vẽ dân số. Phím F bám thủ lĩnh lớn nhất, E bám sự kiện, space phát,
   mũi tên đi từng khung, kéo thả ba file để xem không cần server.
 
-Định dạng khung bản 4 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, lớp đất lượng tử hoá, mã hoá delta và RLE với khung
-khoá mỗi 16 khung, agent 22 byte có id để nội suy. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
+Định dạng khung bản 5 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, bốn lớp lượng tử hoá (thức ăn,
+canh tác, độ màu mỡ, nhà cửa), mã hoá delta và RLE với khung
+khoá mỗi 16 khung, agent 23 byte có id để nội suy và một byte đồ vật đang cầm. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
 trong đó đất chỉ vài KB mỗi khung. Sim flush sau mỗi khung, `serve.py` hỗ trợ Range, nên `&live=1` bám được
 run đang chạy.
 
@@ -138,7 +144,7 @@ thức ăn, thì hồi phục chậm về tiềm năng. Đất cạn hẳn hồi
 thường cũng làm đất mòn nhanh hơn. Đây là thứ để mất: xã hội thành công quá nhanh có thể tự huỷ diệt.
 
 **Agent** có năng lượng, kho dự trữ, tuổi, dòng họ, kiến thức, và một bộ gen. Gen gồm trọng số
-của một mạng thần kinh hồi quy 75 input, 16 ẩn, 19 output (1.539 tham số), 9 gen tính khí, cộng một
+của một mạng thần kinh hồi quy 90 input, 16 ẩn, 20 output (1.796 tham số), 9 gen tính khí, cộng một
 "màu" ba chiều.
 Nhận diện họ hàng dựa trên khoảng cách màu.
 
@@ -148,7 +154,7 @@ số hàng xóm là họ hàng và không họ hàng, mùa, mình vừa bị đ�
 ô đang đứng có phải ruộng không, cảm xúc, ký ức, nhà, bệnh, thủ lĩnh và lệnh, kho gần nhất, vùng đất
 quanh đây, và **biển**: bờ cách bao xa về bốn hướng (trong tầm 4 ô) và vùng mình đứng có bao nhiêu phần
 là nước. Không có phát minh đi biển; não chỉ học nơi đất kết thúc.
-Não trả về hướng di chuyển, một cổng đi hay ở, và một trong năm hành động:
+Não trả về hướng di chuyển, một cổng đi hay ở, và một trong sáu hành động:
 
 | Hành động | Tác dụng |
 |---|---|
@@ -157,21 +163,23 @@ Não trả về hướng di chuyển, một cổng đi hay ở, và một trong 
 | share | Cho họ hàng gần nhất một phần kho |
 | repro | Nếu đủ năng lượng, sinh con. Con thừa hưởng gen có đột biến |
 | rest | Giảm tiêu hao năng lượng |
+| craft | Làm một thứ đã biết từ vật liệu trong tay, hoặc thử ghép, mài, khoét, đập, nung xem ra gì |
 
 Không có hàm thưởng. Ai sinh được nhiều con thì gen của họ tồn tại. Đó là toàn bộ thuật toán học.
 Diệt vong là thật: khi agent cuối cùng chết, run kết thúc. Cờ `--min-pop N` bật lại "nhập cư" nếu muốn.
 
 ## Cái gì có não, cái gì là luật
 
-Mỗi agent có một bộ não riêng: mạng thần kinh hồi quy 53 input, 16 ẩn, 12 output, 876 trọng số,
-kèm 9 gen tính khí. Mọi quyết định mỗi tick (đi đâu, ở hay đi, hái, đánh, chia sẻ, sinh, nghỉ,
-ghi gì vào bộ nhớ) đều do não này đưa ra. Não được sinh ra từ não bố mẹ có đột biến, và trong đời
+Mỗi agent có một bộ não riêng: mạng thần kinh hồi quy 90 input, 16 ẩn, 20 output, 1.796 trọng số,
+kèm 9 gen tính khí. Mọi quyết định mỗi tick (đi đâu, ở hay đi, hái, đánh, chia sẻ, sinh, nghỉ, chế tác,
+ghi gì vào bộ nhớ, ra lệnh gì) đều do não này đưa ra. Não được sinh ra từ não bố mẹ có đột biến, và trong đời
 có thể tự thay đổi bằng cách bắt chước họ hàng thành công hơn. Không có kịch bản hành vi nào.
 
 Phần viết tay là **luật thế giới**: thức ăn mọc thế nào, đánh nhau tính thắng thua ra sao, công nghệ
 có tác dụng gì, thiên tai xảy ra thế nào, cảm xúc tăng giảm theo sự kiện nào. Đó là "harness". Não phải
-tự tìm cách sống trong luật đó. Nông nghiệp, định cư, tầng lớp chiến binh, thủ lĩnh, chia sẻ đều là
-thứ não tìm ra, không phải thứ được lập trình.
+tự tìm cách sống trong luật đó. Nông nghiệp, định cư, tầng lớp chiến binh, thủ lĩnh, chia sẻ, và giờ là
+rìu, thuyền, lửa, nồi, tường đều là thứ não tìm ra, không phải thứ được lập trình. Với đồ vật, phần viết
+tay là **vật lý của vật liệu** (mục Vật liệu và cách gia công), không phải danh sách phát minh.
 
 ## Cảm xúc, suy nghĩ, may mắn
 
@@ -264,33 +272,71 @@ thủ lĩnh sang người theo. Cuối mỗi lần chạy có bảng vinh danh n
 
 ## Phát minh mở, không theo lịch sử loài người
 
-Không có cây công nghệ viết sẵn. Mỗi thế giới tự sinh phát minh của riêng nó, tối đa 64 cái, từ hạt giống
-của thế giới đó. Khi một agent đang làm việc, có xác suất nhỏ nó tìm ra một phát minh mới. Phát minh là
-một bó hiệu ứng trên mười chiều:
+Không có cây công nghệ viết sẵn. Mỗi thế giới tự sinh phát minh của riêng nó, tối đa 128 cái đang được nhớ,
+từ hạt giống của thế giới đó. Có hai loại:
 
-| Chiều | Ý nghĩa |
-|---|---|
-| gather | hái nhanh hơn |
-| metabolism | tiêu hao năng lượng (dương là tệ) |
-| attack, defense | mạnh hơn khi đánh, khi giữ nhà |
-| farm | chăm ruộng hiệu quả hơn |
-| resist | chống bệnh |
-| teach, invent, share | dạy nhanh hơn, phát minh nhanh hơn, cho nhiều hơn |
-| soil | bào mòn đất thêm mỗi lần hái (dương là tệ) |
-| sea | đi biển: cộng dồn tới 0,25 là có thuyền |
+- **Ý tưởng** (practice): một bó hiệu ứng về ruộng, sức đề kháng, dạy học, chia sẻ, phát minh, tìm ra trong
+  lúc làm việc, thiên về việc đang làm, luôn có giá bằng tiêu hao hoặc đất. Đây là cơ chế cũ, nay chỉ còn
+  cho những thứ không phải đồ vật.
+- **Đồ vật** (craft): một công thức tìm ra bằng cách **làm thử với vật liệu trong tay**. Công dụng của thứ
+  làm ra không được viết sẵn mà suy từ tính chất vật liệu. Đây là phần mới và là phần chính.
 
-Lợi ích chính thiên về việc người phát minh đang làm: đang hái thì ra thứ về hái, đang đánh thì ra thứ
-về đánh, đang ốm mà nghỉ thì ra thứ về chống bệnh, đang chia sẻ thì ra thứ về dạy học. Người phát minh
-đứng cách biển không quá 4 ô thì hơn một phần ba số lần lại tìm ra thứ về **đi biển**. Bậc phát minh
-tăng theo số thứ người đó đã biết, nên lợi ích lớn dần. **Mọi phát minh đều có giá**: hoặc tiêu hao nhiều
-hơn, hoặc bào mòn đất nhiều hơn. Phát minh về hái và ruộng thường trả giá bằng đất.
+### Vật liệu và cách gia công
 
-Kiến thức lan truyền theo tiếp xúc, họ hàng dạy dễ hơn, thủ lĩnh dạy gấp đôi, và bị quên khi thế hệ mới
-không kịp học. Não nhìn thấy năng lực tổng của mình chứ không thấy tên phát minh.
+Thế giới có sáu vật liệu thô rải theo địa hình: **gỗ** trên đất màu mỡ, **đá** trên đất cằn, **sợi** gần
+như khắp đất liền, **đất sét** dọc bờ nước, **quặng** trong vài túi hiếm giữa đất cằn, **xương** nơi có
+người chết. Gỗ và sợi mọc lại nhanh, đá và đất sét chậm, quặng rất chậm, xương mục dần. Ai hái thức ăn thì
+nhặt luôn vật liệu quanh chỗ đứng, mang tối đa 8 đơn vị mỗi loại.
 
-**Thời đại** suy ra từ số phát minh trung bình mỗi đầu người và mức định cư, đặt tên không theo lịch sử:
-wild, kindled, rooted, woven, layered, soaring, radiant, beyond. Sử ký ghi mỗi lần đổi thời đại,
-sụp đổ (làng bị bỏ), lãng quên (kiến thức tụt quá nửa), đất cạn kiệt, và tuyệt chủng.
+Mỗi vật liệu là một vector 11 tính chất trong [0, 1]: cứng, giữ lưỡi, nổi, dẻo, chịu lửa, kết dính, nặng,
+rỗng, đang cháy, có cán, đã ghép. Có năm cách gia công, mỗi cách là một hàm trên tính chất:
+
+| Cách | Làm gì | Ví dụ hệ quả (không viết sẵn) |
+|---|---|---|
+| mài | cho một thứ cứng một lưỡi; lưỡi rồi thì thôi | đá mài thành lưỡi; gỗ mài thành cọc |
+| khoét | làm rỗng một thứ chưa rỗng, không phải lưỡi hay dây | gỗ khoét nổi được; đất sét khoét thành bát |
+| đập | hai thứ rất cứng đập vào nhau bật tia lửa | đá đập đá ra **lửa**, cháy rồi tắt |
+| buộc | 2–3 thứ với ít nhất một thứ kết dính | đầu cứng buộc vào cán dẻo thành **cán**; hai khối nặng buộc lại thành **khung** |
+| nung | một thứ đưa vào lửa, chỉ ai đang giữ lửa | đất sét nung thành sành, quặng nung thành kim loại, gỗ thành than |
+
+Công dụng suy từ tính chất của thứ làm ra, rồi xếp vào một ngăn: **công cụ** (lưỡi và cán → hái, làm
+ruộng), **vũ khí** (lưỡi và nặng), **tấm chắn** (cứng và dẻo, ghép từ nhiều phần), **thuyền** (nổi và
+rỗng), **bình chứa** (rỗng, tốt hơn khi đã nung → mang được nhiều hơn), **lửa** (nấu chín: đề kháng, ít
+tiêu hao; và mở ra cách nung), **nơi trú** (hai khối nặng ghép lại: ấm mùa đông và giữ nhà). Không có chỗ
+nào trong mã ghi "rìu", "thuyền", "nồi", "tường". Chúng xuất hiện khi ai đó tình cờ buộc đá mài vào gỗ, khoét
+một khúc gỗ, hay đập hai hòn đá.
+
+**Giá của đồ vật**: mọi thứ mang theo đều nặng, nặng thì tiêu hao năng lượng; công cụ đào bào mòn đất.
+Đồ vật **mòn** theo số tick sử dụng (công cụ mòn khi hái, vũ khí khi đánh, thuyền khi ở trên nước, lửa tắt
+dần dù không dùng) và phải làm lại từ vật liệu.
+
+### Biết và có là hai chuyện
+
+Não có thêm hành động thứ sáu: **chế tác**. Khi chọn nó, agent tốn năng lượng và:
+
+1. nếu biết một công thức mà mình chưa có (hoặc đồ đã mòn) và đủ vật liệu, kể cả làm các phần con trước,
+   thì làm thứ tốt nhất trong số đó;
+2. nếu không, **thử**: chọn ngẫu nhiên một cách gia công và 1–3 thứ đang có (vật liệu thô hoặc đồ đang
+   cầm), xem vật lý trả lời gì. Phần lớn lần thử không ra gì. Ra một thứ đủ hữu dụng thì đó là phát minh:
+   cả thế giới có thêm một công thức, người thử được ghi tên và uy tín.
+
+Công thức lan truyền như mọi kiến thức, qua tiếp xúc. Nhưng biết cách buộc rìu mà không biết mài lưỡi thì
+không làm được, trừ khi đang cầm sẵn một lưỡi. Công thức mà không ai còn sống nhớ, không ai còn cầm, không
+nhà nào còn dùng và không công thức nào khác cần đến thì bị **quên hẳn**, nhường chỗ cho thứ mới.
+
+Não thấy trong tay có gì (6 vật liệu), đang cầm gì (6 ngăn, còn bao nhiêu độ bền), trên đầu có mái không,
+và có công thức nào làm được ngay không. Não không thấy tên. Có chế tác hay không, mài cái gì, là do tiến
+hoá quyết định: dòng họ nào chế tác đúng lúc thì sống, dòng nào không thì thôi.
+
+**Nơi trú** chỉ dựng khi người làm đã đứng yên ít nhất 50 tick, đặt xuống ô đang đứng, thay thế nơi trú
+yếu hơn. Nó giảm tiêu hao mùa đông của ai đứng trên nó, cộng sức giữ nhà khi bị tấn công, mục dần theo
+độ cứng, và nếu bằng gỗ thì cháy được trong đột kích và cháy rừng. Viewer vẽ nơi trú theo vật liệu: gỗ,
+đá hay đã nung, nhỏ hay chắc.
+
+**Thời đại** suy ra từ số điều mỗi đầu người biết (chia 5, vì thế giới có công thức biết nhiều gấp mấy lần
+trước) và mức định cư, đặt tên không theo lịch sử: wild, kindled, rooted, woven, layered, soaring,
+radiant, beyond. Sử ký ghi mỗi lần đổi thời đại, sụp đổ, lãng quên, đất cạn kiệt, tuyệt chủng, và lần
+đầu mỗi thế giới có công cụ, vũ khí, tấm chắn, thuyền, bình chứa, lửa, nơi trú.
 
 ## Những gì đã quan sát được
 
@@ -404,6 +450,35 @@ giới không thuyền). Ở seed 2, ngay khi thuyền lan ra, đến 316 ngư�
 tới 28 phát minh mỗi đầu người, cao nhất từng thấy. Với cá không bao giờ cạn, biển trở thành kho dự trữ
 mà chiến tranh và hạn hán không chạm tới. Cần thêm seed để nói chắc đó là nguyên nhân hay chỉ là trùng hợp.
 
+### Sau khi có vật liệu và chế tác
+
+Cùng 8 seed, 20.000 tick, với hệ vật liệu thay cho phát minh về công cụ viết sẵn:
+
+| Kết cục | Số thế giới | Ghi chú |
+|---|---|---|
+| hưng thịnh | 5 | seed 2, 5, 6 biết 66 đến 99 điều mỗi đầu người; seed 6 là xã hội du mục (3% ở yên) mà vẫn 2.870 dân |
+| bùng-vỡ / sụp đổ | 1 | seed 8 lên 9.112 rồi rơi |
+| cầm cự | 1 | seed 1 không bao giờ vượt 1.000 dân, chỉ tìm ra 14 đồ vật |
+| tuyệt chủng | 1 | seed 4, bộ tộc trên đảo nhỏ, chết ở tick 5.469 |
+
+Trong 8 thế giới có 543 đồ vật được đặt tên: 144 vũ khí, 136 nơi trú, 82 thuyền, 67 bình chứa, 60 công cụ,
+36 lửa, 18 tấm chắn. Không cái nào được viết sẵn. Vài thứ đáng kể:
+
+- **Lửa** xuất hiện ở 7/8 thế giới, sớm nhất tick 94, muộn nhất tick 1.707, luôn bằng cách đập hai thứ
+  rất cứng vào nhau (đá với đá, đá với lưỡi đá). Sau lửa, seed 5 nung đất sét khoét thành **sành**
+  (`fire(hollow(clay))`, chứa 0,82) ở tick 3.666, rồi buộc sợi quanh sành thành bình có quai.
+- **Thuyền** ra từ gỗ khoét (`hollow(wood)`), hoặc gỗ buộc sợi rồi khoét: hai con đường tới cùng một thứ.
+- **Rìu** kiểu `bind(wood, fibre, sharpen(stone))` (+hái 0,28, +tấn công 1,2) là vũ khí mạnh nhất, và cũng
+  là công cụ; đầu đá mài buộc vào cán gỗ là thứ nhiều thế giới cùng tìm ra độc lập.
+- **Nơi trú** rẻ nhất là hai hòn đá và đất sét (`bind(stone, stone, clay)`, sức trú 0,88); nhà gỗ
+  (`bind(wood, wood, clay)`) yếu hơn nhưng ở đâu cũng dựng được, và cháy được.
+- Thế giới nghèo (seed 1, 3) chỉ tìm ra 14 đồ vật: ít người thì ít lần thử, ít lần thử thì ít phát minh,
+  và ngược lại. Phát minh không phải thứ được phát cho mọi xã hội.
+
+Giá phải trả: vật nặng làm tiêu hao tăng 15 đến 27% cho ai mang, nên mang rìu mà không dùng là lỗ; công
+cụ đào bào mòn đất; nhà gỗ cháy trong đột kích. Nhìn bằng mắt: ở seed 2 sau tick 10.000, hai phần ba dân số
+cầm vũ khí, một phần ba có thuyền, làng đầy nhà đá nhỏ.
+
 ### Đối chứng: có mệnh lệnh và không có mệnh lệnh
 
 Cùng 12 seed, 30.000 tick, một nhánh mặc định, một nhánh `--no-orders` (thủ lĩnh vẫn hình thành
@@ -438,6 +513,8 @@ nghe lời đã đủ tạo khác biệt. Mẫu 12 còn nhỏ, chưa phải kế
 ```
 sim/src/
   config.rs   toàn bộ luật thế giới và tham số, đọc từ CLI
+  craft.rs    vật lý vật liệu: sáu vật liệu, năm cách gia công, công dụng suy từ tính chất
+  innovation.rs ý tưởng và công thức, sổ đăng ký phát minh của thế giới
   world.rs    sinh địa hình, thức ăn, mùa
   brain.rs    gen, mạng thần kinh, đột biến, độ họ hàng
   agent.rs    trạng thái agent và quyết định mỗi tick

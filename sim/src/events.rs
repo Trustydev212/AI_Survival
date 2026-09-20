@@ -136,14 +136,17 @@ impl EventLog {
 
         // Innovations that reached half the population.
         for (idx, inn) in innovations.iter().enumerate() {
-            let key = format!("adopted:{idx}");
+            if inn.name.is_empty() {
+                continue;
+            }
+            let key = format!("adopted:{idx}-{}", inn.born_tick);
             if self.fired.contains(&key) {
                 continue;
             }
-            let bit = 1u64 << idx;
+            let bit = 1u128 << idx;
             let n = agents.iter().filter(|a| a.known & bit != 0).count();
             if pop > 0 && n as f32 / popf >= 0.5 {
-                self.fire(tick, &key, format!("{} is now known by half the population", inn.describe()));
+                self.fire(tick, &key, format!("{} is now known by half the population", inn.describe(innovations)));
             }
         }
 
@@ -261,8 +264,16 @@ pub fn kind_of(text: &str) -> &'static str {
     if text.contains("first fields burned") {
         return "first_burn";
     }
-    if text.contains("first boat") {
+    if text.contains("sets out to sea") {
         return "first_sail";
+    }
+    for (slot, kind) in [("first tool:", "first_tool"), ("first weapon:", "first_weapon"), ("first armour:", "first_armour"), ("first boat:", "first_boat"), ("first vessel:", "first_vessel"), ("first fire:", "first_fire"), ("first shelter:", "first_shelter"), ("first house burned", "first_house_burned")] {
+        if text.starts_with(slot) {
+            return kind;
+        }
+    }
+    if text.starts_with("crafted:") {
+        return "craft";
     }
     "other"
 }

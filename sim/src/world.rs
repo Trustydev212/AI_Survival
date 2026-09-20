@@ -1,7 +1,18 @@
 //! The map: a grid of cells with fixed fertility and regrowing food.
 //! Fertility is clustered on purpose so that land is scarce and unequal.
 
+use crate::craft::{M_BONE, M_CLAY, M_FIBRE, M_ORE, M_STONE, M_WOOD, N_MAT};
 use crate::rng::Rng;
+
+/// A made thing standing on a cell: the innovation index of the shelter and its remaining life.
+#[derive(Clone, Copy)]
+pub struct Building {
+    pub item: u16,
+    pub life: f32,
+    pub shelter: f32,
+    /// Wood-like things burn; fired and stone things do not.
+    pub flammable: bool,
+}
 
 pub struct World {
     pub width: usize,
@@ -15,6 +26,12 @@ pub struct World {
     pub food: Vec<f32>,
     /// How tended a cell is, 0..1. Raised by farmers standing on it, decays otherwise.
     pub cultivation: Vec<f32>,
+    /// Raw materials lying on each cell, 0..1 per kind; wood and fibre regrow, the rest barely.
+    pub mats: Vec<[f32; N_MAT]>,
+    /// What each cell could hold at most (the deposit); regrowth heads back toward it.
+    pub mats_cap: Vec<[f32; N_MAT]>,
+    /// Shelters built on cells, if any.
+    pub buildings: Vec<Option<Building>>,
     /// Weather multiplier on regrowth: 1 normal, below 1 drought, above 1 a good year.
     pub climate: f32,
     pub farm_boost: f32,
@@ -62,7 +79,31 @@ impl World {
         let food = fertility.iter().map(|f| f * max_food * 0.8).collect();
         let cultivation = vec![0.0; width * height];
         let base_fertility = fertility.clone();
-        World { width, height, base_fertility, water, fertility, food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
+        // Deposits. Wood where it is fertile, stone where it is bare, ore in rare pockets of the bare
+        // land, clay along the water, fibre almost everywhere on land, bone only where things die.
+        let ore_noise: Vec<f32> = (0..width * height).map(|_| rng.f32()).collect();
+        let is_water = |x: isize, y: isize| water[(y.rem_euclid(height as isize) as usize) * width + x.rem_euclid(width as isize) as usize];
+        let mut mats_cap = vec![[0.0f32; N_MAT]; width * height];
+        for y in 0..height {
+            for x in 0..width {
+                let i = y * width + x;
+                if water[i] {
+                    continue;
+                }
+                let f = base_fertility[i];
+                let m = &mut mats_cap[i];
+                m[M_WOOD] = if f > 0.35 { ((f - 0.25) * 1.3).min(1.0) } else { 0.0 };
+                m[M_FIBRE] = 0.25 + 0.6 * f;
+                m[M_STONE] = if f < 0.3 { 0.8 } else { 0.15 };
+                m[M_ORE] = if f < 0.3 && ore_noise[i] > 0.93 { 0.7 } else { 0.0 };
+                let coast = (-2..=2).any(|dy| (-2..=2).any(|dx| is_water(x as isize + dx, y as isize + dy)));
+                m[M_CLAY] = if coast { 0.8 } else { 0.0 };
+                m[M_BONE] = 0.0;
+            }
+        }
+        let mats = mats_cap.clone();
+        let buildings = vec![None; width * height];
+        World { width, height, base_fertility, water, fertility, mats, mats_cap, buildings, food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
     }
 
     #[inline]
@@ -237,6 +278,48 @@ impl World {
                 }
             }
         }
+    }
+
+    /// Materials grow back toward the deposit: wood and fibre quickly, stone and ore and clay very
+    /// slowly (the deposit is what is easy to reach; digging deeper takes time). Bone rots.
+    pub fn regrow_mats(&mut self) {
+        const RATE: [f32; N_MAT] = [0.0006, 0.00005, 0.002, 0.0002, 0.00002, 0.0];
+        for i in 0..self.mats.len() {
+            let m = &mut self.mats[i];
+            let cap = &self.mats_cap[i];
+            for k in 0..N_MAT {
+                if k == M_BONE {
+                    m[k] *= 0.9995;
+                } else if m[k] < cap[k] {
+                    m[k] = (m[k] + RATE[k] * cap[k]).min(cap[k]);
+                }
+            }
+        }
+    }
+
+    /// Shelters wear; a wildfire or raid may burn wooden ones (handled by callers via `burn_building`).
+    pub fn age_buildings(&mut self) {
+        for b in self.buildings.iter_mut() {
+            if let Some(bd) = b {
+                bd.life -= 1.0;
+                if bd.life <= 0.0 {
+                    *b = None;
+                }
+            }
+        }
+    }
+
+    /// Shelter strength on a cell, 0 if nothing stands there.
+    #[inline]
+    pub fn shelter_at(&self, x: f32, y: f32) -> f32 {
+        match self.buildings[self.idx(x, y)] {
+            Some(b) => b.shelter,
+            None => 0.0,
+        }
+    }
+
+    pub fn building_count(&self) -> usize {
+        self.buildings.iter().filter(|b| b.is_some()).count()
     }
 
     pub fn cultivated_cells(&self) -> usize {
