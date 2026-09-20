@@ -28,6 +28,38 @@ pub const BOND: usize = 3;
 pub const N_EMO: usize = 4;
 pub const EMO_NAMES: [&str; N_EMO] = ["fear", "anger", "joy", "bond"];
 
+/// Skills grow with practice within one life and are never inherited.
+pub const SK_GATHER: usize = 0;
+pub const SK_FIGHT: usize = 1;
+pub const SK_FARM: usize = 2;
+pub const N_SKILL: usize = 3;
+pub const SKILL_NAMES: [&str; N_SKILL] = ["gathering", "fighting", "farming"];
+
+pub const NO_LEADER: u32 = u32::MAX;
+
+/// Deterministic pronounceable name from an id, so leaders can be talked about.
+pub fn name_of(id: u32) -> String {
+    const ON: [&str; 12] = ["k", "t", "m", "r", "s", "n", "v", "l", "d", "b", "h", "z"];
+    const VO: [&str; 6] = ["a", "e", "i", "o", "u", "ai"];
+    const END: [&str; 8] = ["", "n", "r", "sh", "l", "k", "th", "m"];
+    let mut x = id.wrapping_mul(2654435761) ^ 0x9E37;
+    let mut out = String::new();
+    let syllables = 2 + (x % 2) as usize;
+    for i in 0..syllables {
+        x = x.wrapping_mul(1103515245).wrapping_add(12345);
+        let c = ON[(x >> 8) as usize % ON.len()];
+        let v = VO[(x >> 16) as usize % VO.len()];
+        if i == 0 {
+            out.push_str(&c.to_uppercase());
+        } else {
+            out.push_str(c);
+        }
+        out.push_str(v);
+    }
+    out.push_str(END[(x >> 24) as usize % END.len()]);
+    out
+}
+
 #[derive(Clone)]
 pub struct Agent {
     pub x: f32,
@@ -55,12 +87,28 @@ pub struct Agent {
     pub sick: u16,
     /// Ticks of immunity left after recovering.
     pub immune: u16,
+    pub skill: [f32; N_SKILL],
+    /// Standing among kin, earned by deeds and slowly forgotten.
+    pub prestige: f32,
+    /// Index of the leader this agent follows this tick, or NO_LEADER.
+    pub leader: u32,
+    pub followers: u16,
+    pub is_leader: bool,
+    /// Consecutive ticks as a leader. A name is earned, not given.
+    pub tenure: u16,
+    /// 0 = never led; otherwise the id its name is derived from.
+    pub name: u32,
 }
 
 impl Agent {
     #[inline]
     pub fn knows(&self, bit: u16) -> bool {
         self.tech & bit != 0
+    }
+
+    #[inline]
+    pub fn train(&mut self, sk: usize, amount: f32) {
+        self.skill[sk] = (self.skill[sk] + amount).min(1.0);
     }
 
     #[inline]
@@ -95,4 +143,5 @@ pub struct Decision {
     pub action: Action,
     pub target: u32, // nearest agent index at decision time, u32::MAX if none
     pub memory: [f32; N_MEM],
+    pub leader: u32,
 }

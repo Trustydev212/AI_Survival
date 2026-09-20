@@ -73,8 +73,14 @@ fn main() {
         "\nTechnology at end: {}",
         agent::TECH_NAMES.iter().zip(share.iter()).map(|(n, s)| format!("{n} {:.0}%", s * 100.0)).collect::<Vec<_>>().join("  ")
     );
+    let mut hall: Vec<_> = sim.hall.iter().map(|(name, v)| (*name, *v)).collect();
+    hall.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+    println!("\nHall of fame (greatest followings):");
+    for (name, (peak, lineage, tick)) in hall.iter().take(5) {
+        println!("  {:<10} lineage {:>3}  {:>3} followers at tick {}", agent::name_of(*name), lineage, peak, tick);
+    }
     println!("\nHistory ({} events, written to {}):", sim.events.events.len(), events_path);
-    let noisy = ["famine", "war", "plague toll", "raids", "drought", "a year of plenty", "plague:"];
+    let noisy = ["famine", "war", "plague toll", "raids", "drought", "a year of plenty", "plague:", "flood", "wildfire", "bounty", "harsh year", "leader "];
     for e in sim.events.events.iter().filter(|e| !noisy.iter().any(|p| e.text.starts_with(p))) {
         println!("  tick {:>6}: {}", e.tick, e.text);
     }

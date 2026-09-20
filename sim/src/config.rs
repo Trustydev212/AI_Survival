@@ -80,6 +80,20 @@ pub struct Config {
     pub p_infect: f32,
     pub sick_drain: f32,
     pub immune_len: u16,
+    pub p_flood: f32,
+    pub p_wildfire: f32,
+    pub p_harsh_winter: f32,
+    pub p_bounty: f32,
+
+    // learning within a life
+    pub skill_gain: f32,
+    pub p_imitate: f32,
+    pub imitate_rate: f32,
+
+    // leadership
+    pub leader_min_followers: u16,
+    pub leader_min_prestige: f32,
+    pub prestige_decay: f32,
 }
 
 impl Default for Config {
@@ -153,6 +167,18 @@ impl Default for Config {
             p_infect: 0.02,
             sick_drain: 0.25,
             immune_len: 4000,
+            p_flood: 0.08,
+            p_wildfire: 0.08,
+            p_harsh_winter: 0.08,
+            p_bounty: 0.10,
+
+            skill_gain: 0.002,
+            p_imitate: 0.002,
+            imitate_rate: 0.1,
+
+            leader_min_followers: 5,
+            leader_min_prestige: 5.0,
+            prestige_decay: 0.999,
         }
     }
 }
@@ -205,6 +231,13 @@ impl Config {
                 "--p-infect" => set!(p_infect),
                 "--p-windfall" => set!(p_windfall),
                 "--p-accident" => set!(p_accident),
+                "--p-flood" => set!(p_flood),
+                "--p-wildfire" => set!(p_wildfire),
+                "--p-harsh-winter" => set!(p_harsh_winter),
+                "--p-bounty" => set!(p_bounty),
+                "--p-imitate" => set!(p_imitate),
+                "--skill-gain" => set!(skill_gain),
+                "--leader-min-followers" => set!(leader_min_followers),
                 "--cult-decay" => set!(cult_decay),
                 _ => return Err(format!("unknown flag {key}\n{HELP}")),
             }
@@ -246,4 +279,8 @@ USAGE: sim [--flag value ...]
   --p-drought F     chance each year of a drought (0.15); --p-golden F good year (0.15)
   --p-plague F      chance each year of a plague outbreak (0.12); --p-infect F per contact-tick (0.02)
   --p-windfall F    per agent-tick chance of a lucky find (0.0001); --p-accident F of an injury (0.00005)
+  --p-flood F --p-wildfire F --p-harsh-winter F --p-bounty F   yearly chances of regional disasters (0.08/0.08/0.08/0.10)
+  --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
+  --skill-gain F    skill gained per practice (0.002)
+  --leader-min-followers N   kin needed to count as a leader (5)
 ";

@@ -1,6 +1,6 @@
 //! Windowed counters and population-level metrics, printed as a table and CSV.
 
-use crate::agent::{Agent, EMO_NAMES, N_EMO, N_TECH, TECH_BITS, TECH_NAMES};
+use crate::agent::{Agent, EMO_NAMES, N_EMO, N_SKILL, N_TECH, SKILL_NAMES, TECH_BITS, TECH_NAMES};
 use crate::brain::{Action, N_ACT};
 use crate::strategy::{self, StrategyReport};
 use std::collections::HashMap;
@@ -26,6 +26,12 @@ pub struct Window {
     pub windfalls: u32,
     pub accidents: u32,
     pub burned: u32,
+    pub floods: u32,
+    pub wildfires: u32,
+    pub harsh_winters: u32,
+    pub bounties: u32,
+    pub imitations: u32,
+    pub leader_deaths: u32,
 }
 
 pub struct Metrics {
@@ -47,6 +53,9 @@ pub struct Metrics {
     pub settled: f32,
     pub sick: f32,
     pub emotion: [f32; N_EMO],
+    pub skill: [f32; N_SKILL],
+    pub leaders: usize,
+    pub max_followers: u16,
     pub era: &'static str,
     pub w: Window,
 }
@@ -87,6 +96,17 @@ pub fn compute(tick: u64, season: f32, climate: f32, agents: &[Agent], food: f32
     for e in emotion.iter_mut() {
         *e /= n;
     }
+    let mut skill = [0.0f32; N_SKILL];
+    for a in agents {
+        for k in 0..N_SKILL {
+            skill[k] += a.skill[k];
+        }
+    }
+    for k in skill.iter_mut() {
+        *k /= n;
+    }
+    let leaders = agents.iter().filter(|a| a.is_leader).count();
+    let max_followers = agents.iter().map(|a| a.followers).max().unwrap_or(0);
 
     let mut by_lineage: HashMap<u32, u32> = HashMap::new();
     for a in agents {
@@ -159,6 +179,9 @@ pub fn compute(tick: u64, season: f32, climate: f32, agents: &[Agent], food: f32
         settled,
         sick,
         emotion,
+        skill,
+        leaders,
+        max_followers,
         era,
         w,
     }
@@ -166,8 +189,8 @@ pub fn compute(tick: u64, season: f32, climate: f32, agents: &[Agent], food: f32
 
 pub fn print_header() {
     println!(
-        "{:>7} {:>4} {:>5} {:>6} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>4} {:>4} {:>4} {:>4} {:<16} {}",
-        "tick", "clim", "pop", "energy", "lin", "gini", "born", "starv", "kill", "plag", "attk", "share", "strat", "tool%", "farm%", "metl%", "writ%", "field", "stay%", "fear", "angr", "joy", "bond", "era", "dominant strategies"
+        "{:>7} {:>4} {:>5} {:>6} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:<16} {}",
+        "tick", "clim", "pop", "energy", "lin", "gini", "born", "starv", "kill", "plag", "attk", "share", "strat", "tool%", "farm%", "metl%", "writ%", "field", "stay%", "fear", "angr", "joy", "bond", "skil", "lead", "mxfl", "era", "dominant strategies"
     );
 }
 
@@ -181,7 +204,7 @@ pub fn print_row(m: &Metrics) {
         .map(|s| format!("[{:.0}% {}]", 100.0 * s.count as f32 / counted as f32, strategy::describe(&s.centroid)))
         .collect();
     println!(
-        "{:>7} {:>4.2} {:>5} {:>6.1} {:>5} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5.0} {:>5.0} {:>5.0} {:>5.0} {:>5} {:>5.0} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:<16} {}",
+        "{:>7} {:>4.2} {:>5} {:>6.1} {:>5} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5.0} {:>5.0} {:>5.0} {:>5.0} {:>5} {:>5.0} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4} {:>4} {:<16} {}",
         m.tick,
         m.climate,
         m.pop,
@@ -205,6 +228,9 @@ pub fn print_row(m: &Metrics) {
         m.emotion[1],
         m.emotion[2],
         m.emotion[3],
+        (m.skill[0] + m.skill[1] + m.skill[2]) / 3.0,
+        m.leaders,
+        m.max_followers,
         m.era,
         strats.join(" ")
     );
@@ -214,10 +240,12 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
     let acts: Vec<&str> = Action::ALL.iter().map(|a| a.name()).collect();
     let techs: Vec<String> = TECH_NAMES.iter().map(|t| format!("{t}_share")).collect();
     let emos: Vec<String> = EMO_NAMES.iter().map(|e| format!("mean_{e}")).collect();
+    let skills: Vec<String> = SKILL_NAMES.iter().map(|e| format!("skill_{e}")).collect();
     writeln!(
         out,
-        "tick,season,climate,pop,mean_energy,mean_inventory,food,lineages,top_lineage_share,gini,action_entropy,marker_spread,strategy_entropy,effective_strategies,births,starved,aged,killed,plague_deaths,attacks,attack_wins,shares,immigrants,cultivated_cells,settled_share,sick_share,droughts,outbreaks,infections,windfalls,accidents,fields_burned,era,{},{},{}",
+        "tick,season,climate,pop,mean_energy,mean_inventory,food,lineages,top_lineage_share,gini,action_entropy,marker_spread,strategy_entropy,effective_strategies,births,starved,aged,killed,plague_deaths,attacks,attack_wins,shares,immigrants,cultivated_cells,settled_share,sick_share,droughts,outbreaks,infections,windfalls,accidents,fields_burned,floods,wildfires,harsh_winters,bounties,imitations,leaders,max_followers,leader_deaths,era,{},{},{},{}",
         emos.join(","),
+        skills.join(","),
         techs.join(","),
         acts.join(",")
     )
@@ -227,9 +255,10 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     let acts: Vec<String> = m.w.actions.iter().map(|c| c.to_string()).collect();
     let techs: Vec<String> = m.tech.iter().map(|t| format!("{t:.4}")).collect();
     let emos: Vec<String> = m.emotion.iter().map(|e| format!("{e:.4}")).collect();
+    let skills: Vec<String> = m.skill.iter().map(|e| format!("{e:.4}")).collect();
     writeln!(
         out,
-        "{},{:.3},{:.2},{},{:.2},{:.2},{:.1},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{},{},{},{},{},{},{},{},{},{},{:.4},{:.4},{},{},{},{},{},{},{},{},{},{}",
+        "{},{:.3},{:.2},{},{:.2},{:.2},{:.1},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{},{},{},{},{},{},{},{},{},{},{:.4},{:.4},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
         m.tick,
         m.season,
         m.climate,
@@ -262,8 +291,17 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
         m.w.windfalls,
         m.w.accidents,
         m.w.burned,
+        m.w.floods,
+        m.w.wildfires,
+        m.w.harsh_winters,
+        m.w.bounties,
+        m.w.imitations,
+        m.leaders,
+        m.max_followers,
+        m.w.leader_deaths,
         m.era,
         emos.join(","),
+        skills.join(","),
         techs.join(","),
         acts.join(",")
     )

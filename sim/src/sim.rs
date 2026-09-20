@@ -18,7 +18,13 @@ pub struct Sim {
     pub window: Window,
     pub events: EventLog,
     pub climate_until: u64,
+    /// Hall of fame: name id -> (peak followers, lineage, tick of peak).
+    pub hall: std::collections::HashMap<u32, (u16, u32, u64)>,
     spatial: SpatialHash,
+    followers: Vec<u16>,
+    apprentice: Vec<(u32, [f32; N_SKILL])>,
+    imitations: Vec<(u32, u32)>,
+    next_name: u32,
     learned: Vec<(u32, u16)>,
     infected: Vec<u32>,
     decisions: Vec<Decision>,
@@ -40,7 +46,12 @@ impl Sim {
             window: Window::default(),
             events,
             climate_until: 0,
+            hall: std::collections::HashMap::new(),
             spatial,
+            followers: Vec::new(),
+            apprentice: Vec::new(),
+            imitations: Vec::new(),
+            next_name: 0,
             learned: Vec::new(),
             infected: Vec::new(),
             decisions: Vec::with_capacity(cfg.max_agents),
@@ -140,6 +151,13 @@ impl Sim {
             home_y: 0.0,
             sick: 0,
             immune: 0,
+            skill: [0.0; N_SKILL],
+            prestige: 0.0,
+            leader: NO_LEADER,
+            followers: 0,
+            is_leader: false,
+            tenure: 0,
+            name: 0,
         }
     }
 
@@ -177,6 +195,43 @@ impl Sim {
             self.climate_until = self.tick + half;
             self.events.fire(self.tick, "", "a year of plenty: everything grows faster".to_string());
         }
+        else if roll < self.cfg.p_drought + self.cfg.p_golden + self.cfg.p_harsh_winter {
+            self.world.climate = 0.5;
+            self.climate_until = self.tick + year;
+            self.window.harsh_winters += 1;
+            self.events.fire(self.tick, "", "harsh year: a long, bitter winter".to_string());
+        }
+        // Regional luck: floods and wildfires strike a place, bounty blesses one.
+        let r2 = self.rng.f32();
+        if r2 < self.cfg.p_flood {
+            let (cx, cy) = self.fertile_spot();
+            let (cx, cy) = (cx as usize, cy as usize);
+            self.world.for_region(cx, cy, 15, |w, i| {
+                w.cultivation[i] *= 0.1;
+                w.food[i] *= 0.3;
+            });
+            self.strike_agents(cx as f32, cy as f32, 15.0, 10.0);
+            self.window.floods += 1;
+            self.events.fire(self.tick, "", format!("flood: fields and stores swept away around ({cx}, {cy})"));
+        } else if r2 < self.cfg.p_flood + self.cfg.p_wildfire {
+            let (cx, cy) = self.fertile_spot();
+            let (cx, cy) = (cx as usize, cy as usize);
+            self.world.for_region(cx, cy, 15, |w, i| {
+                w.food[i] = 0.0;
+                w.cultivation[i] *= 0.5;
+            });
+            self.strike_agents(cx as f32, cy as f32, 15.0, 15.0);
+            self.window.wildfires += 1;
+            self.events.fire(self.tick, "", format!("wildfire: the land burns around ({cx}, {cy})"));
+        } else if r2 < self.cfg.p_flood + self.cfg.p_wildfire + self.cfg.p_bounty {
+            let (cx, cy) = self.fertile_spot();
+            let (cx, cy) = (cx as usize, cy as usize);
+            self.world.for_region(cx, cy, 15, |w, i| {
+                w.food[i] = (w.food[i] + 8.0 * w.fertility[i]).min(w.max_food * 3.0);
+            });
+            self.window.bounties += 1;
+            self.events.fire(self.tick, "", format!("bounty: a great herd or harvest appears around ({cx}, {cy})"));
+        }
         if self.rng.f32() < self.cfg.p_plague && self.agents.len() > 10 {
             let mut seeded = 0;
             for _ in 0..3 {
@@ -190,6 +245,29 @@ impl Sim {
             if seeded > 0 {
                 self.window.outbreaks += 1;
                 self.events.fire(self.tick, "", "plague: a sickness appears".to_string());
+            }
+        }
+    }
+
+    /// Everyone within radius of a disaster loses energy and takes fright.
+    fn strike_agents(&mut self, cx: f32, cy: f32, radius: f32, damage: f32) {
+        let (w, h) = (self.cfg.width, self.cfg.height);
+        let wrap = self.cfg.wrap;
+        let d = |a: f32, b: f32, size: usize| {
+            let mut d = b - a;
+            if wrap {
+                let s = size as f32;
+                if d > s * 0.5 { d -= s } else if d < -s * 0.5 { d += s }
+            }
+            d
+        };
+        for a in self.agents.iter_mut() {
+            let dx = d(a.x, cx, w);
+            let dy = d(a.y, cy, h);
+            if dx * dx + dy * dy <= radius * radius {
+                a.energy -= damage;
+                a.feel(FEAR, 0.4);
+                a.feel(JOY, -0.2);
             }
         }
     }
@@ -208,6 +286,11 @@ impl Sim {
             let mut kin = 0.0f32;
             let mut foe = 0.0f32;
             let mut sick_near = 0.0f32;
+            let own_score = a.prestige * (0.5 + a.genome.charisma());
+            let mut leader = NO_LEADER;
+            let mut leader_score = own_score.max(cfg.leader_min_prestige);
+            let prev_leader = a.leader;
+            let mut prev_score = 0.0f32;
             self.spatial.for_each_near(a.x, a.y, |j| {
                 if j == i {
                     return;
@@ -222,6 +305,14 @@ impl Sim {
                 crowd += 1.0;
                 if a.genome.kinship(&o.genome) >= cfg.kin_threshold {
                     kin += 1.0;
+                    let score = o.prestige * (0.5 + o.genome.charisma());
+                    if j as u32 == prev_leader {
+                        prev_score = score;
+                    }
+                    if score > leader_score {
+                        leader_score = score;
+                        leader = j as u32;
+                    }
                 } else {
                     foe += 1.0;
                 }
@@ -285,7 +376,26 @@ impl Sim {
             input[37] = if a.knows(METAL) { 1.0 } else { 0.0 };
             input[38] = if a.knows(WALLS) { 1.0 } else { 0.0 };
             input[39] = if a.knows(WRITING) { 1.0 } else { 0.0 };
+            // Loyalty: keep the current leader unless a rival is clearly better.
+            if prev_score > 0.0 && prev_score >= own_score.max(cfg.leader_min_prestige) && prev_score * 1.25 >= leader_score {
+                leader = prev_leader;
+            }
             input[40] = world.climate - 1.0;
+            if leader != NO_LEADER {
+                let l = &agents[leader as usize];
+                input[41] = 1.0;
+                input[42] = self.delta(a.x, l.x, cfg.width) / cfg.vision;
+                input[43] = self.delta(a.y, l.y, cfg.height) / cfg.vision;
+                input[44] = if l.last_action == Action::Attack { 1.0 } else { 0.0 };
+                input[45] = if l.last_action == Action::Share { 1.0 } else { 0.0 };
+            }
+            input[46] = (a.prestige / 20.0).min(2.0);
+            input[47] = a.genome.charisma();
+            input[48] = if a.is_leader { 1.0 } else { 0.0 };
+            input[49] = a.skill[SK_GATHER];
+            input[50] = a.skill[SK_FIGHT];
+            input[51] = a.skill[SK_FARM];
+            input[52] = (a.followers as f32 / 10.0).min(2.0);
 
             let (mut mx, mut my, action, memory) = a.genome.think(&input);
             // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
@@ -293,7 +403,7 @@ impl Sim {
                 mx = 0.0;
                 my = 0.0;
             }
-            self.decisions.push(Decision { mx, my, action, target: nearest, memory });
+            self.decisions.push(Decision { mx, my, action, target: nearest, memory, leader });
         }
     }
 
@@ -307,7 +417,51 @@ impl Sim {
         p
     }
 
+    /// Who leads whom this tick: a follower's chosen leader gets a follower; enough
+    /// followers make a leader, who is named the first time it happens.
+    fn resolve_leaders(&mut self) {
+        let n = self.decisions.len();
+        self.followers.clear();
+        self.followers.resize(n, 0);
+        for (i, d) in self.decisions.iter().enumerate() {
+            self.agents[i].leader = d.leader;
+            if d.leader != NO_LEADER {
+                self.followers[d.leader as usize] = self.followers[d.leader as usize].saturating_add(1);
+            }
+        }
+        let min = self.cfg.leader_min_followers;
+        for i in 0..n {
+            let f = self.followers[i];
+            let a = &mut self.agents[i];
+            a.followers = f;
+            a.is_leader = f >= min;
+            if !a.is_leader {
+                a.tenure = 0;
+                continue;
+            }
+            a.tenure = a.tenure.saturating_add(1);
+            a.prestige += 0.005 * f as f32;
+            if a.name == 0 && a.tenure >= 200 {
+                self.next_name += 1;
+                a.name = self.next_name;
+                let text = format!("{} of lineage {} has led {} kin for 200 ticks", name_of(a.name), a.lineage, f);
+                self.events.fire(self.tick, "first_leader", format!("first leader: {text}"));
+            }
+            if a.name != 0 {
+                let entry = self.hall.entry(a.name).or_insert((0, a.lineage, self.tick));
+                if f > entry.0 {
+                    *entry = (f, a.lineage, self.tick);
+                    if f >= 40 {
+                        let key = format!("great:{}", a.name);
+                        self.events.fire(self.tick, &key, format!("great leader: {} of lineage {} now leads {} kin", name_of(a.name), a.lineage, f));
+                    }
+                }
+            }
+        }
+    }
+
     fn act(&mut self) {
+        self.resolve_leaders();
         let n = self.agents.len();
         let mut births: Vec<Agent> = Vec::new();
         for i in 0..n {
@@ -341,8 +495,10 @@ impl Sim {
                     if self.agents[i].knows(METAL) {
                         rate *= cfg.metal_mult;
                     }
+                    rate *= 1.0 + 0.5 * self.agents[i].skill[SK_GATHER];
                     let take = self.world.harvest(self.agents[i].x, self.agents[i].y, rate, cfg.wrap);
                     let a = &mut self.agents[i];
+                    a.train(SK_GATHER, cfg.skill_gain);
                     a.energy += take;
                     if a.energy > cfg.max_energy {
                         a.inventory = (a.inventory + a.energy - cfg.max_energy).min(cfg.inv_cap);
@@ -397,6 +553,7 @@ impl Sim {
                         let a = &mut self.agents[i];
                         a.energy -= cfg.repro_cost;
                         a.children = a.children.saturating_add(1);
+                        a.prestige += 0.5;
                         let lineage = a.lineage;
                         let mut child = self.make_agent(x, y, child_genome, lineage);
                         child.energy = cfg.child_energy;
@@ -429,7 +586,9 @@ impl Sim {
         let a = &mut self.agents[i];
         if a.knows(FARMING) && a.still >= cfg.settle_ticks {
             let irrigate = a.knows(IRRIGATION);
-            let gain = if irrigate { cfg.cult_gain * 2.0 } else { cfg.cult_gain };
+            let mut gain = if irrigate { cfg.cult_gain * 2.0 } else { cfg.cult_gain };
+            gain *= 1.0 + a.skill[SK_FARM];
+            a.train(SK_FARM, cfg.skill_gain);
             let (ax, ay) = (a.x, a.y);
             if !a.has_home {
                 a.has_home = true;
@@ -442,7 +601,15 @@ impl Sim {
 
     /// Fighting strength: energy, arms, walls when defending at home, and mood.
     fn strength(&self, a: &Agent, defending: bool) -> f32 {
-        let mut s = a.energy;
+        let mut s = a.energy + 20.0 * a.skill[SK_FIGHT];
+        // Fighting beside a leader who just charged: coordinated assault.
+        if !defending && a.leader != NO_LEADER {
+            if let Some(l) = self.agents.get(a.leader as usize) {
+                if l.last_action == Action::Attack {
+                    s += 10.0;
+                }
+            }
+        }
         if a.knows(WEAPONS) {
             s += 20.0;
         }
@@ -465,7 +632,12 @@ impl Sim {
             return;
         }
         self.window.attacks += 1;
-        self.agents[i].energy -= self.cfg.attack_cost;
+        {
+            let gain = self.cfg.skill_gain * 2.0;
+            let a = &mut self.agents[i];
+            a.energy -= self.cfg.attack_cost;
+            a.train(SK_FIGHT, gain);
+        }
         let sa = self.strength(&self.agents[i], false);
         let sd = self.strength(&self.agents[j], true);
         let p_win = 1.0 / (1.0 + (-(sa - sd) / 25.0).exp());
@@ -515,6 +687,7 @@ impl Sim {
             }
             a.feel(JOY, 0.1);
             a.feel(ANGER, -0.1);
+            a.prestige += 0.3;
         } else {
             let a = &mut self.agents[i];
             a.energy -= cfg.attack_damage * 0.5;
@@ -546,6 +719,7 @@ impl Sim {
             let g = &mut self.agents[i];
             g.inventory -= give;
             g.feel(BOND, 0.1);
+            g.prestige += 0.05;
         }
         let t = &mut self.agents[j];
         t.inventory = (t.inventory + give).min(cfg.inv_cap);
@@ -561,38 +735,59 @@ impl Sim {
         let range2 = cfg.learn_range * cfg.learn_range;
         self.learned.clear();
         self.infected.clear();
+        self.apprentice.clear();
+        self.imitations.clear();
         let mut rng = self.rng.clone();
         for i in 0..n {
             let a = &self.agents[i];
             let can_learn = a.tech != ALL_TECH;
             let can_catch = a.sick == 0 && a.immune == 0;
-            if !can_learn && !can_catch {
-                continue;
-            }
+            let wealth = a.energy + a.inventory;
             let mut gained = 0u16;
             let mut caught = false;
+            let mut skills = [0.0f32; N_SKILL];
+            let mut model = NO_LEADER;
             let agents = &self.agents;
             self.spatial.for_each_near(a.x, a.y, |j| {
                 if j == i || j >= n {
                     return;
                 }
                 let o = &agents[j];
-                let missing = o.tech & !a.tech & !gained;
+                let missing = if can_learn { o.tech & !a.tech & !gained } else { 0 };
                 let contagious = can_catch && !caught && o.sick > 0;
-                if missing == 0 && !contagious {
-                    return;
-                }
                 let dx = self.delta(a.x, o.x, cfg.width);
                 let dy = self.delta(a.y, o.y, cfg.height);
                 if dx * dx + dy * dy > range2 {
                     return;
                 }
+                let kin = a.genome.kinship(&o.genome) >= cfg.kin_threshold;
+                let is_leader = a.leader == j as u32;
+                if kin {
+                    // Apprenticeship: watching a more skilled relative rubs off.
+                    for k in 0..N_SKILL {
+                        if o.skill[k] > a.skill[k] + 0.1 {
+                            skills[k] += cfg.skill_gain * 0.25;
+                        }
+                    }
+                    // Imitation: copy a little of a clearly more successful relative's mind.
+                    if model == NO_LEADER && o.energy + o.inventory > 1.5 * wealth {
+                        let p = if is_leader { cfg.p_imitate * 3.0 } else { cfg.p_imitate };
+                        if rng.f32() < p {
+                            model = j as u32;
+                        }
+                    }
+                }
+                if missing == 0 && !contagious {
+                    return;
+                }
                 if missing != 0 {
-                    let kin = a.genome.kinship(&o.genome) >= cfg.kin_threshold;
                     let mut p = if kin { cfg.p_learn } else { cfg.p_learn * 0.25 };
                     p *= 0.5 + a.emotion[BOND];
                     if a.knows(WRITING) || o.knows(WRITING) {
                         p *= 3.0;
+                    }
+                    if is_leader {
+                        p *= 2.0;
                     }
                     for &bit in &TECH_BITS {
                         if missing & bit != 0 && rng.f32() < p {
@@ -613,8 +808,25 @@ impl Sim {
             if caught {
                 self.infected.push(i as u32);
             }
+            if skills.iter().any(|g| *g > 0.0) {
+                self.apprentice.push((i as u32, skills));
+            }
+            if model != NO_LEADER {
+                self.imitations.push((i as u32, model));
+            }
         }
         self.rng = rng;
+        for &(i, g) in &self.apprentice {
+            let a = &mut self.agents[i as usize];
+            for k in 0..N_SKILL {
+                a.train(k, g[k]);
+            }
+        }
+        for &(i, j) in &self.imitations {
+            let model = self.agents[j as usize].genome.clone();
+            self.agents[i as usize].genome.imitate(&model, cfg.imitate_rate);
+            self.window.imitations += 1;
+        }
         for &(i, bits) in &self.learned {
             self.agents[i as usize].tech |= bits;
             for (t, &bit) in TECH_BITS.iter().enumerate() {
@@ -688,6 +900,7 @@ impl Sim {
             for e in 0..N_EMO {
                 a.emotion[e] *= a.genome.emo_decay(e);
             }
+            a.prestige *= cfg.prestige_decay;
 
             a.age += 1;
             if a.attacked_timer > 0 {
@@ -695,8 +908,24 @@ impl Sim {
             }
         }
         self.rng = rng;
+        // Emotional contagion: followers drift toward what their leader feels.
+        for i in 0..n {
+            let l = self.agents[i].leader;
+            if l == NO_LEADER || l as usize >= self.agents.len() {
+                continue;
+            }
+            let le = self.agents[l as usize].emotion;
+            let a = &mut self.agents[i];
+            for e in [FEAR, ANGER, BOND] {
+                a.emotion[e] += (le[e] - a.emotion[e]) * 0.05;
+            }
+        }
+        let mut fallen: Vec<(u32, u16, u32)> = Vec::new();
         let w = &mut self.window;
         self.agents.retain(|a| {
+            if a.name != 0 && a.followers >= 40 && (a.energy <= 0.0 || a.age > cfg.max_age) {
+                fallen.push((a.name, a.followers, a.lineage));
+            }
             if a.energy <= 0.0 {
                 if a.attacked_timer > 0 {
                     w.killed += 1;
@@ -713,6 +942,10 @@ impl Sim {
                 true
             }
         });
+        for (name, followers, lineage) in fallen {
+            self.window.leader_deaths += 1;
+            self.events.fire(self.tick, "", format!("leader {} of lineage {} died, leaving {} followers", name_of(name), lineage, followers));
+        }
     }
 
     /// Keeps the experiment alive after a collapse: fresh random brains drift in.
@@ -736,6 +969,7 @@ impl Sim {
         let a = &mut self.agents[i];
         a.tech |= TECH_BITS[tech];
         a.feel(JOY, 0.3);
+        a.prestige += 2.0;
         self.window.discoveries[tech] += 1;
         let (lineage, x, y) = (a.lineage, a.x, a.y);
         self.events.discovery(self.tick, tech, lineage, x, y);

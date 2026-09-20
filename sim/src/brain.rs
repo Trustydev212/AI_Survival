@@ -4,12 +4,12 @@
 use crate::rng::Rng;
 
 pub const N_MEM: usize = 4;
-pub const N_IN: usize = 41;
+pub const N_IN: usize = 53;
 pub const N_HID: usize = 16;
 pub const N_ACT: usize = 5;
 pub const N_OUT: usize = 3 + N_ACT + N_MEM; // move_x, move_y, go/stay, action scores, memory
 pub const N_WEIGHTS: usize = N_IN * N_HID + N_HID + N_HID * N_OUT + N_OUT;
-pub const N_TEMPER: usize = 8; // 4 emotion decay genes, 4 emotion sensitivity genes
+pub const N_TEMPER: usize = 9; // 4 emotion decay genes, 4 emotion sensitivity genes, 1 charisma gene
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -81,6 +81,19 @@ impl Genome {
     #[inline]
     pub fn emo_sensitivity(&self, e: usize) -> f32 {
         self.temper[4 + e].exp().clamp(0.25, 4.0)
+    }
+
+    /// Natural pull on others, in [0, 1]. Prestige is multiplied by it when choosing whom to follow.
+    #[inline]
+    pub fn charisma(&self) -> f32 {
+        sigmoid(self.temper[8])
+    }
+
+    /// Learn by imitation: pull this brain a fraction of the way toward a model's.
+    pub fn imitate(&mut self, model: &Genome, rate: f32) {
+        for (w, m) in self.weights.iter_mut().zip(model.weights.iter()) {
+            *w += (m - *w) * rate;
+        }
     }
 
     /// 1.0 = identical markers, 0.0 = maximally different.

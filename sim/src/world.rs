@@ -112,6 +112,22 @@ impl World {
         lost
     }
 
+    /// Apply f to every cell within radius r of (cx, cy), wrapping.
+    pub fn for_region(&mut self, cx: usize, cy: usize, r: usize, mut f: impl FnMut(&mut World, usize)) {
+        let r2 = (r * r) as isize;
+        for dy in -(r as isize)..=(r as isize) {
+            for dx in -(r as isize)..=(r as isize) {
+                if dx * dx + dy * dy > r2 {
+                    continue;
+                }
+                let x = (cx as isize + dx).rem_euclid(self.width as isize) as usize;
+                let y = (cy as isize + dy).rem_euclid(self.height as isize) as usize;
+                let i = y * self.width + x;
+                f(self, i);
+            }
+        }
+    }
+
     fn for_block(&mut self, x: f32, y: f32, wrap: bool, mut f: impl FnMut(&mut World, usize)) {
         let cx = (x as isize).min(self.width as isize - 1);
         let cy = (y as isize).min(self.height as isize - 1);
