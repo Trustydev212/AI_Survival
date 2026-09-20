@@ -6,12 +6,13 @@ use crate::rng::Rng;
 pub struct World {
     pub width: usize,
     pub height: usize,
+    /// What the land could be: fertility recovers toward this when rested.
+    pub base_fertility: Vec<f32>,
+    /// What the land is now: harvesting wears it down.
     pub fertility: Vec<f32>,
     pub food: Vec<f32>,
     /// How tended a cell is, 0..1. Raised by farmers standing on it, decays otherwise.
     pub cultivation: Vec<f32>,
-    /// Irrigated cells keep growing through droughts.
-    pub irrigated: Vec<bool>,
     /// Weather multiplier on regrowth: 1 normal, below 1 drought, above 1 a good year.
     pub climate: f32,
     pub farm_boost: f32,
@@ -19,10 +20,13 @@ pub struct World {
     pub max_food: f32,
     pub regrow: f32,
     pub season_len: f32,
+    pub soil_drain: f32,
+    pub soil_recovery: f32,
 }
 
 impl World {
-    pub fn generate(width: usize, height: usize, max_food: f32, regrow: f32, season_len: f32, farm_boost: f32, cult_decay: f32, rng: &mut Rng) -> World {
+    #[allow(clippy::too_many_arguments)]
+    pub fn generate(width: usize, height: usize, max_food: f32, regrow: f32, season_len: f32, farm_boost: f32, cult_decay: f32, soil_drain: f32, soil_recovery: f32, rng: &mut Rng) -> World {
         let mut fertility = vec![0.0f32; width * height];
         // Two octaves of value noise, bilinearly interpolated.
         let octaves = [(24usize, 1.0f32), (8usize, 0.35f32)];
@@ -54,8 +58,8 @@ impl World {
         }
         let food = fertility.iter().map(|f| f * max_food * 0.8).collect();
         let cultivation = vec![0.0; width * height];
-        let irrigated = vec![false; width * height];
-        World { width, height, fertility, food, cultivation, irrigated, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len }
+        let base_fertility = fertility.clone();
+        World { width, height, base_fertility, fertility, food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
     }
 
     #[inline]
@@ -74,31 +78,49 @@ impl World {
     pub fn regrow(&mut self, season: f32) {
         let r = self.regrow * season;
         let climate = self.climate;
-        let irrigated_climate = climate.max(0.8);
+        let tended_climate = climate.max(0.6); // worked land holds water a little better
         let max_food = self.max_food;
         let boost = self.farm_boost;
         let decay = self.cult_decay;
+        let recovery = self.soil_recovery;
         for i in 0..self.food.len() {
-            let fert = self.fertility[i];
             let cult = &mut self.cultivation[i];
             if *cult > 0.0 {
                 *cult *= decay;
                 if *cult < 0.001 {
                     *cult = 0.0;
-                    self.irrigated[i] = false;
                 }
             }
-            let cap = max_food * fert * (1.0 + 2.0 * *cult);
+            let fert = &mut self.fertility[i];
+            let base = self.base_fertility[i];
+            let cap = max_food * *fert * (1.0 + 2.0 * *cult);
             if cap <= 0.0 {
+                // Exhausted land heals only very slowly.
+                if base > 0.0 && *fert < base {
+                    *fert += recovery * 0.25 * base;
+                }
                 continue;
             }
-            let c = if self.irrigated[i] { irrigated_climate } else { climate };
+            let c = if *cult > 0.2 { tended_climate } else { climate };
             let food = &mut self.food[i];
-            *food += r * c * fert * (1.0 + boost * *cult) * (1.0 - *food / cap);
+            *food += r * c * *fert * (1.0 + boost * *cult) * (1.0 - *food / cap);
             if *food > cap {
                 *food = cap;
             }
+            // Rested land (well stocked) recovers toward its potential.
+            if *fert < base && *food > 0.5 * cap {
+                *fert = (*fert + recovery * base).min(base);
+            }
         }
+    }
+
+    /// Mean fertility as a fraction of what the land could be: 1 = pristine.
+    pub fn soil_health(&self) -> f32 {
+        let base: f32 = self.base_fertility.iter().sum();
+        if base <= 0.0 {
+            return 1.0;
+        }
+        self.fertility.iter().sum::<f32>() / base
     }
 
     /// Raiders torch the 3x3 field around a spot. Returns cultivation destroyed.
@@ -148,7 +170,8 @@ impl World {
 
     /// Take up to `rate` food from the agent's cell first, then from the 8 cells around it,
     /// but the ring only where it is a worked field (cultivated). Wild land is picked cell by cell.
-    pub fn harvest(&mut self, x: f32, y: f32, rate: f32, wrap: bool) -> f32 {
+    /// Every unit taken wears the soil by `drain_mult` times the world's soil drain.
+    pub fn harvest(&mut self, x: f32, y: f32, rate: f32, drain_mult: f32, wrap: bool) -> f32 {
         let cx = (x as isize).min(self.width as isize - 1);
         let cy = (y as isize).min(self.height as isize - 1);
         let mut left = rate;
@@ -173,13 +196,14 @@ impl World {
             self.food[i] -= take;
             left -= take;
             got += take;
+            self.fertility[i] = (self.fertility[i] - take * self.soil_drain * drain_mult).max(0.0);
         }
         got
     }
 
     /// A farmer tends the 3x3 block around them: full gain on their cell, half on the ring.
-    /// An irrigating farmer also marks the cells as irrigated.
-    pub fn tend(&mut self, x: f32, y: f32, gain: f32, irrigate: bool, wrap: bool) {
+    /// Tending also gives a little back to the soil, so worked land can be kept alive.
+    pub fn tend(&mut self, x: f32, y: f32, gain: f32, wrap: bool) {
         let cx = (x as isize).min(self.width as isize - 1);
         let cy = (y as isize).min(self.height as isize - 1);
         for dy in -1..=1isize {
@@ -198,8 +222,10 @@ impl World {
                 let g = if dx == 0 && dy == 0 { gain } else { gain * 0.5 };
                 let c = &mut self.cultivation[i];
                 *c = (*c + g).min(1.0);
-                if irrigate {
-                    self.irrigated[i] = true;
+                let base = self.base_fertility[i];
+                let f = &mut self.fertility[i];
+                if *f < base {
+                    *f = (*f + g * 0.02 * base).min(base);
                 }
             }
         }

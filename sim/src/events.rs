@@ -1,7 +1,8 @@
 //! A history book: notable firsts, crises and era changes, detected as they happen.
-//! Written to stdout as they occur and to out/events_seed<N>.txt.
+//! Written to stdout as they occur (unless quiet) and to out/events_seed<N>.txt.
 
-use crate::agent::{Agent, N_TECH, TECH_BITS, TECH_NAMES};
+use crate::agent::Agent;
+use crate::innovation::Innovation;
 use crate::stats::{Metrics, Window};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -13,26 +14,26 @@ pub struct Event {
 
 pub struct EventLog {
     pub events: Vec<Event>,
+    verbose: bool,
     fired: HashSet<String>,
     lineage_peak: HashMap<u32, f32>,
-    tech_reached: [bool; N_TECH],
     era: &'static str,
     settled_peak: f32,
-    writing_peak: f32,
+    known_peak: f32,
     writer: Option<std::io::BufWriter<std::fs::File>>,
 }
 
 impl EventLog {
-    pub fn new(path: Option<&str>) -> EventLog {
+    pub fn new(path: Option<&str>, verbose: bool) -> EventLog {
         let writer = path.and_then(|p| std::fs::File::create(p).ok()).map(std::io::BufWriter::new);
         EventLog {
             events: Vec::new(),
+            verbose,
             fired: HashSet::new(),
             lineage_peak: HashMap::new(),
-            tech_reached: [false; N_TECH],
-            era: "Stone Age",
+            era: "wild",
             settled_peak: 0.0,
-            writing_peak: 0.0,
+            known_peak: 0.0,
             writer,
         }
     }
@@ -42,21 +43,17 @@ impl EventLog {
         if !key.is_empty() && !self.fired.insert(key.to_string()) {
             return;
         }
-        println!("  ! tick {:>6}: {}", tick, text);
+        if self.verbose {
+            println!("  ! tick {:>6}: {}", tick, text);
+        }
         if let Some(w) = self.writer.as_mut() {
             let _ = writeln!(w, "{}\t{}", tick, text);
         }
         self.events.push(Event { tick, text });
     }
 
-    pub fn discovery(&mut self, tick: u64, tech: usize, lineage: u32, x: f32, y: f32) {
-        let key = format!("discover:{}", tech);
-        let text = format!("{} discovered for the first time by lineage {} at ({:.0}, {:.0})", TECH_NAMES[tech], lineage, x, y);
-        self.fire(tick, &key, text);
-    }
-
     /// Called once per stats window; derives crises, social firsts and era changes.
-    pub fn check_window(&mut self, m: &Metrics, agents: &[Agent], window_len: u64) {
+    pub fn check_window(&mut self, m: &Metrics, agents: &[Agent], innovations: &[Innovation], window_len: u64) {
         let tick = m.tick;
         let w: &Window = &m.w;
         let pop = agents.len();
@@ -78,6 +75,12 @@ impl EventLog {
         }
         if w.burned > 0 {
             self.fire(tick, "", format!("raids: {} fields burned this window", w.burned));
+        }
+        if m.soil < 0.5 {
+            self.fire(tick, "soil_half", format!("exhausted land: soil health fell to {:.0}% of its potential", m.soil * 100.0));
+        }
+        if m.soil < 0.25 {
+            self.fire(tick, "soil_quarter", format!("dust: soil health fell to {:.0}% of its potential", m.soil * 100.0));
         }
 
         // Lineages: dominance and extinction.
@@ -108,16 +111,16 @@ impl EventLog {
             self.fire(tick, "monoculture", format!("only one lineage left: {}", by.keys().next().unwrap()));
         }
 
-        // Technology adoption milestones.
-        for t in 0..N_TECH {
-            if self.tech_reached[t] {
+        // Innovations that reached half the population.
+        for (idx, inn) in innovations.iter().enumerate() {
+            let key = format!("adopted:{idx}");
+            if self.fired.contains(&key) {
                 continue;
             }
-            let bit = TECH_BITS[t];
-            let n = agents.iter().filter(|a| a.knows(bit)).count();
+            let bit = 1u64 << idx;
+            let n = agents.iter().filter(|a| a.known & bit != 0).count();
             if pop > 0 && n as f32 / popf >= 0.5 {
-                self.tech_reached[t] = true;
-                self.fire(tick, &format!("adopted:{t}"), format!("{} is now known by half the population", TECH_NAMES[t]));
+                self.fire(tick, &key, format!("{} is now known by half the population", inn.describe()));
             }
         }
 
@@ -140,25 +143,24 @@ impl EventLog {
             }
         }
 
-        // Eras, collapses and dark ages.
+        // Eras, collapses and forgetting.
         if m.era != self.era {
-            self.fire(tick, "", format!("era: {} -> {}", self.era, m.era));
+            self.fire(tick, "", format!("era: {} -> {} (mean knowledge {:.1}, settled {:.0}%)", self.era, m.era, m.mean_known, m.settled * 100.0));
             self.era = m.era;
         }
         if m.settled > self.settled_peak {
             self.settled_peak = m.settled;
         }
         if self.settled_peak >= 0.5 && m.settled < 0.15 {
-            self.fire(tick, "collapse", format!("collapse: villages abandoned, settled share fell from {:.0}% to {:.0}%", self.settled_peak * 100.0, m.settled * 100.0));
+            self.fire(tick, "", format!("collapse: settlements abandoned, settled share fell from {:.0}% to {:.0}%", self.settled_peak * 100.0, m.settled * 100.0));
             self.settled_peak = m.settled;
-            self.fired.remove("collapse");
         }
-        if m.tech[8] > self.writing_peak {
-            self.writing_peak = m.tech[8];
+        if m.mean_known > self.known_peak {
+            self.known_peak = m.mean_known;
         }
-        if self.writing_peak >= 0.5 && m.tech[8] < 0.2 {
-            self.fire(tick, "", format!("dark age: writing fell from {:.0}% to {:.0}% of the population", self.writing_peak * 100.0, m.tech[8] * 100.0));
-            self.writing_peak = m.tech[8];
+        if self.known_peak >= 4.0 && m.mean_known < 0.5 * self.known_peak {
+            self.fire(tick, "", format!("forgetting: mean knowledge fell from {:.1} to {:.1} innovations per head", self.known_peak, m.mean_known));
+            self.known_peak = m.mean_known;
         }
     }
 

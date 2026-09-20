@@ -1,24 +1,11 @@
 use crate::brain::{Action, Genome, N_ACT, N_MEM};
+use crate::innovation::N_EFFECT;
 
 /// Behaviour profile dimensions: the five action frequencies plus mobility.
 pub const N_PROFILE: usize = N_ACT + 1;
 
-/// Culture: knowledge held by an agent, learned by discovery or from neighbours.
-/// Never inherited through genes. Higher techs need lower ones plus social conditions.
-pub const TOOLS: u16 = 1;
-pub const FARMING: u16 = 2;
-pub const WEAPONS: u16 = 4;
-pub const COOKING: u16 = 8;
-pub const METAL: u16 = 16;
-pub const IRRIGATION: u16 = 32;
-pub const WALLS: u16 = 64;
-pub const MEDICINE: u16 = 128;
-pub const WRITING: u16 = 256;
-pub const N_TECH: usize = 9;
-pub const ALL_TECH: u16 = 0x1FF;
-pub const TECH_NAMES: [&str; N_TECH] =
-    ["tools", "farming", "weapons", "cooking", "metal", "irrigation", "walls", "medicine", "writing"];
-pub const TECH_BITS: [u16; N_TECH] = [TOOLS, FARMING, WEAPONS, COOKING, METAL, IRRIGATION, WALLS, MEDICINE, WRITING];
+/// Culture: knowledge is a set of world-specific innovations (see innovation.rs),
+/// learned by discovery or from neighbours. Never inherited through genes.
 
 /// Emotions: fast internal state in [0, 1], driven by events, decaying at a heritable rate.
 pub const FEAR: usize = 0;
@@ -74,7 +61,10 @@ pub struct Agent {
     pub children: u16,
     /// Exponentially decayed history of what this agent actually does.
     pub profile: [f32; N_PROFILE],
-    pub tech: u16,
+    /// Bitset of known innovations, indexed into the world's registry.
+    pub known: u64,
+    /// Summed effects of everything known; refreshed whenever `known` changes.
+    pub caps: [f32; N_EFFECT],
     /// Consecutive ticks spent still. Farming only works when settled.
     pub still: u16,
     pub emotion: [f32; N_EMO],
@@ -102,8 +92,8 @@ pub struct Agent {
 
 impl Agent {
     #[inline]
-    pub fn knows(&self, bit: u16) -> bool {
-        self.tech & bit != 0
+    pub fn known_count(&self) -> u32 {
+        self.known.count_ones()
     }
 
     #[inline]

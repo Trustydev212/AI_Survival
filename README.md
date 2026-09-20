@@ -1,20 +1,29 @@
 # AI Survival
 
-Một sandbox lịch sử loài người, nơi toàn bộ cư dân là AI. Không có người chơi điều khiển.
-Bạn tạo thế giới, thả các bộ lạc vào, rồi xem tiến hoá chọn ra chiến lược sinh tồn nào:
-hái lượm, tích trữ, chia sẻ với họ hàng, hay đi cướp.
+Một thí nghiệm về sự sống nhân tạo. Thả hàng nghìn agent có não riêng vào một thế giới có luật vật lý
+nhưng không có kịch bản, rồi xem chúng tìm ra cách sống nào: hái lượm, định cư, cướp bóc, chia sẻ,
+đi theo thủ lĩnh, phát minh, hay khai thác đất tới cạn kiệt rồi diệt vong.
 
-Repo này hiện chứa **bước 1: lõi mô phỏng headless** (`sim/`). Chưa có đồ hoạ engine,
-chỉ có xuất ảnh PPM và CSV để nhìn nhanh và phân tích.
+Không có gì bắt buộc phải giống lịch sử loài người. Thế giới có thể tuyệt chủng, sụp đổ, trì trệ,
+hoặc thịnh vượng. Mỗi thế giới tự sinh ra công nghệ của riêng nó. Điều duy nhất được kiểm tra là:
+xã hội có tìm được cách giữ mọi thứ phát triển mà không tự huỷ diệt hay không.
+
+Repo này hiện chứa **lõi mô phỏng headless** (`sim/`). Chưa có đồ hoạ engine,
+chỉ có xuất ảnh PPM, CSV, sử ký, và bảng kết cục khi chạy nhiều thế giới.
 
 ## Chạy thử
 
 ```bash
 cd sim
 cargo build --release
-./target/release/sim --seed 3 --ticks 20000 --image-every 5000
+./target/release/sim --seed 3 --ticks 30000 --image-every 5000   # một thế giới, xem trực tiếp
+./target/release/sim --seeds 1-16 --ticks 30000                  # 16 thế giới song song, bảng kết cục
 ./target/release/sim --help
 ```
+
+Một run kết thúc sớm nếu tuyệt chủng. Kết cục được phân loại: `extinct`, `collapsed` (dân số trung bình
+năm cuối dưới một phần tư năm tốt nhất), `fallen` (tụt thời đại), `surviving`, `flourishing`, hoặc
+`flourishing on dying land` (thịnh vượng nhưng đất đã cạn quá nửa).
 
 1000 agent, 20.000 tick chạy khoảng 25 giây trên một nhân CPU (khoảng 800 tick/giây,
 lúc cao điểm hơn 3000 agent). Không phụ thuộc crate ngoài.
@@ -22,16 +31,21 @@ lúc cao điểm hơn 3000 agent). Không phụ thuộc crate ngoài.
 Kết quả ghi vào `out/`:
 
 - `stats_seed<N>.csv`: dân số, số dòng họ, Gini, số sinh, chết đói, bị giết, tấn công, chia sẻ, phân bố hành động, entropy chiến lược, theo từng cửa sổ thời gian.
-- `frame_<tick>.ppm`: bản đồ. Xanh lá là thức ăn, đỏ là ruộng đang canh tác, chấm màu là agent với màu do gen quy định.
-- `events_seed<N>.txt`: sử ký. Khám phá đầu tiên, dòng họ thống trị hoặc tuyệt chủng, nạn đói, chiến tranh, tầng lớp chiến binh xuất hiện, làng định cư đầu tiên.
+- `frame_<tick>.ppm`: bản đồ. Xanh lá là thức ăn, đỏ là ruộng đang canh tác, chấm màu là agent với màu do gen quy định, trắng là đang ốm.
+- `events_seed<N>.txt`: sử ký. Phát minh, dòng họ thống trị hoặc tuyệt chủng, nạn đói, chiến tranh, dịch bệnh, thiên tai, tầng lớp mới, thủ lĩnh, đổi thời đại, sụp đổ, đất cạn kiệt, tuyệt chủng.
+- `experiment_A_B.csv`: bảng kết cục khi chạy `--seeds A-B`.
 
 Cùng seed luôn cho cùng kết quả, nên có thể replay và so sánh thí nghiệm.
 
 ## Cách thế giới vận hành
 
-**Thế giới** là lưới ô cuộn tròn. Mỗi ô có độ màu mỡ cố định, sinh ra từ value noise
+**Thế giới** là lưới ô cuộn tròn. Mỗi ô có độ màu mỡ tiềm năng, sinh ra từ value noise
 rồi ngưỡng hoá để đất tốt tụ thành từng vùng và khoảng 40% bản đồ gần như cằn cỗi.
 Thức ăn mọc lại theo độ màu mỡ và theo mùa. Mùa đông giảm tốc độ mọc xuống 20%.
+
+**Đất có thể chết.** Mỗi đơn vị thức ăn hái đi bào mòn độ màu mỡ một chút. Đất được nghỉ, còn nhiều
+thức ăn, thì hồi phục chậm về tiềm năng. Đất cạn hẳn hồi phục cực chậm. Phát minh làm hái nhanh hơn
+thường cũng làm đất mòn nhanh hơn. Đây là thứ để mất: xã hội thành công quá nhanh có thể tự huỷ diệt.
 
 **Agent** có năng lượng, kho dự trữ, tuổi, dòng họ, kiến thức, và một bộ gen. Gen gồm trọng số
 của một mạng thần kinh 24 input, 16 ẩn, 8 output (536 tham số) cộng một "màu" ba chiều.
@@ -52,7 +66,7 @@ Não trả về hướng di chuyển, một cổng đi hay ở, và một trong 
 | rest | Giảm tiêu hao năng lượng |
 
 Không có hàm thưởng. Ai sinh được nhiều con thì gen của họ tồn tại. Đó là toàn bộ thuật toán học.
-Khi dân số sụp dưới ngưỡng, vài agent gen ngẫu nhiên "nhập cư" để thí nghiệm không chết hẳn.
+Diệt vong là thật: khi agent cuối cùng chết, run kết thúc. Cờ `--min-pop N` bật lại "nhập cư" nếu muốn.
 
 ## Cái gì có não, cái gì là luật
 
@@ -94,46 +108,33 @@ hơn hẳn 25%. Ai có từ 5 người theo là thủ lĩnh; giữ được 200 
 Thủ lĩnh dạy nhanh gấp đôi, người theo đánh mạnh hơn khi thủ lĩnh vừa ra trận, và cảm xúc lan từ
 thủ lĩnh sang người theo. Cuối mỗi lần chạy có bảng vinh danh những người từng dẫn dắt đông nhất.
 
-## Lớp văn hoá
+## Phát minh mở, không theo lịch sử loài người
 
-Kiến thức không nằm trong gen. Trẻ sinh ra không biết gì và học từ người đứng cạnh,
-họ hàng dạy dễ hơn người lạ. Vì vậy kiến thức có thể mất đi qua mùa đông khi dân số tan rã.
+Không có cây công nghệ viết sẵn. Mỗi thế giới tự sinh phát minh của riêng nó, tối đa 64 cái, từ hạt giống
+của thế giới đó. Khi một agent đang làm việc, có xác suất nhỏ nó tìm ra một phát minh mới. Phát minh là
+một bó hiệu ứng trên mười chiều:
 
-| Công nghệ | Khám phá khi | Tác dụng |
-|---|---|---|
-| tools | hái lượm | hái nhanh gấp 1,5 |
-| farming | hái lượm trên đất tốt, đã có tools | đứng yên từ 5 tick trở lên thì vùng 3x3 quanh mình thành ruộng, mọc lại nhanh gấp 12, hái được cả 9 ô |
-| weapons | tấn công, đã có tools | mạnh hơn khi đánh, cướp và gây sát thương gấp 1,5 |
-| cooking | nghỉ ngơi, đã có tools | tiêu hao năng lượng giảm 25% |
-| metal | nghỉ khi đã định cư, có tools và cooking | hái nhanh thêm 1,3; mạnh hơn khi đánh; cùng weapons thì cướp thắng sẽ đốt ruộng nạn nhân |
-| irrigation | canh tác trên 200 tick liên tục | ruộng lên nhanh gấp đôi và chịu được hạn |
-| walls | bị tấn công khi đã định cư, có farming và weapons | phòng thủ tại nhà mạnh hơn nhiều, ruộng không bị đốt |
-| medicine | nghỉ khi đang ốm, có cooking | lây và ốm chỉ còn một nửa |
-| writing | chia sẻ khi đã định cư và gắn bó cao | dạy học nhanh gấp ba, phát minh nhanh gấp đôi |
+| Chiều | Ý nghĩa |
+|---|---|
+| gather | hái nhanh hơn |
+| metabolism | tiêu hao năng lượng (dương là tệ) |
+| attack, defense | mạnh hơn khi đánh, khi giữ nhà |
+| farm | chăm ruộng hiệu quả hơn |
+| resist | chống bệnh |
+| teach, invent, share | dạy nhanh hơn, phát minh nhanh hơn, cho nhiều hơn |
+| soil | bào mòn đất thêm mỗi lần hái (dương là tệ) |
 
-Xác suất phát minh nhân với (0,5 + 2 × vui): xã hội no đủ, hạnh phúc phát minh nhanh hơn.
+Lợi ích chính thiên về việc người phát minh đang làm: đang hái thì ra thứ về hái, đang đánh thì ra thứ
+về đánh, đang ốm mà nghỉ thì ra thứ về chống bệnh, đang chia sẻ thì ra thứ về dạy học. Bậc phát minh
+tăng theo số thứ người đó đã biết, nên lợi ích lớn dần. **Mọi phát minh đều có giá**: hoặc tiêu hao nhiều
+hơn, hoặc bào mòn đất nhiều hơn. Phát minh về hái và ruộng thường trả giá bằng đất.
 
-**Thời đại** suy ra từ trạng thái xã hội, không script: Stone Age, Tool Age, Dawn of Farming,
-Village Age, Metal Age, Age of Writing. Sử ký ghi mỗi lần đổi thời đại, sụp đổ (làng bị bỏ hoang)
-và thời kỳ tăm tối (chữ viết bị quên).
+Kiến thức lan truyền theo tiếp xúc, họ hàng dạy dễ hơn, thủ lĩnh dạy gấp đôi, và bị quên khi thế hệ mới
+không kịp học. Não nhìn thấy năng lực tổng của mình chứ không thấy tên phát minh.
 
-Ruộng cần được chăm liên tục, bỏ đi là mất dần. Du mục đi ngang không tạo ra ruộng.
-Cờ `--start-tech 15` cho bộ lạc khởi đầu biết hết mọi công nghệ, dùng để đối chứng.
-
-## Đo đa dạng chiến lược
-
-Dòng họ không nói lên cách sống: một dòng họ có thể chứa cả nông dân lẫn kẻ cướp.
-Nên mỗi agent giữ một **hồ sơ hành vi**: tần suất năm hành động và mức di chuyển,
-suy giảm theo hàm mũ, tức là thứ nó thực sự làm gần đây chứ không phải gen nói gì.
-
-Mỗi cửa sổ thống kê, lõi chạy k-means xác định trên hồ sơ này, gộp các cụm gần nhau,
-rồi báo:
-
-- số cụm và nhãn mỗi cụm, ví dụ `gather71 attack19 nomadic74`
-- **entropy chiến lược** và **số cách sống hiệu dụng** (2 mũ entropy). Về 1.0 nghĩa là cả xã hội đã hội tụ về một kiểu.
-- của cải, tuổi trung bình và số dòng họ góp mặt trong mỗi cụm
-
-Bảng cuối mỗi lần chạy liệt kê các cụm. Cột `strat` trong bảng theo tick là số cách sống hiệu dụng.
+**Thời đại** suy ra từ số phát minh trung bình mỗi đầu người và mức định cư, đặt tên không theo lịch sử:
+wild, kindled, rooted, woven, layered, soaring, radiant, beyond. Sử ký ghi mỗi lần đổi thời đại,
+sụp đổ (làng bị bỏ), lãng quên (kiến thức tụt quá nửa), đất cạn kiệt, và tuyệt chủng.
 
 ## Những gì đã quan sát được
 
@@ -189,6 +190,19 @@ du mục còn lại lang thang ở vùng cằn giữa các làng.
 Với thủ lĩnh, seed 3 sau 30.000 tick: thủ lĩnh có tên đầu tiên ở tick 219 với 6 người theo. Đại thủ lĩnh
 chỉ xuất hiện sau tick 20.000 khi làng đủ đông. Tarel của dòng họ 16 kết thúc với 255 người theo.
 
+### Thí nghiệm 8 thế giới với phát minh mở
+
+Cùng luật, 40.000 tick, không nhập cư, đất có thể chết:
+
+| Lần | Thay đổi | Kết cục |
+|---|---|---|
+| 1 | Chăm ruộng không trả lại gì cho đất | 8/8 sụp đổ. Đất còn 5% đến 47%. Seed 6 biết đủ 64 phát minh, mỗi người thuộc 43 cái, nhưng đất còn 12% và làng bị bỏ hoang. |
+| 2 | Chăm ruộng phục hồi đất mạnh, thêm phát minh bảo tồn đất | 7/8 thịnh vượng, đất 98% đến 100% ở mọi thế giới. Quá dễ. |
+| 3 | Phục hồi yếu đi năm lần | Phân tán: đất từ 52% đến 100%. Seed 7 tụt đất từ 100% xuống 55% cùng các đợt dịch. Seed 1 quên kiến thức từ 40 xuống 14 phát minh mỗi đầu người khi dòng họ thống trị tuyệt chủng. |
+
+Bài học: chỉ khi có cả hai con đường, khai thác và bảo tồn, mà không con đường nào rẻ hơn hẳn,
+thì các thế giới mới rẽ nhánh. Đó là điều kiện để thí nghiệm có nghĩa.
+
 ### Ba bài học khi cân bằng
 
 1. Xác suất khám phá phải tính theo agent-tick. 1000 agent với xác suất 0,0002 mỗi tick tìm ra công cụ ngay tick 1.
@@ -215,7 +229,8 @@ sim/src/
 
 ## Bước tiếp theo
 
-1. Lớp hiển thị bằng Godot 4 đọc trạng thái từ lõi này, camera bám theo sử ký và thủ lĩnh.
-2. Trần dân số 4.000 đang chạm sau nông nghiệp và tốc độ còn khoảng 100 đến 180 tick/giây. Nâng trần cần tối ưu thêm.
-3. Thủ lĩnh ra quyết định tập thể: người theo bỏ phiếu hoặc thủ lĩnh ra lệnh di cư, chiến tranh.
-4. Tôn giáo hoặc tập quán như một lớp meme lan truyền độc lập với công nghệ.
+1. Bỏ trần dân số cứng 4.000 để sức chứa hoàn toàn do đất quyết định. Cần tối ưu tốc độ trước.
+2. Não nhìn được xa hơn: trạng thái đất quanh vùng, không chỉ ô đang đứng, để có thể chọn di cư trước khi đất chết.
+3. Thủ lĩnh ra quyết định tập thể: ra lệnh di cư, chiến tranh, cấm hái ở vùng cạn.
+4. Tập quán lan truyền như meme, độc lập với phát minh, ví dụ "không hái ở đất dưới 30%".
+5. Lớp hiển thị bằng Godot 4 đọc trạng thái từ lõi này, camera bám sử ký và thủ lĩnh.

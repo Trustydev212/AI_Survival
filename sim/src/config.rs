@@ -4,6 +4,8 @@
 #[derive(Clone, Debug)]
 pub struct Config {
     pub seed: u64,
+    pub seeds: Option<(u64, u64)>,
+    pub quiet: bool,
     pub width: usize,
     pub height: usize,
     pub agents: usize,
@@ -21,6 +23,8 @@ pub struct Config {
     pub max_food: f32,
     pub regrow: f32,
     pub season_len: f32,
+    pub soil_drain: f32,
+    pub soil_recovery: f32,
 
     // body
     pub max_energy: f32,
@@ -56,17 +60,10 @@ pub struct Config {
     pub p_discover: f32,
     pub p_learn: f32,
     pub learn_range: f32,
-    pub tools_gather_mult: f32,
     pub farm_boost: f32,
     pub cult_gain: f32,
     pub settle_ticks: u16,
     pub cult_decay: f32,
-    pub weapon_mult: f32,
-    pub metal_mult: f32,
-    pub cooking_saving: f32,
-    /// Tech bitmask founders start with (1 tools, 2 farming, 4 weapons, 8 cooking, 16 metal,
-    /// 32 irrigation, 64 walls, 128 medicine, 256 writing).
-    pub start_tech: u16,
 
     // luck and disasters
     pub p_windfall: f32,
@@ -100,12 +97,14 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             seed: 42,
+            seeds: None,
+            quiet: false,
             width: 192,
             height: 192,
             agents: 1000,
             tribes: 20,
             max_agents: 4000,
-            min_pop: 60,
+            min_pop: 0,
             ticks: 20_000,
             log_every: 500,
             image_every: 0,
@@ -115,6 +114,8 @@ impl Default for Config {
             max_food: 10.0,
             regrow: 0.08,
             season_len: 2000.0,
+            soil_drain: 0.001,
+            soil_recovery: 0.0002,
 
             max_energy: 100.0,
             start_energy: 60.0,
@@ -143,18 +144,13 @@ impl Default for Config {
             p_mut: 0.08,
             sigma: 0.15,
 
-            p_discover: 0.000002,
+            p_discover: 0.000001,
             p_learn: 0.01,
             learn_range: 2.5,
-            tools_gather_mult: 1.5,
-            farm_boost: 12.0,
-            cult_gain: 0.02,
+            farm_boost: 6.0,
+            cult_gain: 0.006,
             settle_ticks: 5,
             cult_decay: 0.99,
-            weapon_mult: 1.5,
-            metal_mult: 1.3,
-            cooking_saving: 0.25,
-            start_tech: 0,
 
             p_windfall: 0.0001,
             p_accident: 0.00005,
@@ -192,6 +188,11 @@ impl Config {
             if key == "--help" || key == "-h" {
                 return Err(HELP.to_string());
             }
+            if key == "--quiet" {
+                c.quiet = true;
+                i += 1;
+                continue;
+            }
             let val = args.get(i + 1).ok_or_else(|| format!("missing value for {key}"))?;
             macro_rules! set {
                 ($field:ident) => {
@@ -200,6 +201,15 @@ impl Config {
             }
             match key {
                 "--seed" => set!(seed),
+                "--seeds" => {
+                    let (a, b) = val.split_once('-').ok_or_else(|| format!("--seeds wants A-B, got {val}"))?;
+                    let a: u64 = a.parse().map_err(|_| format!("bad seeds range {val}"))?;
+                    let b: u64 = b.parse().map_err(|_| format!("bad seeds range {val}"))?;
+                    if b < a {
+                        return Err(format!("bad seeds range {val}"));
+                    }
+                    c.seeds = Some((a, b));
+                }
                 "--width" => set!(width),
                 "--height" => set!(height),
                 "--agents" => set!(agents),
@@ -214,6 +224,8 @@ impl Config {
                 "--regrow" => set!(regrow),
                 "--max-food" => set!(max_food),
                 "--season-len" => set!(season_len),
+                "--soil-drain" => set!(soil_drain),
+                "--soil-recovery" => set!(soil_recovery),
                 "--base-cost" => set!(base_cost),
                 "--max-age" => set!(max_age),
                 "--attack-damage" => set!(attack_damage),
@@ -223,8 +235,9 @@ impl Config {
                 "--p-discover" => set!(p_discover),
                 "--p-learn" => set!(p_learn),
                 "--farm-boost" => set!(farm_boost),
+                "--cult-gain" => set!(cult_gain),
+                "--cult-decay" => set!(cult_decay),
                 "--settle-ticks" => set!(settle_ticks),
-                "--start-tech" => set!(start_tech),
                 "--p-drought" => set!(p_drought),
                 "--p-golden" => set!(p_golden),
                 "--p-plague" => set!(p_plague),
@@ -238,7 +251,6 @@ impl Config {
                 "--p-imitate" => set!(p_imitate),
                 "--skill-gain" => set!(skill_gain),
                 "--leader-min-followers" => set!(leader_min_followers),
-                "--cult-decay" => set!(cult_decay),
                 _ => return Err(format!("unknown flag {key}\n{HELP}")),
             }
             i += 2;
@@ -252,12 +264,14 @@ pub const HELP: &str = "AI Survival headless sim
 USAGE: sim [--flag value ...]
 
   --seed N          RNG seed (default 42)
+  --seeds A-B       run every seed from A to B in parallel and print an outcome table
+  --quiet           no per-window rows or live events (implied by --seeds)
   --agents N        initial agents (1000)
   --tribes N        founding tribes, agents spawn clustered per tribe (20)
-  --ticks N         ticks to run (20000)
+  --ticks N         ticks to run (20000); a run ends early on extinction
   --width/--height  map size in cells (192)
   --max-agents N    hard population cap (4000)
-  --min-pop N       below this, random immigrants arrive (60)
+  --min-pop N       below this, random immigrants arrive; 0 = extinction is final (0)
   --log-every N     stats interval (500)
   --image-every N   write out/frame_XXXXXX.ppm every N ticks (0 = off)
   --out DIR         output directory (out)
@@ -265,21 +279,19 @@ USAGE: sim [--flag value ...]
   --regrow F        food regrowth per tick (0.08)
   --max-food F      food cap per fully fertile cell (10)
   --season-len F    ticks per year (2000)
+  --soil-drain F    fertility lost per unit harvested (0.001); --soil-recovery F regained per rested tick (0.0002)
   --base-cost F     energy burned per tick (0.15)
   --max-age N       ticks before dying of old age (3000)
   --attack-damage F --steal F --p-mut F --sigma F
-  --p-discover F    per agent-tick chance of discovering tools while gathering (2e-6);
-                    farming and cooking are half as likely, weapons 20x per attack
-  --p-learn F       chance per tick of learning a tech from an adjacent kin (0.01)
-  --farm-boost F    regrowth multiplier of a fully cultivated cell (12)
-  --cult-decay F    cultivation kept per tick when untended (0.99)
-  --settle-ticks N  ticks an agent must stay still before its farming takes effect (5)
-  --start-tech N    tech bitmask founders begin with: 1 tools, 2 farming, 4 weapons, 8 cooking,
-                    16 metal, 32 irrigation, 64 walls, 128 medicine, 256 writing (0)
-  --p-drought F     chance each year of a drought (0.15); --p-golden F good year (0.15)
-  --p-plague F      chance each year of a plague outbreak (0.12); --p-infect F per contact-tick (0.02)
-  --p-windfall F    per agent-tick chance of a lucky find (0.0001); --p-accident F of an injury (0.00005)
-  --p-flood F --p-wildfire F --p-harsh-winter F --p-bounty F   yearly chances of regional disasters (0.08/0.08/0.08/0.10)
+  --p-discover F    per agent-tick chance of inventing something while working (1e-6)
+  --p-learn F       chance per tick of learning an innovation from an adjacent kin (0.01)
+  --farm-boost F    regrowth multiplier of a fully tended cell (6); innovations raise it
+  --cult-gain F     tending per still tick (0.006); --cult-decay F kept per untended tick (0.99)
+  --settle-ticks N  ticks an agent must stay still before its tending takes effect (5)
+  --p-drought F --p-golden F --p-harsh-winter F --p-plague F   yearly weather chances
+  --p-flood F --p-wildfire F --p-bounty F                       yearly regional events
+  --p-infect F      plague spread per contact-tick (0.02)
+  --p-windfall F --p-accident F   per agent-tick personal luck
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
   --skill-gain F    skill gained per practice (0.002)
   --leader-min-followers N   kin needed to count as a leader (5)
