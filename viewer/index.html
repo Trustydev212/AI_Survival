@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI Survival viewer</title>
+<title>AI Survival</title>
 <link rel="icon" href="data:,">
 <style>
   :root {
@@ -13,52 +13,73 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font: 13px/1.4 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
-  #app { display: grid; grid-template-columns: 1fr 340px; grid-template-rows: 48px 1fr 56px; height: 100vh; }
-  header { grid-column: 1 / 3; display: flex; align-items: center; gap: 18px; padding: 0 16px;
-    background: var(--panel); border-bottom: 1px solid var(--line); }
-  header .title { font-weight: 700; letter-spacing: .04em; color: var(--accent); }
+  #app { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: 48px 1fr 60px; height: 100vh; }
+  header { grid-column: 1 / 3; display: flex; align-items: center; gap: 14px; padding: 0 14px;
+    background: var(--panel); border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+  header .title { font-weight: 800; letter-spacing: .06em; color: var(--accent); }
   header .stat { color: var(--muted); }
-  header .stat b { color: var(--text); font-weight: 600; margin-left: 4px; }
+  header .stat b { color: var(--text); font-weight: 600; margin-left: 4px; font-variant-numeric: tabular-nums; }
   header .era { padding: 2px 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); }
+  header .spacer { flex: 1; }
   #stage { position: relative; background: #05070b; overflow: hidden; }
-  canvas { display: block; }
+  #stage canvas { display: block; }
   #hint { position: absolute; left: 12px; bottom: 12px; color: var(--muted); font-size: 12px;
     background: rgba(11,14,20,.75); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
+  #banner { position: absolute; left: 50%; top: 18px; transform: translateX(-50%) translateY(-30px); opacity: 0;
+    transition: all .35s ease; pointer-events: none; min-width: 360px; max-width: 70%;
+    background: linear-gradient(180deg, #2a2412, #14110a); border: 2px solid var(--accent); border-radius: 8px;
+    box-shadow: 0 0 0 2px #000, 0 12px 40px rgba(0,0,0,.6); padding: 12px 18px; display: flex; gap: 14px; align-items: center; }
+  #banner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #banner .icon { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 0 #000); }
+  #banner .kicker { color: var(--accent); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+  #banner .title { font-size: 17px; font-weight: 700; }
+  #banner .sub { color: var(--muted); font-size: 12px; }
+  #legend { position: absolute; right: 12px; top: 12px; background: rgba(11,14,20,.85); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; min-width: 210px; max-height: 60%; overflow-y: auto; }
+  #legend h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .fac { display: grid; grid-template-columns: 18px 1fr 44px; gap: 6px; align-items: center; padding: 2px 0; cursor: pointer; }
+  .fac canvas { image-rendering: pixelated; width: 18px; height: 18px; }
+  .fac .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+  .fac .bar i { display: block; height: 100%; }
+  .fac .n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; font-size: 11px; }
+  .fac .name { font-size: 12px; }
   aside { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
   aside h3 { margin: 0; padding: 10px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
-    border-bottom: 1px solid var(--line); }
+    border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+  aside h3 label { text-transform: none; letter-spacing: 0; font-weight: normal; }
   #events { flex: 1; overflow-y: auto; padding: 6px 0; min-height: 0; }
-  .ev { padding: 6px 14px; border-left: 3px solid transparent; cursor: default; color: var(--muted); }
+  .ev { padding: 6px 14px; border-left: 3px solid transparent; color: var(--muted); display: flex; gap: 8px; }
   .ev.past { color: var(--text); }
   .ev.now { border-left-color: var(--accent); background: var(--panel2); }
   .ev.locatable { cursor: pointer; }
+  .ev .ic { width: 18px; text-align: center; flex: none; }
   .ev .t { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
   .ev.crisis .t { color: var(--danger); }
   .ev.good .t { color: var(--ok); }
-  #leaders { border-top: 1px solid var(--line); padding: 8px 14px; max-height: 190px; overflow-y: auto; }
+  .ev.major { font-weight: 600; }
+  #leaders { border-top: 1px solid var(--line); padding: 8px 14px; max-height: 180px; overflow-y: auto; }
   .ld { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
-  .ld .sw { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #000; }
+  .ld canvas { image-rendering: pixelated; width: 16px; height: 16px; }
   .ld .n { flex: 1; }
   .ld .f { color: var(--muted); font-variant-numeric: tabular-nums; }
-  footer { grid-column: 1 / 3; display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  footer { grid-column: 1 / 3; display: flex; align-items: center; gap: 10px; padding: 0 14px;
     background: var(--panel); border-top: 1px solid var(--line); }
   button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
     padding: 5px 10px; cursor: pointer; font: inherit; }
   button.on { border-color: var(--accent); color: var(--accent); }
-  #timeline { flex: 1; height: 26px; position: relative; cursor: pointer; }
+  #timeline { flex: 1; height: 34px; position: relative; cursor: pointer; }
   #timeline canvas { width: 100%; height: 100%; }
-  #speed { color: var(--muted); min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+  #speed { color: var(--muted); min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
   #loader { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     background: rgba(11,14,20,.92); z-index: 10; flex-direction: column; gap: 12px; text-align: center; padding: 24px; }
   #loader.hidden { display: none; }
-  #loader input { color: var(--muted); }
   #loader .big { font-size: 18px; font-weight: 600; }
   #loader .small { color: var(--muted); max-width: 520px; }
-  @media (max-width: 800px) {
-    #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 200px 56px; }
+  @media (max-width: 900px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 200px 60px; }
     header { grid-column: 1; } footer { grid-column: 1; }
     aside { border-left: none; border-top: 1px solid var(--line); }
-    header .stat:nth-child(n+6) { display: none; }
+    #legend { display: none; }
   }
 </style>
 </head>
@@ -67,242 +88,529 @@
   <header>
     <span class="title">AI SURVIVAL</span>
     <span class="era" id="era">–</span>
-    <span class="stat">tick<b id="s-tick">0</b></span>
-    <span class="stat">dân<b id="s-pop">0</b></span>
-    <span class="stat">đất<b id="s-soil">–</b></span>
-    <span class="stat">khí hậu<b id="s-clim">–</b></span>
-    <span class="stat">tuân lệnh<b id="s-obey">–</b></span>
-    <span class="stat">kiến thức<b id="s-known">–</b></span>
-    <span class="stat">kho<b id="s-stores">0</b></span>
-    <span class="stat">thủ lĩnh<b id="s-leaders">0</b></span>
+    <span class="stat"><span data-t="tick">tick</span><b id="s-tick">0</b></span>
+    <span class="stat"><span data-t="pop">dân</span><b id="s-pop">0</b></span>
+    <span class="stat"><span data-t="soil">đất</span><b id="s-soil">–</b></span>
+    <span class="stat"><span data-t="weather">thời tiết</span><b id="s-clim">–</b></span>
+    <span class="stat"><span data-t="obey">tuân lệnh</span><b id="s-obey">–</b></span>
+    <span class="stat"><span data-t="known">kiến thức</span><b id="s-known">–</b></span>
+    <span class="stat"><span data-t="stores">kho</span><b id="s-stores">0</b></span>
+    <span class="stat"><span data-t="leaders">thủ lĩnh</span><b id="s-leaders">0</b></span>
+    <span class="spacer"></span>
+    <span class="stat" id="live" style="display:none;color:var(--ok)">● LIVE</span>
+    <button id="lang">EN</button>
   </header>
   <div id="stage">
-    <canvas id="map"></canvas>
-    <div id="hint">kéo để di chuyển · lăn chuột để phóng · space phát/dừng · F bám thủ lĩnh lớn nhất · E bám sự kiện · click sự kiện để bay tới</div>
+    <canvas id="gl"></canvas>
+    <div id="legend"><h4 data-t="factions">Phe phái</h4><div id="factions"></div></div>
+    <div id="banner"><div class="icon" id="b-icon">★</div><div><div class="kicker" id="b-kicker"></div><div class="title" id="b-title"></div><div class="sub" id="b-sub"></div></div></div>
+    <div id="hint" data-t="hint">kéo để di chuyển · lăn chuột để phóng · space phát/dừng · F bám thủ lĩnh · E bám sự kiện · L đổi ngôn ngữ · ← → từng khung</div>
     <div id="loader">
-      <div class="big">AI Survival viewer</div>
-      <div class="small" id="loadmsg">Đang tải out/snap_seed…</div>
-      <div class="small">Hoặc kéo thả ba file <code>snap_seedN.bin</code>, <code>meta_seedN.json</code>, <code>events_seedN.txt</code> vào đây.</div>
+      <div class="big">AI Survival</div>
+      <div class="small" id="loadmsg">…</div>
+      <div class="small" data-t="drop">Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.</div>
       <input type="file" id="files" multiple>
     </div>
   </div>
   <aside>
-    <h3>Sử ký</h3>
+    <h3><span data-t="history">Sử ký</span><label><input type="checkbox" id="pauseMajor"> <span data-t="pauseMajor">dừng ở sự kiện lớn</span></label></h3>
     <div id="events"></div>
-    <h3>Thủ lĩnh đang dẫn dắt</h3>
+    <h3><span data-t="leading">Thủ lĩnh đang dẫn dắt</span></h3>
     <div id="leaders"></div>
   </aside>
   <footer>
     <button id="play">▶</button>
-    <button id="slower">−</button><span id="speed">1 f/s</span><button id="faster">+</button>
+    <button id="slower">−</button><span id="speed"></span><button id="faster">+</button>
     <div id="timeline"><canvas id="tl"></canvas></div>
-    <button id="followLeader">F thủ lĩnh</button>
-    <button id="followEvent">E sự kiện</button>
+    <button id="followLeader">F</button>
+    <button id="followEvent">E</button>
     <button id="reset">⌂</button>
   </footer>
 </div>
+<script src="lib/pixi.min.js"></script>
 <script>
 (() => {
+'use strict';
 const $ = id => document.getElementById(id);
+const TILE = 8;          // terrain pixels per world cell
+const SPR = 16;          // character sprite size
 const ERA_COLORS = ['#3b4252','#5e81ac','#6be3a1','#a3be8c','#ebcb8b','#f2c14e','#d08770','#bf616a'];
+const PALETTE = ['#e04b4b','#4b8fe0','#4bd07a','#f2c14e','#c65cd6','#4bd6d0','#f28b3d','#7dd64b',
+                 '#e04b9c','#8fa3ff','#d6b04b','#5ce0b8','#ff7a7a','#8f6bff','#b8e04b','#ff5cc8',
+                 '#4bb3e0','#e0a04b','#9c4bd6','#4be0a0','#e06b4b','#6bb3ff','#c8e04b','#ff9cd6'];
+const ORDER_NAMES = ['hold','move','raid','conserve','pool'];
+
+// ---------- i18n
+const T = {
+  vi: { tick: 'tick', pop: 'dân', soil: 'đất', weather: 'thời tiết', obey: 'tuân lệnh', known: 'kiến thức', stores: 'kho', leaders: 'thủ lĩnh',
+    factions: 'Phe phái', history: 'Sử ký', pauseMajor: 'dừng ở sự kiện lớn', leading: 'Thủ lĩnh đang dẫn dắt',
+    hint: 'kéo để di chuyển · lăn chuột để phóng · space phát/dừng · F bám thủ lĩnh · E bám sự kiện · L đổi ngôn ngữ · ← → từng khung',
+    drop: 'Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.',
+    loading: 'Đang tải', notfound: 'Không tìm thấy dữ liệu trên server. Kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
+    followers: 'người theo', unnamed: '(chưa có tên)', fps: 'khung/giây', order: 'lệnh', custom: 'tập quán', none: 'không',
+    normal: 'bình thường', winter: 'mùa đông', drought: 'hạn hán', droughtWinter: 'hạn + đông', plenty: 'được mùa', harsh: 'năm khắc nghiệt',
+    lineage: 'dòng họ', eras: ['hoang dã','nhóm lửa','bén rễ','đan kết','nhiều tầng','vút cao','rực rỡ','vượt xa'],
+    orders: ['ở lại','di cư','đột kích','kiềm chế','góp kho'] },
+  en: { tick: 'tick', pop: 'pop', soil: 'soil', weather: 'weather', obey: 'obedience', known: 'knowledge', stores: 'stores', leaders: 'leaders',
+    factions: 'Factions', history: 'Chronicle', pauseMajor: 'pause on major events', leading: 'Leaders now',
+    hint: 'drag to pan · wheel to zoom · space play/pause · F follow leader · E follow events · L language · ← → step',
+    drop: 'Or drop the three files snap_seedN.bin, meta_seedN.json, events_seedN.txt here.',
+    loading: 'Loading', notfound: 'No data on the server. Drop the files here.', badfile: 'Not a snapshot file.',
+    followers: 'followers', unnamed: '(unnamed)', fps: 'frames/s', order: 'order', custom: 'custom', none: 'none',
+    normal: 'normal', winter: 'winter', drought: 'drought', droughtWinter: 'drought + winter', plenty: 'year of plenty', harsh: 'harsh year',
+    lineage: 'lineage', eras: ['wild','kindled','rooted','woven','layered','soaring','radiant','beyond'],
+    orders: ['hold','move','raid','conserve','pool'] },
+};
+let lang = localStorage.getItem('aisv.lang') || 'vi';
+const t = k => T[lang][k];
+function applyLang() {
+  document.documentElement.lang = lang;
+  for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t);
+  $('lang').textContent = lang === 'vi' ? 'EN' : 'VI';
+  localStorage.setItem('aisv.lang', lang);
+  if (state.frames.length) { renderEventList(); draw(true); }
+}
+
+// ---------- event translation: kind + regex over the English text -> both languages
+const num = s => (+s).toLocaleString(lang === 'vi' ? 'vi' : 'en');
+const EV = {
+  era:          { icon: '⟡', major: true, re: /era: (\w+) -> (\w+)/, vi: m => `Thời đại mới: ${eraName(m[2])}`, en: m => `A new era: ${m[2]}`, sub: { vi: m => `từ ${eraName(m[1])}`, en: m => `from ${m[1]}` } },
+  first_leader: { icon: '👑', major: true, re: /first leader: (\w+) of lineage (\d+) has led (\d+) kin/, vi: m => `${m[1]} trở thành thủ lĩnh đầu tiên`, en: m => `${m[1]} becomes the first leader`, sub: { vi: m => `dòng họ ${m[2]}, ${m[3]} người theo`, en: m => `lineage ${m[2]}, ${m[3]} followers` } },
+  great_leader: { icon: '👑', major: true, re: /great leader: (\w+) of lineage (\d+) now leads (\d+) kin/, vi: m => `${m[1]} trở thành đại thủ lĩnh`, en: m => `${m[1]} rises as a great leader`, sub: { vi: m => `dẫn dắt ${m[3]} người của dòng họ ${m[2]}`, en: m => `leading ${m[3]} of lineage ${m[2]}` } },
+  leader_died:  { icon: '🕯', major: false, re: /leader (\w+) of lineage (\d+) died, leaving (\d+) followers/, vi: m => `Thủ lĩnh ${m[1]} qua đời, để lại ${m[3]} người theo`, en: m => `Leader ${m[1]} died, leaving ${m[3]} followers` },
+  rivalry:      { icon: '⚔', major: false, re: /rivalry: (\w+) lost (\d+) followers to (\w+)/, vi: m => `${m[1]} mất ${m[2]} người theo về tay ${m[3]}`, en: m => `${m[1]} lost ${m[2]} followers to ${m[3]}` },
+  merger:       { icon: '🤝', major: false, re: /(\w+) and (\d+) followers went over to (\w+)/, vi: m => `${m[1]} cùng ${m[2]} người theo về dưới trướng ${m[3]}`, en: m => `${m[1]} and ${m[2]} followers went over to ${m[3]}` },
+  innovation:   { icon: '💡', major: false, re: /innovation: (\w+) \(t(\d+): ([^)]*)\) by lineage (\d+)/, vi: m => `Phát minh ${m[1]} (bậc ${m[2]}: ${m[3]}) của dòng họ ${m[4]}`, en: m => `Innovation ${m[1]} (tier ${m[2]}: ${m[3]}) by lineage ${m[4]}` },
+  adopted:      { icon: '📖', major: false, re: /(\w+) \(t(\d+): ([^)]*)\) is now known by half/, vi: m => `Nửa dân số đã biết ${m[1]} (${m[3]})`, en: m => `Half the people now know ${m[1]} (${m[3]})` },
+  famine:       { icon: '🥀', major: false, re: /famine: (\d+) starved \((\d+)%/, vi: m => `Nạn đói: ${num(m[1])} chết đói (${m[2]}% dân mỗi 1000 tick)`, en: m => `Famine: ${num(m[1])} starved (${m[2]}% per 1000 ticks)` },
+  war:          { icon: '🔥', major: false, re: /war: (\d+) killed in (\d+) attacks \((\d+)%/, vi: m => `Chiến tranh: ${num(m[1])} bị giết trong ${num(m[2])} trận (${m[3]}%)`, en: m => `War: ${num(m[1])} killed in ${num(m[2])} attacks (${m[3]}%)` },
+  plague:       { icon: '☣', major: true, re: /plague: a sickness appears/, vi: () => 'Dịch bệnh bùng phát', en: () => 'A plague breaks out', sub: { vi: () => 'bệnh lây theo tiếp xúc, làng đông chịu nặng nhất', en: () => 'spreads by contact; crowded villages suffer most' } },
+  plague_toll:  { icon: '☣', major: false, re: /plague toll: (\d+) dead of sickness, (\d+) infected/, vi: m => `Dịch: ${num(m[1])} chết, ${num(m[2])} nhiễm`, en: m => `Plague: ${num(m[1])} dead, ${num(m[2])} infected` },
+  raids:        { icon: '🔥', major: false, re: /raids: (\d+) fields burned/, vi: m => `Cướp bóc: ${m[1]} ruộng bị đốt`, en: m => `Raids: ${m[1]} fields burned` },
+  first_burn:   { icon: '🔥', major: true, re: /first fields burned/, vi: () => 'Ruộng bị đốt lần đầu', en: () => 'The first fields are burned', sub: { vi: () => 'kẻ cướp được trang bị tốt đã học cách đốt làng', en: () => 'well-armed raiders have learned to torch villages' } },
+  drought:      { icon: '☀', major: false, re: /drought: rains fail for (\d+)/, vi: m => `Hạn hán: mưa ngừng ${m[1]} tick`, en: m => `Drought: rains fail for ${m[1]} ticks` },
+  plenty:       { icon: '🌾', major: false, re: /plenty/, vi: () => 'Năm được mùa', en: () => 'A year of plenty' },
+  harsh_year:   { icon: '❄', major: false, re: /harsh year/, vi: () => 'Năm khắc nghiệt: mùa đông dài', en: () => 'A harsh year: a long winter' },
+  flood:        { icon: '🌊', major: false, re: /flood: .* around \((\d+), (\d+)\)/, vi: m => `Lũ lụt quanh (${m[1]}, ${m[2]})`, en: m => `Flood around (${m[1]}, ${m[2]})` },
+  wildfire:     { icon: '🔥', major: false, re: /wildfire: .* around \((\d+), (\d+)\)/, vi: m => `Cháy rừng quanh (${m[1]}, ${m[2]})`, en: m => `Wildfire around (${m[1]}, ${m[2]})` },
+  bounty:       { icon: '🦌', major: false, re: /bounty: .* around \((\d+), (\d+)\)/, vi: m => `Vùng trù phú xuất hiện quanh (${m[1]}, ${m[2]})`, en: m => `Bounty appears around (${m[1]}, ${m[2]})` },
+  soil_half:    { icon: '🏜', major: true, re: /soil health fell to (\d+)%/, vi: m => `Đất kiệt sức: còn ${m[1]}% tiềm năng`, en: m => `Exhausted land: ${m[1]}% of potential left`, sub: { vi: () => 'khai thác nhanh hơn đất hồi phục', en: () => 'harvest outruns recovery' } },
+  soil_quarter: { icon: '🏜', major: true, re: /soil health fell to (\d+)%/, vi: m => `Đất hoá bụi: còn ${m[1]}%`, en: m => `Dust: soil at ${m[1]}%`, sub: { vi: () => 'phần lớn đất đai đã chết', en: () => 'most of the land is dead' } },
+  lineage:      { icon: '⚑', major: false, re: /lineage (\d+) (now holds (\d+)%|went extinct \(peaked at (\d+)%)/, vi: m => m[3] ? `Dòng họ ${m[1]} chiếm ${m[3]}% dân số` : `Dòng họ ${m[1]} tuyệt chủng (từng chiếm ${m[4]}%)`, en: m => m[3] ? `Lineage ${m[1]} holds ${m[3]}% of the people` : `Lineage ${m[1]} went extinct (peaked at ${m[4]}%)` },
+  monoculture:  { icon: '⚑', major: true, re: /only one lineage left: (\d+)/, vi: m => `Chỉ còn một dòng họ: ${m[1]}`, en: m => `Only one lineage remains: ${m[1]}`, sub: { vi: () => 'mọi phe khác đã biến mất', en: () => 'every other faction is gone' } },
+  warriors:     { icon: '🗡', major: true, re: /warrior class emerged: (\d+)%/, vi: m => `Tầng lớp chiến binh xuất hiện`, en: () => `A warrior class emerges`, sub: { vi: m => `${m[1]}% dân dành hơn 30% thời gian đi đánh`, en: m => `${m[1]}% spend over 30% of their time attacking` } },
+  settlement:   { icon: '🏠', major: true, re: /first settled way of life: (\d+)%/, vi: () => 'Định cư đầu tiên', en: () => 'The first settled life', sub: { vi: m => `${m[1]}% dân gần như không di chuyển nữa`, en: m => `${m[1]}% now barely move` } },
+  sharers:      { icon: '🤲', major: true, re: /sharing culture emerged: (\d+)%/, vi: () => 'Văn hoá chia sẻ hình thành', en: () => 'A sharing culture emerges', sub: { vi: m => `${m[1]}% thường xuyên cho họ hàng thức ăn`, en: m => `${m[1]}% regularly give food to kin` } },
+  obedience:    { icon: '📣', major: true, re: /(\d+)% of orders are obeyed/, vi: m => 'Lời thủ lĩnh bắt đầu có trọng lượng', en: () => 'The word of leaders now carries', sub: { vi: m => `${m[1]}% mệnh lệnh được tuân`, en: m => `${m[1]}% of orders obeyed` } },
+  custom_order: { icon: '📜', major: true, re: /a custom of (\w+):.*\((\d+)% of orders, (\d+)% obeyed\)/, vi: m => `Tập quán ${customVi(m[1])} hình thành`, en: m => `A custom of ${m[1]} forms`, sub: { vi: m => `${m[2]}% mệnh lệnh, ${m[3]}% được tuân`, en: m => `${m[2]}% of orders, ${m[3]}% obeyed` } },
+  custom_root:  { icon: '📜', major: true, re: /a (\w+) custom took root: (\d+)%/, vi: m => `Tập quán ${customVi(m[1])} bén rễ không cần thủ lĩnh`, en: m => `A ${m[1]} custom took root without leaders`, sub: { vi: m => `${m[2]}% dân giữ nó`, en: m => `${m[2]}% keep it` } },
+  collapse:     { icon: '💀', major: true, re: /collapse: .* from (\d+)% to (\d+)%/, vi: () => 'Sụp đổ: các làng bị bỏ hoang', en: () => 'Collapse: settlements abandoned', sub: { vi: m => `định cư từ ${m[1]}% xuống ${m[2]}%`, en: m => `settled share ${m[1]}% → ${m[2]}%` } },
+  forgetting:   { icon: '🌑', major: true, re: /forgetting: .* from ([\d.]+) to ([\d.]+)/, vi: () => 'Thời kỳ lãng quên', en: () => 'An age of forgetting', sub: { vi: m => `kiến thức mỗi người từ ${m[1]} xuống ${m[2]}`, en: m => `knowledge per head ${m[1]} → ${m[2]}` } },
+  first_store:  { icon: '🏚', major: true, re: /first storehouse: raised by (\w+) of lineage (\d+)/, vi: m => `${m[1]} dựng kho chung đầu tiên`, en: m => `${m[1]} raises the first storehouse`, sub: { vi: m => `dòng họ ${m[2]} giờ có thức ăn chung`, en: m => `lineage ${m[2]} now holds food in common` } },
+  first_loot:   { icon: '💰', major: true, re: /looted/, vi: () => 'Kho chung bị cướp lần đầu', en: () => 'The first storehouse is looted' },
+  granary:      { icon: '🏚', major: false, re: /granary: .* drawn on (\d+) times through the winter by a population of (\d+)/, vi: m => `Kho nuôi làng qua mùa đông: ${num(m[1])} lượt rút, dân số ${num(m[2])}`, en: m => `Storehouses carried the winter: ${num(m[1])} withdrawals, population ${num(m[2])}` },
+  extinction:   { icon: '☠', major: true, re: /extinction/, vi: () => 'Tuyệt chủng', en: () => 'Extinction', sub: { vi: () => 'agent cuối cùng đã chết', en: () => 'the last agent has died' } },
+};
+const customVi = o => ({ hold: 'ở lại', move: 'di cư', raid: 'đột kích', conserve: 'kiềm chế', pool: 'góp kho', staying: 'ở lại', migration: 'di cư', raiding: 'đột kích', restraint: 'kiềm chế', pooling: 'góp kho' })[o] || o;
+function eraName(en) { const i = T.en.eras.indexOf(en); return i >= 0 ? T[lang].eras[i] : en; }
+function describeEvent(e) {
+  const d = EV[e.kind];
+  if (!d) return { text: e.text, icon: '·', major: false, sub: '' };
+  const m = e.text.match(d.re);
+  if (!m) return { text: e.text, icon: d.icon, major: d.major, sub: '' };
+  return { text: (d[lang] || d.en)(m), icon: d.icon, major: d.major, sub: d.sub ? (d.sub[lang] || d.sub.en)(m) : '' };
+}
+
+// ---------- state
 const state = {
-  buf: null, dv: null, W: 0, H: 0, maxFood: 10, frames: [], meta: null, events: [],
-  frame: 0, playing: false, fps: 1, acc: 0,
-  cam: { x: 0, y: 0, zoom: 4 }, follow: null, drag: null, lastEvent: -1,
-  world: null, worldFrame: -1,
+  bytes: null, W: 0, H: 0, maxFood: 10, frames: [], meta: null, events: [], live: false, liveOffset: 0,
+  frame: 0, sub: 0, playing: false, fps: 4, follow: null, drag: null, pauseMajor: false, shownBanner: -1,
+  layerCache: { idx: -1, layers: null }, agentCache: new Map(), lastType: null,
+  tileTypes: null, pixi: null, sprites: new Map(), lastFrameDrawn: -1, seenMajor: new Set(),
 };
 
 // ---------- loading
 async function loadFromServer() {
   const q = new URLSearchParams(location.search);
-  const seed = q.get('seed') || '2';
-  const dir = q.get('dir') || 'out';
-  $('loadmsg').textContent = `Đang tải ${dir}/snap_seed${seed}.bin …`;
+  const seed = q.get('seed') || '2', dir = q.get('dir') || 'out';
+  state.live = q.get('live') === '1';
+  state.src = { seed, dir };
+  $('loadmsg').textContent = `${t('loading')} ${dir}/snap_seed${seed}.bin …`;
   try {
     const [bin, meta, ev] = await Promise.all([
-      fetch(`${dir}/snap_seed${seed}.bin`).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }),
-      fetch(`${dir}/meta_seed${seed}.json`).then(r => r.ok ? r.json() : null),
-      fetch(`${dir}/events_seed${seed}.txt`).then(r => r.ok ? r.text() : ''),
+      fetch(`${dir}/snap_seed${seed}.bin`, { cache: 'no-store' }).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }),
+      fetch(`${dir}/meta_seed${seed}.json`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
+      fetch(`${dir}/events_seed${seed}.txt`, { cache: 'no-store' }).then(r => r.ok ? r.text() : ''),
     ]);
-    boot(bin, meta, ev);
-  } catch (e) {
-    $('loadmsg').textContent = 'Không tìm thấy dữ liệu trên server. Kéo thả file vào đây.';
-  }
+    boot(new Uint8Array(bin), meta, ev);
+    if (state.live) { $('live').style.display = ''; setInterval(pollLive, 2000); }
+  } catch (e) { $('loadmsg').textContent = t('notfound'); }
 }
-$('files').addEventListener('change', async e => {
-  let bin = null, meta = null, ev = '';
-  for (const f of e.target.files) {
-    if (f.name.endsWith('.bin')) bin = await f.arrayBuffer();
-    else if (f.name.endsWith('.json')) meta = JSON.parse(await f.text());
-    else if (f.name.endsWith('.txt')) ev = await f.text();
-  }
+async function pollLive() {
+  const { seed, dir } = state.src;
+  try {
+    const r = await fetch(`${dir}/snap_seed${seed}.bin`, { cache: 'no-store', headers: { Range: `bytes=${state.bytes.length}-` } });
+    if (r.status === 206) {
+      const more = new Uint8Array(await r.arrayBuffer());
+      if (more.length) { const nb = new Uint8Array(state.bytes.length + more.length); nb.set(state.bytes); nb.set(more, state.bytes.length); state.bytes = nb; }
+    } else if (r.status === 200) { state.bytes = new Uint8Array(await r.arrayBuffer()); }
+    const before = state.frames.length; indexFrames();
+    const [meta, ev] = await Promise.all([fetch(`${dir}/meta_seed${seed}.json`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null), fetch(`${dir}/events_seed${seed}.txt`, { cache: 'no-store' }).then(r => r.ok ? r.text() : '')]);
+    if (meta) state.meta = meta;
+    if (ev) { const n = state.events.length; parseEvents(ev); if (state.events.length !== n) renderEventList(); }
+    if (state.frames.length > before && state.frame >= before - 1) { state.frame = state.frames.length - 1; state.sub = 0; draw(true); }
+    drawTimeline();
+  } catch (e) { /* the run may not have written yet */ }
+}
+for (const [el, evn] of [[$('files'), 'change'], [$('stage'), 'drop']]) el.addEventListener(evn, async e => {
+  e.preventDefault(); const files = e.target.files || e.dataTransfer.files; let bin = null, meta = null, ev = '';
+  for (const f of files) { if (f.name.endsWith('.bin')) bin = new Uint8Array(await f.arrayBuffer()); else if (f.name.endsWith('.json')) meta = JSON.parse(await f.text()); else if (f.name.endsWith('.txt')) ev = await f.text(); }
   if (bin) boot(bin, meta, ev);
 });
 $('stage').addEventListener('dragover', e => e.preventDefault());
-$('stage').addEventListener('drop', async e => {
-  e.preventDefault();
-  let bin = null, meta = null, ev = '';
-  for (const f of e.dataTransfer.files) {
-    if (f.name.endsWith('.bin')) bin = await f.arrayBuffer();
-    else if (f.name.endsWith('.json')) meta = JSON.parse(await f.text());
-    else if (f.name.endsWith('.txt')) ev = await f.text();
-  }
-  if (bin) boot(bin, meta, ev);
-});
 
-function boot(bin, meta, evText) {
-  state.buf = bin; state.dv = new DataView(bin);
-  const dv = state.dv;
-  if (String.fromCharCode(...new Uint8Array(bin, 0, 4)) !== 'AISV') { $('loadmsg').textContent = 'File không đúng định dạng.'; return; }
-  const version = dv.getUint32(4, true);
+function parseEvents(text) {
+  state.events = text.split('\n').filter(l => l.includes('\t')).map(l => {
+    const p = l.split('\t'); const tick = +p[0]; const kind = p.length >= 3 ? p[1] : guessKind(p[1]); const txt = p[p.length - 1];
+    const m = txt.match(/\((\d+),\s*(\d+)\)/);
+    return { tick, kind, text: txt, x: m ? +m[1] : null, y: m ? +m[2] : null };
+  });
+}
+function guessKind(txt) { for (const k in EV) if (EV[k].re.test(txt)) return k; return 'other'; }
+
+function boot(bytes, meta, evText) {
+  state.bytes = bytes;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset);
+  if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'AISV' || dv.getUint32(4, true) < 3) { $('loadmsg').textContent = t('badfile') + ' (v3+)'; return; }
   state.W = dv.getUint16(8, true); state.H = dv.getUint16(10, true); state.maxFood = dv.getFloat32(12, true);
-  state.meta = meta || { names: {}, eras: ['wild','kindled','rooted','woven','layered','soaring','radiant','beyond'] };
-  // index frames
-  const n = state.W * state.H;
-  const storeBytes = version >= 2 ? 16 : 12;
-  let off = 16; state.frames = [];
-  while (off + 33 <= bin.byteLength) {
-    const tick = dv.getUint32(off, true), era = dv.getUint8(off + 4);
-    const pop = dv.getUint32(off + 5, true), stores = dv.getUint32(off + 9, true);
-    const f = { off, tick, era, pop, stores,
-      soil: dv.getFloat32(off + 13, true), climate: dv.getFloat32(off + 17, true),
-      obedience: dv.getFloat32(off + 21, true), known: dv.getFloat32(off + 25, true), season: dv.getFloat32(off + 29, true) };
-    f.world = off + 33; f.agents = f.world + n * 3; f.storesOff = f.agents + pop * 17;
-    const end = f.storesOff + stores * storeBytes;
-    if (end > bin.byteLength) break;
+  state.meta = meta || { names: {}, eras: T.en.eras };
+  state.frames = []; indexFrames();
+  parseEvents(evText);
+  state.frame = 0; state.sub = 0; state.layerCache.idx = -1; state.agentCache.clear(); state.lastType = null; state.seenMajor.clear();
+  initPixi();
+  renderEventList();
+  $('loader').classList.add('hidden');
+  resetCamera(); draw(true); drawTimeline(); syncButtons();
+}
+function indexFrames() {
+  const b = state.bytes, dv = new DataView(b.buffer, b.byteOffset);
+  let off = state.frames.length ? state.frames[state.frames.length - 1].end : 16;
+  while (off + 4 <= b.length) {
+    const len = dv.getUint32(off, true); const start = off + 4, end = start + len;
+    if (end > b.length) break;
+    const f = { start, end, tick: dv.getUint32(start, true), era: b[start + 4], key: b[start + 5] === 1,
+      pop: dv.getUint32(start + 6, true), stores: dv.getUint32(start + 10, true),
+      soil: dv.getFloat32(start + 14, true), climate: dv.getFloat32(start + 18, true), obedience: dv.getFloat32(start + 22, true),
+      known: dv.getFloat32(start + 26, true), season: dv.getFloat32(start + 30, true), layers: [] };
+    let o = start + 34;
+    for (let L = 0; L < 3; L++) { const n = dv.getUint32(o, true); f.layers.push([o + 4, n]); o += 4 + n; }
+    f.agents = o; f.storesOff = o + f.pop * 22;
     state.frames.push(f); off = end;
   }
-  state.storeBytes = storeBytes;
-  // events
-  state.events = evText.split('\n').filter(l => l.includes('\t')).map(l => {
-    const [t, text] = l.split('\t');
-    const m = text.match(/\((\d+),\s*(\d+)\)/);
-    const lower = text.toLowerCase();
-    return { tick: +t, text, x: m ? +m[1] : null, y: m ? +m[2] : null,
-      cls: /famine|war:|plague|collapse|extinct|dust|exhausted|flood|wildfire|forgetting|died|looted/.test(lower) ? 'crisis'
-         : /innovation|custom|era:|first|granary|storehouse|great leader|plenty|bounty|took root/.test(lower) ? 'good' : '' };
-  });
-  renderEventList();
-  state.frame = 0; state.worldFrame = -1;
-  resetCamera();
-  $('loader').classList.add('hidden');
-  resize(); draw();
 }
 
-// ---------- frame access
-function agentsOf(f) {
-  const out = new Array(f.pop); const dv = state.dv; let o = f.agents;
-  for (let i = 0; i < f.pop; i++, o += 17) {
-    out[i] = { x: dv.getUint16(o, true) / 64, y: dv.getUint16(o + 2, true) / 64,
-      r: dv.getUint8(o + 4), g: dv.getUint8(o + 5), b: dv.getUint8(o + 6), flags: dv.getUint8(o + 7),
-      lineage: dv.getUint16(o + 8, true), name: dv.getUint32(o + 10, true), followers: dv.getUint16(o + 14, true), energy: dv.getUint8(o + 16) };
-  }
-  return out;
+// ---------- decoding
+function rleInto(dst, b, off, len, xor) {
+  let i = 0, o = off; const end = off + len;
+  if (xor) { while (o < end) { const v = b[o], r = b[o + 1]; if (v) for (let k = 0; k < r; k++) dst[i + k] ^= v; i += r; o += 2; } }
+  else { while (o < end) { const v = b[o], r = b[o + 1]; dst.fill(v, i, i + r); i += r; o += 2; } }
 }
-function storesOf(f) {
-  const out = []; const dv = state.dv; let o = f.storesOff;
-  for (let i = 0; i < f.stores; i++, o += state.storeBytes) {
-    out.push({ x: dv.getUint16(o, true) / 64, y: dv.getUint16(o + 2, true) / 64, food: dv.getFloat32(o + 4, true),
-      r: dv.getUint8(o + 8), g: dv.getUint8(o + 9), b: dv.getUint8(o + 10),
-      owner: state.storeBytes >= 16 ? dv.getUint32(o + 12, true) : 0 });
+function layersOf(idx) {
+  const n = state.W * state.H; const c = state.layerCache;
+  if (c.idx === idx) return c.layers;
+  let from;
+  if (c.idx >= 0 && c.idx < idx && idx - c.idx < 16 && !state.frames.slice(c.idx + 1, idx + 1).some(f => f.key)) from = c.idx + 1;
+  else { let k = idx; while (k > 0 && !state.frames[k].key) k--; from = k; c.layers = [new Uint8Array(n), new Uint8Array(n), new Uint8Array(n)]; }
+  for (let i = from; i <= idx; i++) { const f = state.frames[i]; for (let L = 0; L < 3; L++) rleInto(c.layers[L], state.bytes, f.layers[L][0], f.layers[L][1], !f.key); }
+  c.idx = idx; return c.layers;
+}
+function agentsOf(idx) {
+  if (state.agentCache.has(idx)) return state.agentCache.get(idx);
+  const f = state.frames[idx], b = state.bytes, dv = new DataView(b.buffer, b.byteOffset); const n = f.pop;
+  const a = { n, id: new Uint32Array(n), x: new Float32Array(n), y: new Float32Array(n), lineage: new Uint16Array(n), name: new Uint32Array(n),
+    followers: new Uint16Array(n), flags: new Uint8Array(n), energy: new Uint8Array(n), mdx: new Int8Array(n), mdy: new Int8Array(n),
+    under: new Uint8Array(n), action: new Uint8Array(n), index: new Map(), stores: [] };
+  let o = f.agents;
+  for (let i = 0; i < n; i++, o += 22) {
+    a.id[i] = dv.getUint32(o, true); a.x[i] = dv.getUint16(o + 4, true) / 64; a.y[i] = dv.getUint16(o + 6, true) / 64;
+    a.lineage[i] = dv.getUint16(o + 8, true); a.name[i] = dv.getUint32(o + 10, true); a.followers[i] = dv.getUint16(o + 14, true);
+    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21];
+    a.index.set(a.id[i], i);
   }
-  return out;
+  o = f.storesOff;
+  for (let i = 0; i < f.stores; i++, o += 14) a.stores.push({ x: dv.getUint16(o, true) / 64, y: dv.getUint16(o + 2, true) / 64, food: dv.getFloat32(o + 4, true), lineage: dv.getUint16(o + 8, true), owner: dv.getUint32(o + 10, true) });
+  if (state.agentCache.size > 6) state.agentCache.delete(state.agentCache.keys().next().value);
+  state.agentCache.set(idx, a); return a;
 }
 
-// ---------- world layer
-function worldImage(f) {
-  if (state.worldFrame === state.frame && state.world) return state.world;
-  const { W, H } = state; const n = W * H;
-  const food = new Uint8Array(state.buf, f.world, n), cult = new Uint8Array(state.buf, f.world + n, n), fert = new Uint8Array(state.buf, f.world + 2 * n, n);
-  if (!state.world) { state.world = document.createElement('canvas'); state.world.width = W; state.world.height = H; }
-  const ctx = state.world.getContext('2d'); const img = ctx.createImageData(W, H); const d = img.data;
-  const winter = f.season < 0.45;
-  for (let i = 0; i < n; i++) {
-    const fe = fert[i] / 255, fo = food[i] / 255, cu = cult[i] / 255;
-    // barren rock is blue-black; fertile land brown-green; standing food glows green; fields go gold.
-    let r = 14 + 38 * fe + 120 * cu, g = 18 + 46 * fe + 150 * fo * (winter ? 0.55 : 1) + 60 * cu, b = 26 + 8 * fe;
-    if (winter) { r += 10; b += 22; }
-    d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; d[i * 4 + 3] = 255;
-  }
-  ctx.putImageData(img, 0, 0);
-  state.worldFrame = state.frame; return state.world;
-}
+// ---------- pixel art generation
+function px(ctx, x, y, c) { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); }
+function hash(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967296; }
 
-// ---------- drawing
-const cv = $('map'), ctx = cv.getContext('2d');
-function resize() {
-  const r = $('stage').getBoundingClientRect();
-  cv.width = Math.floor(r.width * devicePixelRatio); cv.height = Math.floor(r.height * devicePixelRatio);
-  cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
-  draw(); drawTimeline();
-}
-function resetCamera() {
-  const r = $('stage').getBoundingClientRect();
-  state.cam.zoom = Math.max(1, Math.min(r.width / state.W, r.height / state.H));
-  state.cam.x = state.W / 2; state.cam.y = state.H / 2; state.follow = null; syncButtons();
-}
-function toScreen(x, y) {
-  const r = { w: cv.width / devicePixelRatio, h: cv.height / devicePixelRatio };
-  return [(x - state.cam.x) * state.cam.zoom + r.w / 2, (y - state.cam.y) * state.cam.zoom + r.h / 2];
-}
-function draw() {
-  if (!state.frames.length) return;
-  const f = state.frames[state.frame];
-  const z = state.cam.zoom, dpr = devicePixelRatio;
-  const w = cv.width / dpr, h = cv.height / dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, w, h);
-  ctx.imageSmoothingEnabled = z < 3;
-  const [ox, oy] = toScreen(0, 0);
-  ctx.drawImage(worldImage(f), ox, oy, state.W * z, state.H * z);
-
-  const agents = agentsOf(f), stores = storesOf(f);
-  // stores: a square with a fill bar
-  for (const s of stores) {
-    const [sx, sy] = toScreen(s.x, s.y); const size = Math.max(6, 2.2 * z);
-    ctx.fillStyle = '#1a1206'; ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
-    ctx.strokeStyle = `rgb(${s.r},${s.g},${s.b})`; ctx.lineWidth = 1.5; ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
-    const fill = Math.min(1, s.food / 3000);
-    ctx.fillStyle = '#f2c14e'; ctx.fillRect(sx - size / 2 + 1.5, sy + size / 2 - 1.5 - (size - 3) * fill, size - 3, (size - 3) * fill);
-  }
-  // agents
-  const a = Math.max(1, Math.min(z * 0.8, 6));
-  const leaders = [];
-  for (const p of agents) {
-    const [sx, sy] = toScreen(p.x, p.y);
-    if (sx < -10 || sy < -10 || sx > w + 10 || sy > h + 10) continue;
-    if (p.flags & 1) ctx.fillStyle = '#ffffff';
-    else ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
-    if (p.flags & 4) { ctx.fillRect(sx - a / 2, sy - a / 2, a, a); }
-    else { ctx.beginPath(); ctx.arc(sx, sy, a / 2, 0, 6.283); ctx.fill(); }
-    if (p.flags & 2) leaders.push(p);
-  }
-  // leaders: ring scaled by following, and a name when it matters
-  leaders.sort((x, y) => y.followers - x.followers);
-  ctx.font = `${Math.max(10, Math.min(13, z * 1.4))}px system-ui, sans-serif`; ctx.textAlign = 'center';
-  for (const p of leaders) {
-    const [sx, sy] = toScreen(p.x, p.y); const rr = Math.max(4, Math.min(3 + Math.sqrt(p.followers) * 0.9 * Math.min(z / 4, 1.5), 40));
-    ctx.strokeStyle = 'rgba(242,193,78,.9)'; ctx.lineWidth = p.followers >= 40 ? 2 : 1;
-    ctx.beginPath(); ctx.arc(sx, sy, rr, 0, 6.283); ctx.stroke();
-    if (p.name && (p.followers >= 20 || z >= 6)) {
-      const name = (state.meta.names || {})[p.name] || `#${p.name}`;
-      ctx.fillStyle = 'rgba(0,0,0,.6)'; const tw = ctx.measureText(name).width + 8;
-      ctx.fillRect(sx - tw / 2, sy - rr - 16, tw, 14);
-      ctx.fillStyle = '#f2c14e'; ctx.fillText(name, sx, sy - rr - 5);
+// terrain tiles: index = kind*3 + variant
+const TK = { rock: 0, dirt: 1, grass0: 2, grass1: 3, grass2: 4, field0: 5, field1: 6, snow0: 7, snow1: 8, snowfield: 9 };
+function makeTiles() {
+  const kinds = 10, vars = 3; const c = document.createElement('canvas'); c.width = TILE * vars; c.height = TILE * kinds; const g = c.getContext('2d');
+  const pal = {
+    rock: ['#1b2130', '#232a3c', '#2e3648', '#3a4358'], dirt: ['#4a3826', '#553f2b', '#614a33', '#6d5439'],
+    grass0: ['#3c5a2a', '#44662f', '#4c7034', '#557a3a'], grass1: ['#4a7d34', '#53893a', '#5c9640', '#66a247'], grass2: ['#5aa040', '#64ad47', '#6fba4f', '#7ac857'],
+    field0: ['#6b4a2a', '#7a5631', '#5c8a3a', '#8a6238'], field1: ['#8a6a2a', '#c9a23a', '#e0b84a', '#7a5a2a'],
+    snow0: ['#7a8ea0', '#8fa3b5', '#a3b7c8', '#b7cad9'], snow1: ['#8ea2b2', '#a7bbcb', '#bcd0df', '#d0e3f0'], snowfield: ['#6b5a4a', '#9aa9b8', '#b9c8d6', '#7a6a58'],
+  };
+  const names = Object.keys(TK);
+  for (let k = 0; k < kinds; k++) for (let v = 0; v < vars; v++) {
+    const p = pal[names[k]]; const ox = v * TILE, oy = k * TILE;
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      const r = hash(x + v * 31, y + k * 17);
+      let col = p[0];
+      if (names[k].startsWith('field')) { col = (y % 3 === 0) ? p[3] : (r < 0.35 ? p[2] : p[1]); if (names[k] === 'field1' && r < 0.2 && y % 3 !== 0) col = p[2]; }
+      else if (names[k] === 'snowfield') { col = (y % 3 === 0) ? p[3] : (r < 0.5 ? p[2] : p[1]); }
+      else { col = r < 0.55 ? p[0] : r < 0.8 ? p[1] : r < 0.93 ? p[2] : p[3]; if (names[k].startsWith('grass') && r > 0.97) col = '#d8e07a'; }
+      px(g, ox + x, oy + y, col);
     }
   }
-  // HUD
-  $('s-tick').textContent = f.tick.toLocaleString('vi');
-  $('s-pop').textContent = f.pop.toLocaleString('vi');
-  $('s-soil').textContent = Math.round(f.soil * 100) + '%';
-  $('s-clim').textContent = f.climate < 0.6 ? (f.season < 0.45 ? 'hạn + đông' : 'hạn hán') : f.climate > 1.2 ? 'được mùa' : f.season < 0.45 ? 'mùa đông' : 'bình thường';
-  $('s-obey').textContent = Math.round(f.obedience * 100) + '%';
-  $('s-known').textContent = f.known.toFixed(1);
-  $('s-stores').textContent = f.stores;
-  $('s-leaders').textContent = leaders.length;
-  const eraName = state.meta.eras[f.era] || f.era; $('era').textContent = eraName; $('era').style.borderColor = ERA_COLORS[f.era] || '#666';
-  renderLeaders(leaders); markEvents(f.tick);
+  return c;
 }
+// characters: body atlas (skin/legs/hair) and tunic atlas (white + pattern) x 5 frames (4 walk + idle), 2 body variants (well, sick)
+const NFRAMES = 5, NPAT = 6;
+function makeCharacters() {
+  const c = document.createElement('canvas'); c.width = SPR * NFRAMES; c.height = SPR * (2 + NPAT); const g = c.getContext('2d');
+  const drawBody = (ox, oy, frame, sick) => {
+    const skin = sick ? '#a7c9a0' : '#e6b48c', skin2 = sick ? '#86a880' : '#c98f66', hair = '#3a2a1e', eye = '#1a1010', boot = '#3a2a1e';
+    const bob = frame === 4 ? 0 : (frame % 2 === 0 ? 0 : 1);
+    // head 6x6 at (5,2+bob)
+    for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) px(g, ox + 5 + x, oy + 2 + bob + y, (x === 0 || x === 5 || y === 0) ? skin2 : skin);
+    for (let x = 0; x < 6; x++) px(g, ox + 5 + x, oy + 2 + bob, hair); for (let x = 0; x < 6; x++) px(g, ox + 5 + x, oy + 1 + bob, hair);
+    px(g, ox + 7, oy + 5 + bob, eye); px(g, ox + 9, oy + 5 + bob, eye);
+    // arms
+    px(g, ox + 4, oy + 9 + bob, skin); px(g, ox + 4, oy + 10 + bob, skin); px(g, ox + 11, oy + 9 + bob, skin); px(g, ox + 11, oy + 10 + bob, skin);
+    // legs: frames 0..3 walk, 4 idle
+    const legs = [[6, 9], [7, 8], [6, 9], [5, 10], [6, 9]][frame];
+    const lift = [0, 1, 0, 1, 0][frame];
+    for (let y = 0; y < 3; y++) { px(g, ox + legs[0], oy + 12 + y, skin2); px(g, ox + legs[1], oy + 12 + y - lift, skin2); }
+    px(g, ox + legs[0], oy + 15, boot); px(g, ox + legs[1], oy + 15 - lift, boot);
+  };
+  const drawTunic = (ox, oy, frame, pat) => {
+    const bob = frame === 4 ? 0 : (frame % 2 === 0 ? 0 : 1);
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 6; x++) {
+      let c2 = '#ffffff';
+      const edge = x === 0 || x === 5;
+      if (edge) c2 = '#b0b0b0';
+      // faction pattern in a darker shade so tint keeps it readable
+      const p = [ (x === 2 || x === 3) && y === 2, (x + y) % 2 === 0 && y > 0 && y < 4 && !edge, y === 2, x === 2 || x === 3, (x === 1 || x === 4) && y !== 2, y === 1 || y === 3 ][pat];
+      if (p && !edge) c2 = '#7a7a7a';
+      px(g, ox + 5 + x, oy + 8 + bob + y, c2);
+    }
+  };
+  for (let f = 0; f < NFRAMES; f++) { drawBody(f * SPR, 0, f, false); drawBody(f * SPR, SPR, f, true); }
+  for (let p = 0; p < NPAT; p++) for (let f = 0; f < NFRAMES; f++) drawTunic(f * SPR, (2 + p) * SPR, f, p);
+  return c;
+}
+// banners (leader flag, 6 glyphs, white for tint) and the storehouse
+function makeProps() {
+  const c = document.createElement('canvas'); c.width = SPR * 7; c.height = SPR * 2; const g = c.getContext('2d');
+  for (let p = 0; p < NPAT; p++) {
+    const ox = p * SPR;
+    for (let y = 2; y < 16; y++) px(g, ox + 4, y, '#6b4a2a');
+    for (let y = 2; y < 10; y++) for (let x = 5; x < 14 - (y > 6 ? (y - 6) * 2 : 0); x++) px(g, ox + x, y, '#ffffff');
+    const glyph = [[8, 5], [7, 5], [9, 5], [8, 4], [8, 6], [7, 4], [9, 6], [7, 6], [9, 4]];
+    const sets = [[0], [1, 2], [0, 1, 2], [0, 3, 4], [5, 6, 7, 8], [3, 4, 1, 2]][p];
+    for (const i of sets) px(g, ox + glyph[i][0], glyph[i][1], '#5a5a5a');
+  }
+  // storehouse at (6*16, 0): wooden granary with roof
+  const ox = 6 * SPR;
+  for (let y = 7; y < 16; y++) for (let x = 2; x < 14; x++) px(g, ox + x, y, (x % 3 === 0) ? '#6b4a2a' : '#8a6238');
+  for (let y = 2; y < 8; y++) for (let x = 1 + (7 - y); x < 15 - (7 - y); x++) px(g, ox + x, y, y % 2 ? '#a83a2a' : '#c9503a');
+  for (let y = 11; y < 16; y++) for (let x = 6; x < 10; x++) px(g, ox + x, y, '#3a2a1e');
+  return c;
+}
+function factionColor(lineage) { return PALETTE[(lineage * 7) % PALETTE.length]; }
+function factionPattern(lineage) { return (lineage * 5) % NPAT; }
+function hexToInt(h) { return parseInt(h.slice(1), 16); }
+
+// ---------- pixi scene
+let app, world, terrainSprite, terrainCanvas, terrainCtx, tiles, chars, props, bodies, tunics, fxLayer, labelLayer, storeLayer, bodyTex = [], tunicTex = [], bannerTex = [], storeTex;
+function initPixi() {
+  if (app) { app.destroy(true, { children: true }); state.sprites.clear(); }
+  app = new PIXI.Application({ view: $('gl'), resizeTo: $('stage'), backgroundColor: 0x05070b, antialias: false, resolution: Math.min(devicePixelRatio, 2), autoDensity: true });
+  PIXI.BaseTexture.defaultOptions.scaleMode = PIXI.SCALE_MODES.NEAREST;
+  world = new PIXI.Container(); app.stage.addChild(world);
+  tiles = makeTiles(); chars = makeCharacters(); props = makeProps();
+  terrainCanvas = document.createElement('canvas'); terrainCanvas.width = state.W * TILE; terrainCanvas.height = state.H * TILE; terrainCtx = terrainCanvas.getContext('2d');
+  terrainSprite = new PIXI.Sprite(PIXI.Texture.from(terrainCanvas)); world.addChild(terrainSprite);
+  const cb = PIXI.BaseTexture.from(chars); const pb = PIXI.BaseTexture.from(props);
+  bodyTex = [0, 1].map(v => Array.from({ length: NFRAMES }, (_, f) => new PIXI.Texture(cb, new PIXI.Rectangle(f * SPR, v * SPR, SPR, SPR))));
+  tunicTex = Array.from({ length: NPAT }, (_, p) => Array.from({ length: NFRAMES }, (_, f) => new PIXI.Texture(cb, new PIXI.Rectangle(f * SPR, (2 + p) * SPR, SPR, SPR))));
+  bannerTex = Array.from({ length: NPAT }, (_, p) => new PIXI.Texture(pb, new PIXI.Rectangle(p * SPR, 0, SPR, SPR)));
+  storeTex = new PIXI.Texture(pb, new PIXI.Rectangle(6 * SPR, 0, SPR, SPR));
+  storeLayer = new PIXI.Container(); world.addChild(storeLayer);
+  bodies = new PIXI.ParticleContainer(20000, { position: true, uvs: true, scale: true, alpha: true }); world.addChild(bodies);
+  tunics = new PIXI.ParticleContainer(20000, { position: true, uvs: true, scale: true, tint: true, alpha: true }); world.addChild(tunics);
+  fxLayer = new PIXI.Container(); world.addChild(fxLayer);
+  labelLayer = new PIXI.Container(); world.addChild(labelLayer);
+  state.lastType = new Uint8Array(state.W * state.H).fill(255);
+  state.pixi = true;
+  app.ticker.add(tick);
+}
+function tileType(food, cult, fert, winter) {
+  if (fert < 8) return TK.rock; if (fert < 20) return TK.dirt;
+  if (cult >= 20) return winter ? TK.snowfield : TK.field1; if (cult >= 8) return winter ? TK.snowfield : TK.field0;
+  if (winter) return food >= 10 ? TK.snow1 : TK.snow0;
+  return food >= 16 ? TK.grass2 : food >= 6 ? TK.grass1 : TK.grass0;
+}
+function drawTerrain(idx) {
+  const [food, cult, fert] = layersOf(idx); const f = state.frames[idx]; const winter = f.season < 0.42;
+  const W = state.W, H = state.H; let changed = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x; const k = tileType(food[i], cult[i], fert[i], winter);
+    if (state.lastType[i] === k) continue;
+    state.lastType[i] = k; changed++;
+    const v = (x * 7 + y * 13) % 3;
+    terrainCtx.drawImage(tiles, v * TILE, k * TILE, TILE, TILE, x * TILE, y * TILE, TILE, TILE);
+  }
+  if (changed) terrainSprite.texture.baseTexture.update();
+}
+
+// ---------- per-render update
+let animClock = 0, lastNow = performance.now();
+function tick() {
+  const now = performance.now(); const dt = Math.min(0.1, (now - lastNow) / 1000); lastNow = now; animClock += dt;
+  if (!state.frames.length) return;
+  if (state.playing) {
+    state.sub += dt * state.fps;
+    while (state.sub >= 1) {
+      state.sub -= 1; const nf = state.frame + 1;
+      if (nf >= state.frames.length) { state.sub = 0; if (!state.live) { state.playing = false; syncButtons(); } break; }
+      state.frame = nf;
+      if (checkMajor()) break;
+    }
+    applyFollow();
+  }
+  draw(false);
+}
+function checkMajor() {
+  const tk = state.frames[state.frame].tick, prev = state.frame > 0 ? state.frames[state.frame - 1].tick : -1;
+  for (const [i, e] of state.events.entries()) {
+    if (e.tick <= prev || e.tick > tk) continue;
+    const d = describeEvent(e); if (!d.major || state.seenMajor.has(i)) continue;
+    state.seenMajor.add(i); showBanner(d, e);
+    if (e.x != null) { state.cam.tx = e.x; state.cam.ty = e.y; }
+    if (state.pauseMajor) { state.playing = false; state.sub = 0; syncButtons(); return true; }
+    return false;
+  }
+  return false;
+}
+function showBanner(d, e) {
+  $('b-icon').textContent = d.icon; $('b-kicker').textContent = `${t('tick')} ${e.tick.toLocaleString()}`; $('b-title').textContent = d.text; $('b-sub').textContent = d.sub || '';
+  $('banner').classList.add('show'); clearTimeout(state.bannerT); state.bannerT = setTimeout(() => $('banner').classList.remove('show'), 4500);
+}
+
+function draw(force) {
+  if (!state.pixi) return;
+  const idx = state.frame; const f = state.frames[idx]; const A = agentsOf(idx); const B = idx + 1 < state.frames.length ? agentsOf(idx + 1) : null;
+  const s = state.sub;
+  if (force || state.lastFrameDrawn !== idx) { drawTerrain(idx); state.lastFrameDrawn = idx; updateHud(f, A); renderLeaders(A); renderFactions(A); markEvents(f.tick); drawTimeline(); }
+  // camera
+  const z = state.cam.zoom / TILE; world.scale.set(z);
+  world.position.set(app.screen.width / 2 - state.cam.x * TILE * z, app.screen.height / 2 - state.cam.y * TILE * z);
+  // sprites: reconcile by id
+  const alive = new Set(); const W = state.W, H = state.H;
+  const walkFrame = Math.floor(animClock * 8) % 4;
+  const detail = state.cam.zoom >= 3;
+  for (let i = 0; i < A.n; i++) {
+    const id = A.id[i]; alive.add(id);
+    let sp = state.sprites.get(id);
+    if (!sp) {
+      sp = { body: new PIXI.Sprite(bodyTex[0][4]), tunic: new PIXI.Sprite(tunicTex[factionPattern(A.lineage[i])][4]) };
+      sp.body.anchor.set(0.5, 1); sp.tunic.anchor.set(0.5, 1); sp.tunic.tint = hexToInt(factionColor(A.lineage[i]));
+      bodies.addChild(sp.body); tunics.addChild(sp.tunic); state.sprites.set(id, sp);
+    }
+    let x = A.x[i], y = A.y[i], moving = false, dx = A.mdx[i];
+    if (B) { const j = B.index.get(id); if (j !== undefined) { let ddx = B.x[j] - x, ddy = B.y[j] - y; if (Math.abs(ddx) < W / 2 && Math.abs(ddy) < H / 2) { x += ddx * s; y += ddy * s; moving = ddx * ddx + ddy * ddy > 0.05; if (Math.abs(ddx) > 0.05) dx = ddx; } } }
+    const sick = A.flags[i] & 1; const fr = moving ? walkFrame : 4;
+    sp.body.texture = bodyTex[sick ? 1 : 0][fr]; sp.tunic.texture = tunicTex[factionPattern(A.lineage[i])][fr];
+    const sx = (dx < 0 ? -1 : 1) * (detail ? 1 : 0.6);
+    sp.body.scale.set(sx, detail ? 1 : 0.6); sp.tunic.scale.set(sx, detail ? 1 : 0.6);
+    const bob = moving ? 0 : Math.sin(animClock * 3 + id) * 0.4;
+    sp.body.position.set(x * TILE, y * TILE + bob + 2); sp.tunic.position.set(x * TILE, y * TILE + bob + 2);
+    const a = A.energy[i] < 15 ? 0.55 : 1; sp.body.alpha = a; sp.tunic.alpha = a;
+  }
+  for (const [id, sp] of state.sprites) if (!alive.has(id)) { bodies.removeChild(sp.body); tunics.removeChild(sp.tunic); sp.body.destroy(); sp.tunic.destroy(); state.sprites.delete(id); }
+  // stores, banners, labels: rebuilt per frame change only
+  if (force || state.lastPropsFrame !== idx) {
+    state.lastPropsFrame = idx;
+    storeLayer.removeChildren().forEach(c => c.destroy({ children: true })); fxLayer.removeChildren().forEach(c => c.destroy({ children: true })); labelLayer.removeChildren().forEach(c => c.destroy({ children: true }));
+    for (const st of A.stores) {
+      const sp = new PIXI.Sprite(storeTex); sp.anchor.set(0.5, 1); sp.position.set(st.x * TILE, st.y * TILE + 2); storeLayer.addChild(sp);
+      const g = new PIXI.Graphics(); const fill = Math.min(1, st.food / 3000);
+      g.beginFill(0x000000).drawRect(-7, 3, 14, 3).endFill(); g.beginFill(hexToInt(factionColor(st.lineage))).drawRect(-6, 4, 12 * fill, 1).endFill(); g.position.set(st.x * TILE, st.y * TILE); storeLayer.addChild(g);
+    }
+    const leaders = []; for (let i = 0; i < A.n; i++) if (A.flags[i] & 2) leaders.push(i);
+    leaders.sort((a, b) => A.followers[b] - A.followers[a]);
+    const style = new PIXI.TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 11, fill: '#f2c14e', stroke: '#000', strokeThickness: 3 });
+    for (const [k, i] of leaders.entries()) {
+      const fl = new PIXI.Sprite(bannerTex[factionPattern(A.lineage[i])]); fl.anchor.set(0.25, 1); fl.tint = hexToInt(factionColor(A.lineage[i]));
+      const sc = Math.min(2.2, 0.8 + Math.sqrt(A.followers[i]) * 0.12); fl.scale.set(sc); fl.position.set(A.x[i] * TILE, A.y[i] * TILE - 12); fxLayer.addChild(fl);
+      const ord = A.under[i]; if (ord) { const gl = new PIXI.Text(['⌂','➜','⚔','✋','⇅'][ord - 1], new PIXI.TextStyle({ fontSize: 10, fill: '#fff', stroke: '#000', strokeThickness: 2 })); gl.anchor.set(0.5, 1); gl.position.set(A.x[i] * TILE + 10, A.y[i] * TILE - 12 * sc + 2); fxLayer.addChild(gl); }
+      if (k < 40 && A.name[i] && (A.followers[i] >= 15 || k < 12)) { const nm = (state.meta.names || {})[A.name[i]] || `#${A.name[i]}`; const tx = new PIXI.Text(nm, style); tx.anchor.set(0.5, 1); tx.scale.set(1 / Math.max(1, z * 0.9)); tx.position.set(A.x[i] * TILE, A.y[i] * TILE - 14 * sc - 2); labelLayer.addChild(tx); }
+    }
+  }
+}
+function updateHud(f, A) {
+  $('s-tick').textContent = f.tick.toLocaleString(); $('s-pop').textContent = f.pop.toLocaleString();
+  $('s-soil').textContent = Math.round(f.soil * 100) + '%';
+  const winter = f.season < 0.42;
+  $('s-clim').textContent = f.climate < 0.45 ? (winter ? t('droughtWinter') : t('drought')) : f.climate < 0.7 ? t('harsh') : f.climate > 1.2 ? t('plenty') : winter ? t('winter') : t('normal');
+  $('s-obey').textContent = Math.round(f.obedience * 100) + '%'; $('s-known').textContent = f.known.toFixed(1); $('s-stores').textContent = f.stores;
+  let L = 0; for (let i = 0; i < A.n; i++) if (A.flags[i] & 2) L++; $('s-leaders').textContent = L;
+  $('era').textContent = T[lang].eras[f.era] || f.era; $('era').style.borderColor = ERA_COLORS[f.era] || '#666';
+}
+
+// ---------- panels
+function swatch(lineage, size) {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16; const g = c.getContext('2d');
+  g.drawImage(chars, 4 * SPR, 0, SPR, SPR, 0, 0, 16, 16);
+  const tc = document.createElement('canvas'); tc.width = 16; tc.height = 16; const tg = tc.getContext('2d');
+  tg.drawImage(chars, 4 * SPR, (2 + factionPattern(lineage)) * SPR, SPR, SPR, 0, 0, 16, 16);
+  tg.globalCompositeOperation = 'multiply'; tg.fillStyle = factionColor(lineage); tg.fillRect(0, 0, 16, 16);
+  tg.globalCompositeOperation = 'destination-in'; tg.drawImage(chars, 4 * SPR, (2 + factionPattern(lineage)) * SPR, SPR, SPR, 0, 0, 16, 16);
+  g.drawImage(tc, 0, 0); return c;
+}
+function renderFactions(A) {
+  const counts = new Map(); const lead = new Map(); const custom = new Map();
+  for (let i = 0; i < A.n; i++) { const l = A.lineage[i]; counts.set(l, (counts.get(l) || 0) + 1); if (A.flags[i] & 16) custom.set(l, (custom.get(l) || 0) + 1); if ((A.flags[i] & 2) && A.name[i] && (!lead.has(l) || A.followers[i] > lead.get(l).f)) lead.set(l, { f: A.followers[i], name: A.name[i] }); }
+  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10); const box = $('factions'); box.innerHTML = '';
+  for (const [l, n] of rows) {
+    const d = document.createElement('div'); d.className = 'fac'; d.appendChild(swatch(l));
+    const mid = document.createElement('div'); const ld = lead.get(l); const nm = ld ? ((state.meta.names || {})[ld.name] || '') : '';
+    mid.innerHTML = `<div class="name">${t('lineage')} ${l}${nm ? ' · ' + nm : ''}</div><div class="bar"><i style="width:${Math.round(100 * n / A.n)}%;background:${factionColor(l)}"></i></div>`;
+    d.appendChild(mid); const cnt = document.createElement('div'); cnt.className = 'n'; cnt.textContent = n; d.appendChild(cnt);
+    d.onclick = () => { let sx = 0, sy = 0, k = 0; for (let i = 0; i < A.n; i++) if (A.lineage[i] === l) { sx += A.x[i]; sy += A.y[i]; k++; } if (k) flyTo(sx / k, sy / k); };
+    box.appendChild(d);
+  }
+}
+function renderLeaders(A) {
+  const ls = []; for (let i = 0; i < A.n; i++) if (A.flags[i] & 2) ls.push(i); ls.sort((a, b) => A.followers[b] - A.followers[a]);
+  const box = $('leaders'); box.innerHTML = '';
+  for (const i of ls.slice(0, 8)) {
+    const d = document.createElement('div'); d.className = 'ld'; d.appendChild(swatch(A.lineage[i]));
+    const nm = A.name[i] ? ((state.meta.names || {})[A.name[i]] || `#${A.name[i]}`) : t('unnamed'); const ord = A.under[i] ? ` · ${t('order')}: ${T[lang].orders[A.under[i] - 1]}` : '';
+    d.innerHTML += `<span class="n">${nm}<span style="color:var(--muted)">${ord}</span></span><span class="f">${A.followers[i]} ${t('followers')}</span>`;
+    const x = A.x[i], y = A.y[i]; d.onclick = () => { flyTo(x, y); state.follow = 'leader'; syncButtons(); }; box.appendChild(d);
+  }
+}
+function renderEventList() {
+  const box = $('events'); box.innerHTML = '';
+  for (const [i, e] of state.events.entries()) {
+    const d = describeEvent(e); const el = document.createElement('div');
+    el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
+    el.dataset.i = i; el.innerHTML = `<span class="ic">${d.icon}</span><span><span class="t">${e.tick}</span>${d.text.replace(/</g, '&lt;')}${d.sub ? ' <span style="color:var(--muted)">· ' + d.sub + '</span>' : ''}</span>`;
+    if (e.x != null) el.onclick = () => { flyTo(e.x, e.y); state.follow = null; state.frame = frameAt(e.tick); state.sub = 0; syncButtons(); draw(true); };
+    box.appendChild(el);
+  }
+}
+function markEvents(tick) { const box = $('events'); let last = null; for (const d of box.children) { const e = state.events[+d.dataset.i]; const past = e.tick <= tick; d.classList.toggle('past', past); d.classList.remove('now'); if (past) last = d; } if (last) { last.classList.add('now'); if (state.playing) last.scrollIntoView({ block: 'nearest' }); } }
+function frameAt(tick) { let i = 0; while (i + 1 < state.frames.length && state.frames[i + 1].tick <= tick) i++; return i; }
 
 // ---------- timeline
 const tl = $('tl'), tctx = tl.getContext('2d');
@@ -310,109 +618,55 @@ function drawTimeline() {
   if (!state.frames.length) return;
   const r = $('timeline').getBoundingClientRect(); tl.width = r.width * devicePixelRatio; tl.height = r.height * devicePixelRatio;
   tctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-  const w = r.width, h = r.height, n = state.frames.length;
-  const maxPop = Math.max(...state.frames.map(f => f.pop), 1);
-  for (let i = 0; i < n; i++) {
-    const f = state.frames[i]; const x = i / n * w;
-    tctx.fillStyle = ERA_COLORS[f.era] || '#444'; tctx.globalAlpha = .35; tctx.fillRect(x, 0, w / n + 1, h);
-    tctx.globalAlpha = 1; tctx.fillStyle = '#e6ebf5'; const ph = f.pop / maxPop * (h - 4);
-    tctx.fillRect(x, h - ph, Math.max(1, w / n), ph);
-  }
-  for (const e of state.events) if (e.cls === 'crisis') { tctx.fillStyle = 'rgba(255,107,107,.6)'; tctx.fillRect(tickToX(e.tick, w), 0, 1, 6); }
-  tctx.fillStyle = '#f2c14e'; tctx.fillRect(state.frame / n * w - 1, 0, 2, h);
+  const w = r.width, h = r.height, n = state.frames.length; const maxPop = Math.max(1, ...state.frames.map(f => f.pop));
+  for (let i = 0; i < n; i++) { const f = state.frames[i]; const x = i / n * w; tctx.globalAlpha = .35; tctx.fillStyle = ERA_COLORS[f.era] || '#444'; tctx.fillRect(x, 0, w / n + 1, h); tctx.globalAlpha = 1; tctx.fillStyle = '#e6ebf5'; const ph = f.pop / maxPop * (h - 12); tctx.fillRect(x, h - ph, Math.max(1, w / n), ph); }
+  const lastTick = state.frames[n - 1].tick || 1;
+  for (const e of state.events) { const d = describeEvent(e); if (!d.major) continue; const x = e.tick / lastTick * w; tctx.fillStyle = '#f2c14e'; tctx.beginPath(); tctx.moveTo(x - 4, 0); tctx.lineTo(x + 4, 0); tctx.lineTo(x, 7); tctx.fill(); }
+  tctx.fillStyle = '#ffffff'; tctx.fillRect((state.frame + state.sub) / n * w - 1, 0, 2, h);
 }
-function tickToX(t, w) { const last = state.frames[state.frames.length - 1].tick || 1; return t / last * w; }
-$('timeline').addEventListener('click', e => {
-  const r = $('timeline').getBoundingClientRect();
-  state.frame = Math.max(0, Math.min(state.frames.length - 1, Math.floor((e.clientX - r.left) / r.width * state.frames.length)));
-  draw(); drawTimeline();
-});
-
-// ---------- events panel
-function renderEventList() {
-  const box = $('events'); box.innerHTML = '';
-  for (const [i, e] of state.events.entries()) {
-    const d = document.createElement('div'); d.className = 'ev ' + e.cls + (e.x != null ? ' locatable' : ''); d.dataset.i = i;
-    d.innerHTML = `<span class="t">${e.tick}</span>${e.text.replace(/</g, '&lt;')}`;
-    if (e.x != null) d.onclick = () => { flyTo(e.x, e.y); state.follow = null; syncButtons(); const fi = frameAt(e.tick); state.frame = fi; draw(); drawTimeline(); };
-    box.appendChild(d);
-  }
-}
-function markEvents(tick) {
-  const box = $('events'); let last = null;
-  for (const d of box.children) {
-    const e = state.events[+d.dataset.i]; const past = e.tick <= tick;
-    d.classList.toggle('past', past); d.classList.remove('now'); if (past) last = d;
-  }
-  if (last) { last.classList.add('now'); if (state.playing) last.scrollIntoView({ block: 'nearest' }); }
-}
-function frameAt(tick) { let i = 0; while (i + 1 < state.frames.length && state.frames[i + 1].tick <= tick) i++; return i; }
-function renderLeaders(leaders) {
-  const box = $('leaders'); box.innerHTML = '';
-  for (const p of leaders.slice(0, 8)) {
-    const d = document.createElement('div'); d.className = 'ld';
-    const name = p.name ? ((state.meta.names || {})[p.name] || `#${p.name}`) : '(chưa có tên)';
-    d.innerHTML = `<span class="sw" style="background:rgb(${p.r},${p.g},${p.b})"></span><span class="n">${name}</span><span class="f">${p.followers} người theo</span>`;
-    d.onclick = () => { flyTo(p.x, p.y); state.follow = 'leader'; syncButtons(); };
-    box.appendChild(d);
-  }
-}
+$('timeline').addEventListener('click', e => { const r = $('timeline').getBoundingClientRect(); state.frame = Math.max(0, Math.min(state.frames.length - 1, Math.floor((e.clientX - r.left) / r.width * state.frames.length))); state.sub = 0; draw(true); });
 
 // ---------- camera
-function flyTo(x, y) { state.cam.x = x; state.cam.y = y; if (state.cam.zoom < 5) state.cam.zoom = 5; draw(); }
+state.cam = { x: 0, y: 0, zoom: 4, tx: null, ty: null };
+function resetCamera() { const r = $('stage').getBoundingClientRect(); state.cam.zoom = Math.max(1, Math.min(r.width / state.W, r.height / state.H)); state.cam.x = state.W / 2; state.cam.y = state.H / 2; state.cam.tx = null; state.follow = null; syncButtons(); }
+function flyTo(x, y) { state.cam.tx = x; state.cam.ty = y; if (state.cam.zoom < 6) state.cam.zoom = 6; }
 function applyFollow() {
-  const f = state.frames[state.frame];
-  if (state.follow === 'leader') {
-    const ls = agentsOf(f).filter(p => p.flags & 2); if (!ls.length) return;
-    const top = ls.reduce((a, b) => b.followers > a.followers ? b : a);
-    state.cam.x += (top.x - state.cam.x) * 0.3; state.cam.y += (top.y - state.cam.y) * 0.3;
-  } else if (state.follow === 'event') {
-    let last = null; for (const e of state.events) { if (e.tick <= f.tick && e.x != null) last = e; if (e.tick > f.tick) break; }
-    if (last) { state.cam.x += (last.x - state.cam.x) * 0.3; state.cam.y += (last.y - state.cam.y) * 0.3; }
-  }
+  if (state.follow === 'leader') { const A = agentsOf(state.frame); let best = -1, bf = -1; for (let i = 0; i < A.n; i++) if ((A.flags[i] & 2) && A.followers[i] > bf) { bf = A.followers[i]; best = i; } if (best >= 0) { state.cam.tx = A.x[best]; state.cam.ty = A.y[best]; } }
+  else if (state.follow === 'event') { const tk = state.frames[state.frame].tick; let last = null; for (const e of state.events) { if (e.tick <= tk && e.x != null) last = e; if (e.tick > tk) break; } if (last) { state.cam.tx = last.x; state.cam.ty = last.y; } }
 }
-cv.addEventListener('mousedown', e => { state.drag = { x: e.clientX, y: e.clientY, cx: state.cam.x, cy: state.cam.y }; });
-window.addEventListener('mousemove', e => { if (!state.drag) return; state.follow = null; syncButtons();
-  state.cam.x = state.drag.cx - (e.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (e.clientY - state.drag.y) / state.cam.zoom; draw(); });
+app = null;
+setInterval(() => { if (state.cam.tx != null) { state.cam.x += (state.cam.tx - state.cam.x) * 0.15; state.cam.y += (state.cam.ty - state.cam.y) * 0.15; if (Math.abs(state.cam.tx - state.cam.x) < 0.05 && !state.follow) state.cam.tx = null; } }, 33);
+const gl = $('gl');
+gl.addEventListener('mousedown', e => { state.drag = { x: e.clientX, y: e.clientY, cx: state.cam.x, cy: state.cam.y }; });
+window.addEventListener('mousemove', e => { if (!state.drag) return; state.follow = null; state.cam.tx = null; syncButtons(); state.cam.x = state.drag.cx - (e.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (e.clientY - state.drag.y) / state.cam.zoom; });
 window.addEventListener('mouseup', () => state.drag = null);
-cv.addEventListener('wheel', e => { e.preventDefault(); const k = e.deltaY < 0 ? 1.15 : 1 / 1.15; state.cam.zoom = Math.max(0.5, Math.min(40, state.cam.zoom * k)); draw(); }, { passive: false });
-cv.addEventListener('touchstart', e => { const t = e.touches[0]; state.drag = { x: t.clientX, y: t.clientY, cx: state.cam.x, cy: state.cam.y }; }, { passive: true });
-cv.addEventListener('touchmove', e => { if (!state.drag) return; const t = e.touches[0]; state.cam.x = state.drag.cx - (t.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (t.clientY - state.drag.y) / state.cam.zoom; draw(); }, { passive: true });
+gl.addEventListener('wheel', e => { e.preventDefault(); const k = e.deltaY < 0 ? 1.15 : 1 / 1.15; state.cam.zoom = Math.max(1, Math.min(48, state.cam.zoom * k)); }, { passive: false });
+gl.addEventListener('touchstart', e => { const p = e.touches[0]; state.drag = { x: p.clientX, y: p.clientY, cx: state.cam.x, cy: state.cam.y }; }, { passive: true });
+gl.addEventListener('touchmove', e => { if (!state.drag) return; const p = e.touches[0]; state.cam.x = state.drag.cx - (p.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (p.clientY - state.drag.y) / state.cam.zoom; }, { passive: true });
 
-// ---------- playback
-function syncButtons() {
-  $('play').textContent = state.playing ? '❚❚' : '▶';
-  $('followLeader').classList.toggle('on', state.follow === 'leader');
-  $('followEvent').classList.toggle('on', state.follow === 'event');
-  $('speed').textContent = state.fps + ' f/s';
-}
+// ---------- controls
+function syncButtons() { $('play').textContent = state.playing ? '❚❚' : '▶'; $('followLeader').classList.toggle('on', state.follow === 'leader'); $('followEvent').classList.toggle('on', state.follow === 'event'); $('speed').textContent = `${state.fps} ${t('fps')}`; }
 $('play').onclick = () => { state.playing = !state.playing; syncButtons(); };
 $('faster').onclick = () => { state.fps = Math.min(60, state.fps * 2); syncButtons(); };
-$('slower').onclick = () => { state.fps = Math.max(0.25, state.fps / 2); syncButtons(); };
+$('slower').onclick = () => { state.fps = Math.max(0.5, state.fps / 2); syncButtons(); };
 $('followLeader').onclick = () => { state.follow = state.follow === 'leader' ? null : 'leader'; syncButtons(); };
 $('followEvent').onclick = () => { state.follow = state.follow === 'event' ? null : 'event'; syncButtons(); };
-$('reset').onclick = () => { resetCamera(); draw(); };
+$('reset').onclick = () => { resetCamera(); };
+$('lang').onclick = () => { lang = lang === 'vi' ? 'en' : 'vi'; applyLang(); syncButtons(); };
+$('pauseMajor').onchange = e => state.pauseMajor = e.target.checked;
 window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
   if (e.key === 'f' || e.key === 'F') $('followLeader').click();
   if (e.key === 'e' || e.key === 'E') $('followEvent').click();
-  if (e.key === 'ArrowRight') { state.frame = Math.min(state.frames.length - 1, state.frame + 1); draw(); drawTimeline(); }
-  if (e.key === 'ArrowLeft') { state.frame = Math.max(0, state.frame - 1); draw(); drawTimeline(); }
+  if (e.key === 'l' || e.key === 'L') $('lang').click();
+  if (e.key === 'ArrowRight') { state.frame = Math.min(state.frames.length - 1, state.frame + 1); state.sub = 0; draw(true); }
+  if (e.key === 'ArrowLeft') { state.frame = Math.max(0, state.frame - 1); state.sub = 0; draw(true); }
   if (e.key === '+' || e.key === '=') $('faster').click();
   if (e.key === '-') $('slower').click();
 });
-let last = performance.now();
-function loop(now) {
-  const dt = (now - last) / 1000; last = now;
-  if (state.playing && state.frames.length) {
-    state.acc += dt * state.fps;
-    while (state.acc >= 1) { state.acc -= 1; state.frame++; if (state.frame >= state.frames.length) { state.frame = state.frames.length - 1; state.playing = false; syncButtons(); } }
-    applyFollow(); draw(); drawTimeline();
-  }
-  requestAnimationFrame(loop);
-}
-window.addEventListener('resize', resize);
-requestAnimationFrame(loop);
+window.addEventListener('resize', () => { if (state.frames.length) { draw(true); } });
+applyLang(); syncButtons();
 loadFromServer();
 })();
 </script>

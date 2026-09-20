@@ -19,6 +19,8 @@ pub struct EventLog {
     fired: HashSet<String>,
     lineage_peak: HashMap<u32, f32>,
     era: &'static str,
+    /// Last tick a cooled-down key fired, so repeating stories are told once in a while.
+    cooldowns: HashMap<String, u64>,
     obey_peak: f32,
     custom: [bool; N_ORDER],
     settled_peak: f32,
@@ -35,6 +37,7 @@ impl EventLog {
             fired: HashSet::new(),
             lineage_peak: HashMap::new(),
             era: "wild",
+            cooldowns: HashMap::new(),
             obey_peak: 0.0,
             custom: [false; N_ORDER],
             settled_peak: 0.0,
@@ -52,9 +55,21 @@ impl EventLog {
             println!("  ! tick {:>6}: {}", tick, text);
         }
         if let Some(w) = self.writer.as_mut() {
-            let _ = writeln!(w, "{}\t{}", tick, text);
+            let _ = writeln!(w, "{}\t{}\t{}", tick, kind_of(&text), text);
+            let _ = w.flush();
         }
         self.events.push(Event { tick, text });
+    }
+
+    /// Record an event at most once per `cooldown` ticks for the given key.
+    pub fn fire_cooldown(&mut self, tick: u64, key: &str, cooldown: u64, text: String) {
+        if let Some(last) = self.cooldowns.get(key) {
+            if tick < last + cooldown {
+                return;
+            }
+        }
+        self.cooldowns.insert(key.to_string(), tick);
+        self.fire(tick, "", text);
     }
 
     /// Called once per stats window; derives crises, social firsts and era changes.
@@ -218,4 +233,33 @@ impl EventLog {
             let _ = w.flush();
         }
     }
+}
+
+/// A short machine-readable kind for each event, derived from how its text begins.
+/// Viewers translate by kind and pull numbers and names out of the text.
+pub fn kind_of(text: &str) -> &'static str {
+    const KINDS: [(&str, &str); 34] = [
+        ("famine:", "famine"), ("war:", "war"), ("plague toll:", "plague_toll"), ("plague:", "plague"),
+        ("raids:", "raids"), ("drought:", "drought"), ("a year of plenty", "plenty"), ("harsh year", "harsh_year"),
+        ("flood:", "flood"), ("wildfire:", "wildfire"), ("bounty:", "bounty"), ("exhausted land", "soil_half"),
+        ("dust:", "soil_quarter"), ("lineage ", "lineage"), ("only one lineage", "monoculture"),
+        ("innovation:", "innovation"), (" is now known by half", "adopted"), ("a warrior class", "warriors"),
+        ("first settled", "settlement"), ("a sharing culture", "sharers"), ("the word of leaders", "obedience"),
+        ("a custom of", "custom_order"), ("era:", "era"), ("collapse:", "collapse"), ("forgetting:", "forgetting"),
+        ("first leader:", "first_leader"), ("great leader:", "great_leader"), ("leader ", "leader_died"),
+        ("rivalry:", "rivalry"), ("first storehouse", "first_store"), ("first storehouse looted", "first_loot"),
+        ("granary:", "granary"), ("extinction:", "extinction"), (" took root", "custom_root"),
+    ];
+    for (needle, kind) in KINDS {
+        if text.starts_with(needle) || (needle.starts_with(' ') && text.contains(needle)) {
+            return kind;
+        }
+    }
+    if text.contains("went over to") {
+        return "merger";
+    }
+    if text.contains("first fields burned") {
+        return "first_burn";
+    }
+    "other"
 }

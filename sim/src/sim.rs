@@ -43,6 +43,7 @@ pub struct Sim {
     decisions: Vec<Decision>,
     next_lineage: u32,
     next_name: u32,
+    next_id: u32,
 }
 
 impl Sim {
@@ -77,6 +78,7 @@ impl Sim {
             decisions: Vec::with_capacity(cfg.agents * 4),
             next_lineage: 0,
             next_name: 0,
+            next_id: 0,
             cfg,
         };
         sim.spawn_tribes();
@@ -132,7 +134,9 @@ impl Sim {
         self.next_lineage
     }
 
-    fn make_agent(&self, x: f32, y: f32, genome: Genome, lineage: u32) -> Agent {
+    fn make_agent(&mut self, x: f32, y: f32, genome: Genome, lineage: u32) -> Agent {
+        self.next_id += 1;
+        let id = self.next_id;
         let genome_charisma = genome.charisma();
         let mut decay = [0.0; N_EMO];
         let mut sens = [0.0; N_EMO];
@@ -141,8 +145,11 @@ impl Sim {
             sens[e] = genome.emo_sensitivity(e);
         }
         Agent {
+            id,
             x,
             y,
+            mdx: 0.0,
+            mdy: 0.0,
             energy: self.cfg.start_energy,
             inventory: 0.0,
             age: 0,
@@ -399,7 +406,8 @@ impl Sim {
                 let me = self.agents[i].name;
                 let f = self.agents[i].followers;
                 if f >= 10 {
-                    self.events.fire(self.tick, "", format!("{} and {} followers went over to {}", name_of(me), f, name_of(new_name)));
+                    let key = format!("merge:{me}:{new_name}");
+                    self.events.fire_cooldown(self.tick, &key, 2000, format!("{} and {} followers went over to {}", name_of(me), f, name_of(new_name)));
                 }
             }
         }
@@ -553,6 +561,8 @@ impl Sim {
                 let a = &mut self.agents[i];
                 a.x = nx;
                 a.y = ny;
+                a.mdx = d.mx;
+                a.mdy = d.my;
             }
 
             match d.action {
@@ -619,8 +629,9 @@ impl Sim {
                         a.children = a.children.saturating_add(1);
                         a.prestige += 0.5;
                         let lineage = a.lineage;
+                        let child_energy = cfg.child_energy;
                         let mut child = self.make_agent(x, y, child_genome, lineage);
-                        child.energy = cfg.child_energy;
+                        child.energy = child_energy;
                         births.push(child);
                         self.window.births += 1;
                     }

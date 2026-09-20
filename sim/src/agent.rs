@@ -50,8 +50,13 @@ pub fn name_of(id: u32) -> String {
 
 #[derive(Clone)]
 pub struct Agent {
+    /// Unique for the whole run, so a viewer can follow one life across frames.
+    pub id: u32,
     pub x: f32,
     pub y: f32,
+    /// Last movement, for drawing.
+    pub mdx: f32,
+    pub mdy: f32,
     pub energy: f32,
     pub inventory: f32,
     pub age: u32,

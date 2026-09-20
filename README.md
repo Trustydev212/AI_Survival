@@ -13,21 +13,43 @@ chỉ có xuất ảnh PPM, CSV, sử ký, và bảng kết cục khi chạy nhi
 
 ## Xem bằng mắt
 
+![viewer](docs/viewer.png)
+
 ```bash
-cd sim && ./target/release/sim --seed 2 --ticks 30000 --snapshot-every 100 --out ../viewer/out
-cd ../viewer && python3 -m http.server 8765
-# mở http://127.0.0.1:8765/index.html?seed=2
+cd sim && ./target/release/sim --seed 2 --ticks 20000 --snapshot-every 25 --out ../viewer/out
+python3 ../viewer/serve.py            # rồi mở http://127.0.0.1:8765/index.html?seed=2
+# thêm &live=1 để xem trong lúc sim đang chạy
 ```
 
-`viewer/index.html` là trình xem 2D chạy trong trình duyệt, không cần cài gì. Nó phát lại luồng ảnh chụp
-trạng thái mà sim ghi ra: đất, thức ăn, ruộng, từng agent với màu dòng họ, người ốm màu trắng, thủ lĩnh
-có vòng và tên, kho chung là ô vuông có thanh đầy. Bên phải là sử ký cuộn theo thời gian, bấm vào sự kiện
-có toạ độ để bay tới, và danh sách thủ lĩnh đang dẫn dắt. Thanh thời gian dưới cùng tô màu theo thời đại,
-vẽ dân số và đánh dấu khủng hoảng. Phím F bám thủ lĩnh lớn nhất, E bám sự kiện mới nhất, space phát,
-mũi tên đi từng khung. Không có server thì kéo thả ba file `snap`, `meta`, `events` vào trang.
+`viewer/index.html` là game viewer 2D pixel art chạy trong trình duyệt bằng **PixiJS** (WebGL, đã kèm sẵn
+trong `viewer/lib`, không cần mạng). Toàn bộ hình ảnh sinh bằng code lúc mở trang nên không vướng bản quyền:
 
-Ảnh chụp mỗi 100 tick cho 30.000 tick nặng khoảng 43 MB. Đây là bản mẫu cho lớp Godot sau này:
-định dạng khung được ghi ở đầu `sim/src/snapshot.rs`.
+- **Đất** là tile 8x8: đá, đất cằn, ba mức cỏ theo thức ăn, ruộng có luống, phủ tuyết mùa đông.
+- **Nhân vật** 16x16 có hoạt ảnh đi bộ bốn khung và nhịp thở khi đứng, quay mặt theo hướng đi. Vị trí nội suy
+  giữa hai khung chụp nên đi lại mượt dù chỉ chụp mỗi 25 tick. Người ốm da xanh, người đói mờ đi.
+- **Phe phái** là dòng họ. Mỗi dòng họ có màu áo riêng từ bảng 24 màu và một hoạ tiết trên áo trong sáu mẫu,
+  nên phân biệt được cả khi mù màu. Bảng phe phái bên phải hiện thị phần, thủ lĩnh và sprite mẫu, bấm để bay tới.
+- **Thủ lĩnh** có cờ hiệu màu phe, to theo số người theo, kèm tên và biểu tượng mệnh lệnh đang ra.
+- **Kho chung** là nhà kho gỗ mái đỏ với thanh đầy màu phe.
+- **Sử ký song ngữ Việt Anh**, phím L để đổi. Sim ghi loại sự kiện, viewer dịch theo loại và có biểu tượng.
+- **Sự kiện lớn** (đổi thời đại, thủ lĩnh đầu tiên, đại thủ lĩnh, dịch bệnh, kho đầu tiên, tập quán, sụp đổ,
+  tuyệt chủng, đất chết, chiến binh, định cư, chia sẻ) hiện banner giữa màn hình và camera bay tới, có tuỳ chọn
+  tự dừng. Chúng cũng được đánh dấu tam giác vàng trên thanh thời gian.
+- Thanh thời gian tô màu thời đại và vẽ dân số. Phím F bám thủ lĩnh lớn nhất, E bám sự kiện, space phát,
+  mũi tên đi từng khung, kéo thả ba file để xem không cần server.
+
+Định dạng khung bản 3 ghi ở đầu `sim/src/snapshot.rs`: lớp đất lượng tử hoá, mã hoá delta và RLE với khung
+khoá mỗi 16 khung, agent 22 byte có id để nội suy. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
+trong đó đất chỉ vài KB mỗi khung. Sim flush sau mỗi khung, `serve.py` hỗ trợ Range, nên `&live=1` bám được
+run đang chạy.
+
+### Chạy trên máy cá nhân
+
+Đo trên máy ảo 4 nhân, không GPU: sim đạt khoảng 700.000 agent-tick mỗi giây, tức một thế giới 4.000 agent
+chạy 175 tick mỗi giây, 20.000 tick trong 80 giây. Kết quả giống hệt từng byte dù bao nhiêu luồng. Viewer
+vẽ vài nghìn sprite hoạt ảnh bằng WebGL, chạy tốt trên GPU tích hợp; ở đây kiểm tra bằng Chromium không đầu
+với GL phần mềm. Tôi chưa chạy trên máy của bạn, nên hai điều cần xem: RAM của trình duyệt bằng cỡ file
+ảnh chụp cộng vài chục MB, và với run trên 50.000 tick nên chụp thưa hơn hoặc xem trực tiếp.
 
 ## Chạy thử
 
@@ -361,6 +383,6 @@ sim/src/
 
 ## Bước tiếp theo
 
-1. Song song hoá nốt phần hành động và trao đổi chất, hiện mới được hai phần ba thời gian mỗi tick.
-2. Viewer: nén ảnh chụp để xem được run dài, vẽ hướng di chuyển và mệnh lệnh, xem trực tiếp khi sim đang chạy.
-3. Lớp Godot 4 đọc cùng định dạng khung, cho bản phát hành.
+1. Tốc độ sim: cấu trúc agent quá lớn gây trượt cache khi quét hàng xóm; chuyển sang mảng gọn theo cột.
+2. Viewer: hiệu ứng cho trận đánh, dịch, thiên tai; âm thanh; chọn một agent để theo dõi cả đời.
+3. Đóng gói thành ứng dụng chạy một cú bấm (Tauri hoặc Electron) gồm sim và viewer.

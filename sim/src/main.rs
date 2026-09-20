@@ -111,6 +111,12 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
                 let era = stats::level_of(known, sim.settled_share()) as u8;
                 sn.frame(t, era, &sim.world, &sim.agents, &sim.stores.list, soil, obey, known, sim.world.season(t), cfg.settle_ticks, cfg.custom_min)
                     .expect("write snapshot frame");
+                if sn.frames % 20 == 1 {
+                    let mut names: Vec<(u32, String)> = sim.hall.keys().map(|id| (*id, agent::name_of(*id))).collect();
+                    names.sort();
+                    let meta = format!("{}/meta_seed{}.json", cfg.out_dir, cfg.seed);
+                    let _ = snapshot::write_meta(&meta, cfg.width, cfg.height, sn.frames, &names, &stats::ERA_NAMES, cfg.seed, t, cfg.snapshot_every);
+                }
             }
         }
         if cfg.image_every > 0 && t % cfg.image_every == 0 {
@@ -149,7 +155,7 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         let mut names: Vec<(u32, String)> = sim.hall.keys().map(|id| (*id, agent::name_of(*id))).collect();
         names.sort();
         let meta = format!("{}/meta_seed{}.json", cfg.out_dir, cfg.seed);
-        snapshot::write_meta(&meta, cfg.width, cfg.height, frames, &names, &stats::ERA_NAMES, cfg.seed).expect("write meta");
+        snapshot::write_meta(&meta, cfg.width, cfg.height, frames, &names, &stats::ERA_NAMES, cfg.seed, sim.tick, cfg.snapshot_every).expect("write meta");
     }
 
     let m = last.expect("at least one stats window");
