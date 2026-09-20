@@ -30,6 +30,8 @@ pub struct Sim {
     pub regions: RegionGrid,
     /// Village storehouses.
     pub stores: Stores,
+    /// Seconds spent per phase, for --profile.
+    pub profile: [f64; 5],
     spatial: SpatialHash,
     followers: Vec<u16>,
     /// Followers lost this window, by (old leader name, new leader name).
@@ -57,6 +59,7 @@ impl Sim {
             world,
             regions,
             stores: Stores::default(),
+            profile: [0.0; 5],
             agents: Vec::with_capacity(cfg.agents * 4),
             tick: 0,
             window: Window::default(),
@@ -130,6 +133,13 @@ impl Sim {
     }
 
     fn make_agent(&self, x: f32, y: f32, genome: Genome, lineage: u32) -> Agent {
+        let genome_charisma = genome.charisma();
+        let mut decay = [0.0; N_EMO];
+        let mut sens = [0.0; N_EMO];
+        for e in 0..N_EMO {
+            decay[e] = genome.emo_decay(e);
+            sens[e] = genome.emo_sensitivity(e);
+        }
         Agent {
             x,
             y,
@@ -168,10 +178,14 @@ impl Sim {
             custom_dx: 0.0,
             custom_dy: 0.0,
             custom_strength: 0.0,
+            charisma: genome_charisma,
+            emo_decay: decay,
+            emo_sens: sens,
         }
     }
 
     pub fn step(&mut self) {
+        let t0 = std::time::Instant::now();
         self.weather();
         let season = self.world.season(self.tick);
         self.world.regrow(season);
@@ -180,13 +194,26 @@ impl Sim {
         }
         self.tend_stores();
         self.spatial.rebuild(self.agents.iter().map(|a| (a.x, a.y)));
+        let t1 = std::time::Instant::now();
         self.sense_and_think(season);
+        let t2 = std::time::Instant::now();
         self.act();
+        let t3 = std::time::Instant::now();
         self.contact();
+        let t4 = std::time::Instant::now();
         self.metabolise_and_die();
         self.immigrate();
+        let t5 = std::time::Instant::now();
+        let p = &mut self.profile;
+        p[0] += (t1 - t0).as_secs_f64();
+        p[1] += (t2 - t1).as_secs_f64();
+        p[2] += (t3 - t2).as_secs_f64();
+        p[3] += (t4 - t3).as_secs_f64();
+        p[4] += (t5 - t4).as_secs_f64();
         self.tick += 1;
     }
+
+    pub const PHASES: [&'static str; 5] = ["world", "sense", "act", "contact", "metabolise"];
 
     /// Stores spoil a little every tick and are forgotten when long unused and empty.
     fn tend_stores(&mut self) {
@@ -853,75 +880,49 @@ impl Sim {
     fn metabolise_and_die(&mut self) {
         let cfg = &self.cfg;
         let n = self.decisions.len();
-        let mut rng = self.rng.clone();
-        let mut hungry: Vec<u32> = Vec::new();
         let winter = self.world.season(self.tick) < 0.5;
-        for (i, a) in self.agents.iter_mut().enumerate() {
-            let (moved, resting) = if i < n {
-                let d = &self.decisions[i];
-                ((d.mx * d.mx + d.my * d.my).sqrt(), d.action == Action::Rest)
-            } else {
-                (0.0, false) // newborns this tick
-            };
-            let mut move_cost = cfg.move_cost;
-            if a.obeyed && a.under == Some(Order::Move) {
-                move_cost *= 1.0 - cfg.march_saving;
+        let seed = cfg.seed ^ self.tick.wrapping_mul(0xA24B_AED4_963E_E407);
+        let total = self.agents.len();
+        let threads = cfg.threads.max(1);
+        let decisions = &self.decisions;
+        let mut hungry_parts: Vec<Vec<u32>> = Vec::new();
+        let mut luck_parts: Vec<(u32, u32)> = Vec::new();
+        if threads == 1 || total < 2 * CHUNK {
+            for (c, slice) in self.agents.chunks_mut(CHUNK).enumerate() {
+                let (h, l) = metabolise_chunk(c, slice, n, seed, cfg, decisions);
+                hungry_parts.push(h);
+                luck_parts.push(l);
             }
-            let mut cost = cfg.base_cost + move_cost * moved;
-            if resting {
-                cost *= cfg.rest_factor;
-            }
-            cost *= (1.0 + a.caps[E_METABOLISM]).max(0.3);
-            if a.sick > 0 {
-                cost += cfg.sick_drain / (1.0 + a.caps[E_RESIST]).max(0.2);
-                a.sick -= 1;
-                if a.sick == 0 {
-                    a.immune = cfg.immune_len;
+        } else {
+            let slots: Vec<std::sync::Mutex<(Option<&mut [Agent]>, Vec<u32>, (u32, u32))>> =
+                self.agents.chunks_mut(CHUNK).map(|sl| std::sync::Mutex::new((Some(sl), Vec::new(), (0, 0)))).collect();
+            let next = std::sync::atomic::AtomicUsize::new(0);
+            std::thread::scope(|scope| {
+                for _ in 0..threads {
+                    scope.spawn(|| loop {
+                        let c = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if c >= slots.len() {
+                            break;
+                        }
+                        let mut g = slots[c].lock().unwrap();
+                        let slice = g.0.take().unwrap();
+                        let (h, l) = metabolise_chunk(c, slice, n, seed, cfg, decisions);
+                        g.1 = h;
+                        g.2 = l;
+                    });
                 }
-                a.feel(FEAR, 0.01);
-                a.feel(JOY, -0.02);
-            } else if a.immune > 0 {
-                a.immune -= 1;
-            }
-            a.energy -= cost;
-            if a.energy < cfg.eat_below && a.inventory > 0.0 {
-                let eat = a.inventory.min(cfg.eat_amount);
-                a.inventory -= eat;
-                a.energy += eat;
-            } else if a.energy < cfg.eat_below {
-                hungry.push(i as u32);
-            }
-
-            // Personal luck.
-            let roll = rng.f32();
-            if roll < cfg.p_windfall {
-                a.inventory = (a.inventory + 20.0).min(cfg.inv_cap);
-                a.feel(JOY, 0.3);
-                self.window.windfalls += 1;
-            } else if roll < cfg.p_windfall + cfg.p_accident {
-                a.energy -= 15.0;
-                a.feel(FEAR, 0.2);
-                self.window.accidents += 1;
-            }
-
-            // Slow emotional drift from circumstances, then temperament-driven fading.
-            if a.energy < 20.0 {
-                a.feel(ANGER, 0.02);
-                a.feel(JOY, -0.02);
-            } else if a.energy > 70.0 {
-                a.feel(JOY, 0.02);
-            }
-            for e in 0..N_EMO {
-                a.emotion[e] *= a.genome.emo_decay(e);
-            }
-            a.prestige *= cfg.prestige_decay;
-
-            a.age += 1;
-            if a.attacked_timer > 0 {
-                a.attacked_timer -= 1;
+            });
+            for slot in slots {
+                let (_, h, l) = slot.into_inner().unwrap();
+                hungry_parts.push(h);
+                luck_parts.push(l);
             }
         }
-        self.rng = rng;
+        let hungry: Vec<u32> = hungry_parts.into_iter().flatten().collect();
+        for (w, a) in luck_parts {
+            self.window.windfalls += w;
+            self.window.accidents += a;
+        }
         // The hungry draw on their village's store.
         for &i in &hungry {
             let a = &self.agents[i as usize];
@@ -1110,26 +1111,28 @@ fn decide(
         let mut kin = 0.0f32;
         let mut foe = 0.0f32;
         let mut sick_near = 0.0f32;
-        let own_score = a.prestige * (0.5 + a.genome.charisma());
+        let own_score = a.prestige * (0.5 + a.charisma);
         let mut leader = NO_LEADER;
         let mut leader_score = own_score.max(cfg.leader_min_prestige);
         let prev_leader = a.leader;
         let mut prev_score = 0.0f32;
-        spatial.for_each_near(a.x, a.y, |j| {
+        let mut seen = 0u32;
+        spatial.for_each_near_until(a.x, a.y, |j| {
             if j == i {
-                return;
+                return true;
             }
             let o = &agents[j];
             let dx = geo.delta(a.x, o.x, cfg.width);
             let dy = geo.delta(a.y, o.y, cfg.height);
             let d2 = dx * dx + dy * dy;
             if d2 > vision2 {
-                return;
+                return true;
             }
+            seen += 1;
             crowd += 1.0;
-            if a.genome.kinship(&o.genome) >= cfg.kin_threshold {
+            if a.is_kin(o, cfg.kin_threshold) {
                 kin += 1.0;
-                let score = o.prestige * (0.5 + o.genome.charisma());
+                let score = o.prestige * (0.5 + o.charisma);
                 if j as u32 == prev_leader {
                     prev_score = score;
                 }
@@ -1147,6 +1150,7 @@ fn decide(
                 best_d2 = d2;
                 nearest = j as u32;
             }
+            seen < cfg.max_neighbours
         });
         // Loyalty: keep the current leader unless a rival is clearly better. How much
         // better depends on the follower's attachment, so bands do not flip all at once.
@@ -1217,7 +1221,7 @@ fn decide(
             input[45] = if l.last_action == Action::Share { 1.0 } else { 0.0 };
         }
         input[46] = (a.prestige / 20.0).min(2.0);
-        input[47] = a.genome.charisma();
+        input[47] = a.charisma;
         input[48] = if a.is_leader { 1.0 } else { 0.0 };
         input[49] = a.skill[SK_GATHER];
         input[50] = a.skill[SK_FIGHT];
@@ -1312,9 +1316,10 @@ fn contact_chunk(
         let mut skills = [0.0f32; N_SKILL];
         let mut model = NO_LEADER;
         let mut custom: Option<(Order, f32, f32)> = None;
-        spatial.for_each_near(a.x, a.y, |j| {
+        let mut seen = 0u32;
+        spatial.for_each_near_until(a.x, a.y, |j| {
             if j == i || j >= n {
-                return;
+                return true;
             }
             let o = &agents[j];
             let missing = if can_learn { o.known & !a.known & !gained } else { 0 };
@@ -1322,9 +1327,10 @@ fn contact_chunk(
             let dx = geo.delta(a.x, o.x, cfg.width);
             let dy = geo.delta(a.y, o.y, cfg.height);
             if dx * dx + dy * dy > range2 {
-                return;
+                return true;
             }
-            let kin = a.genome.kinship(&o.genome) >= cfg.kin_threshold;
+            seen += 1;
+            let kin = a.is_kin(o, cfg.kin_threshold);
             let is_leader = a.leader == j as u32;
             if kin {
                 // Apprenticeship: watching a more skilled relative rubs off.
@@ -1346,7 +1352,7 @@ fn contact_chunk(
                 }
             }
             if missing == 0 && !contagious {
-                return;
+                return true;
             }
             if missing != 0 {
                 let mut p = if kin { cfg.p_learn } else { cfg.p_learn * 0.25 };
@@ -1367,10 +1373,88 @@ fn contact_chunk(
             if contagious && rng.f32() < cfg.p_infect / resist {
                 caught = true;
             }
+            seen < cfg.max_neighbours
         });
         if gained != 0 || caught || model != NO_LEADER || custom.is_some() || skills.iter().any(|g| *g > 0.0) {
             out.push((i as u32, Contact { gained, caught, skills, model, custom }));
         }
     }
     out
+}
+
+/// Per-agent upkeep for one fixed chunk: costs, sickness, luck, mood. Pure except for the
+/// chunk-local RNG, so the outcome never depends on the thread count.
+fn metabolise_chunk(
+    c: usize, slice: &mut [Agent], n: usize, seed: u64, cfg: &Config, decisions: &[Decision],
+) -> (Vec<u32>, (u32, u32)) {
+    let mut rng = Rng::new(seed ^ (c as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    let mut hungry = Vec::new();
+    let (mut windfalls, mut accidents) = (0u32, 0u32);
+for (k, a) in slice.iter_mut().enumerate() {
+    let i = c * CHUNK + k;
+        let (moved, resting) = if i < n {
+            let d = &decisions[i];
+            ((d.mx * d.mx + d.my * d.my).sqrt(), d.action == Action::Rest)
+        } else {
+            (0.0, false) // newborns this tick
+        };
+        let mut move_cost = cfg.move_cost;
+        if a.obeyed && a.under == Some(Order::Move) {
+            move_cost *= 1.0 - cfg.march_saving;
+        }
+        let mut cost = cfg.base_cost + move_cost * moved;
+        if resting {
+            cost *= cfg.rest_factor;
+        }
+        cost *= (1.0 + a.caps[E_METABOLISM]).max(0.3);
+        if a.sick > 0 {
+            cost += cfg.sick_drain / (1.0 + a.caps[E_RESIST]).max(0.2);
+            a.sick -= 1;
+            if a.sick == 0 {
+                a.immune = cfg.immune_len;
+            }
+            a.feel(FEAR, 0.01);
+            a.feel(JOY, -0.02);
+        } else if a.immune > 0 {
+            a.immune -= 1;
+        }
+        a.energy -= cost;
+        if a.energy < cfg.eat_below && a.inventory > 0.0 {
+            let eat = a.inventory.min(cfg.eat_amount);
+            a.inventory -= eat;
+            a.energy += eat;
+        } else if a.energy < cfg.eat_below {
+            hungry.push(i as u32);
+        }
+
+        // Personal luck.
+        let roll = rng.f32();
+        if roll < cfg.p_windfall {
+            a.inventory = (a.inventory + 20.0).min(cfg.inv_cap);
+            a.feel(JOY, 0.3);
+            windfalls += 1;
+        } else if roll < cfg.p_windfall + cfg.p_accident {
+            a.energy -= 15.0;
+            a.feel(FEAR, 0.2);
+            accidents += 1;
+        }
+
+        // Slow emotional drift from circumstances, then temperament-driven fading.
+        if a.energy < 20.0 {
+            a.feel(ANGER, 0.02);
+            a.feel(JOY, -0.02);
+        } else if a.energy > 70.0 {
+            a.feel(JOY, 0.02);
+        }
+        for e in 0..N_EMO {
+            a.emotion[e] *= a.emo_decay[e];
+        }
+        a.prestige *= cfg.prestige_decay;
+
+        a.age += 1;
+        if a.attacked_timer > 0 {
+            a.attacked_timer -= 1;
+        }
+    }
+    (hungry, (windfalls, accidents))
 }

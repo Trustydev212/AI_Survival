@@ -101,6 +101,10 @@ pub struct Agent {
     pub custom_dx: f32,
     pub custom_dy: f32,
     pub custom_strength: f32,
+    /// Cached from the genome at birth: these never change within a life.
+    pub charisma: f32,
+    pub emo_decay: [f32; N_EMO],
+    pub emo_sens: [f32; N_EMO],
 }
 
 impl Agent {
@@ -116,8 +120,17 @@ impl Agent {
 
     #[inline]
     pub fn feel(&mut self, e: usize, amount: f32) {
-        let s = self.genome.emo_sensitivity(e);
-        self.emotion[e] = (self.emotion[e] + amount * s).clamp(0.0, 1.0);
+        self.emotion[e] = (self.emotion[e] + amount * self.emo_sens[e]).clamp(0.0, 1.0);
+    }
+
+    /// Is `other` close kin? Squared marker distance against the threshold, no sqrt.
+    #[inline]
+    pub fn is_kin(&self, other: &Agent, kin_threshold: f32) -> bool {
+        let a = &self.genome.marker;
+        let b = &other.genome.marker;
+        let d2 = (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2);
+        let lim = (1.0 - kin_threshold) * 1.732;
+        d2 <= lim * lim
     }
 
     #[inline]

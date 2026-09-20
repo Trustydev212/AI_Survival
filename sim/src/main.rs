@@ -66,6 +66,11 @@ fn main() {
     let (o, sim) = run_one(cfg.clone());
     let secs = start.elapsed().as_secs_f64();
     eprintln!("done: {} ticks in {:.2}s ({:.0} ticks/s)", o.ticks, secs, o.ticks as f64 / secs);
+    if cfg.profile {
+        let total: f64 = sim.profile.iter().sum::<f64>().max(1e-9);
+        let parts: Vec<String> = sim::Sim::PHASES.iter().zip(sim.profile.iter()).map(|(n, t)| format!("{n} {:.0}%", 100.0 * t / total)).collect();
+        eprintln!("profile: {}", parts.join("  "));
+    }
     summarize(&sim);
     println!("\nOutcome: {} after {} ticks. Peak pop {}, final pop {}, {} innovations, {:.1} known per head,",
         o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known);

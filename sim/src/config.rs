@@ -6,6 +6,7 @@ pub struct Config {
     pub seed: u64,
     pub seeds: Option<(u64, u64)>,
     pub quiet: bool,
+    pub profile: bool,
     /// Worker threads inside one world. Results do not depend on this.
     pub threads: usize,
     pub width: usize,
@@ -37,6 +38,8 @@ pub struct Config {
     pub speed: f32,
     pub max_age: u32,
     pub vision: f32,
+    /// At most this many neighbours are looked at per tick; crowds beyond it blur together.
+    pub max_neighbours: u32,
     pub inv_cap: f32,
     pub eat_below: f32,
     pub eat_amount: f32,
@@ -129,6 +132,7 @@ impl Default for Config {
             seed: 42,
             seeds: None,
             quiet: false,
+            profile: false,
             threads: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
             width: 192,
             height: 192,
@@ -156,6 +160,7 @@ impl Default for Config {
             speed: 1.0,
             max_age: 3000,
             vision: 6.0,
+            max_neighbours: 96,
             inv_cap: 100.0,
             eat_below: 50.0,
             eat_amount: 5.0,
@@ -247,6 +252,11 @@ impl Config {
                 i += 1;
                 continue;
             }
+            if key == "--profile" {
+                c.profile = true;
+                i += 1;
+                continue;
+            }
             if key == "--no-orders" {
                 c.no_orders = true;
                 i += 1;
@@ -288,6 +298,7 @@ impl Config {
                 "--soil-recovery" => set!(soil_recovery),
                 "--base-cost" => set!(base_cost),
                 "--max-age" => set!(max_age),
+                "--max-neighbours" => set!(max_neighbours),
                 "--attack-damage" => set!(attack_damage),
                 "--steal" => set!(steal),
                 "--p-mut" => set!(p_mut),
@@ -340,6 +351,7 @@ USAGE: sim [--flag value ...]
   --seeds A-B       run every seed from A to B in parallel and print an outcome table
   --quiet           no per-window rows or live events (implied by --seeds)
   --threads N       worker threads inside one world (all cores); results never depend on it
+  --profile         print the share of time spent in each phase at the end
   --agents N        initial agents (1000)
   --tribes N        founding tribes, agents spawn clustered per tribe (20)
   --ticks N         ticks to run (20000); a run ends early on extinction
@@ -356,6 +368,7 @@ USAGE: sim [--flag value ...]
   --soil-drain F    fertility lost per unit harvested (0.001); --soil-recovery F regained per rested tick (0.0002)
   --base-cost F     energy burned per tick (0.15)
   --max-age N       ticks before dying of old age (3000)
+  --max-neighbours N   neighbours an agent looks at per tick before the crowd blurs (96)
   --attack-damage F --steal F --p-mut F --sigma F
   --p-discover F    per agent-tick chance of inventing something while working (1e-6)
   --p-learn F       chance per tick of learning an innovation from an adjacent kin (0.01)

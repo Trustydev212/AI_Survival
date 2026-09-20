@@ -40,7 +40,17 @@ impl SpatialHash {
     /// Visit every index in the 3x3 block of buckets around (x, y).
     /// Callers filter by exact distance.
     #[inline]
+    #[allow(dead_code)]
     pub fn for_each_near(&self, x: f32, y: f32, mut f: impl FnMut(usize)) {
+        self.for_each_near_until(x, y, |j| {
+            f(j);
+            true
+        });
+    }
+
+    /// Like for_each_near, but stops as soon as the callback returns false.
+    #[inline]
+    pub fn for_each_near_until(&self, x: f32, y: f32, mut f: impl FnMut(usize) -> bool) {
         let cx = ((x / self.cell) as isize).min(self.cols as isize - 1);
         let cy = ((y / self.cell) as isize).min(self.rows as isize - 1);
         for dy in -1..=1 {
@@ -59,7 +69,9 @@ impl SpatialHash {
                 }
                 let mut i = self.heads[by as usize * self.cols + bx as usize];
                 while i != NONE {
-                    f(i as usize);
+                    if !f(i as usize) {
+                        return;
+                    }
                     i = self.next[i as usize];
                 }
             }
