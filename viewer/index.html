@@ -27,18 +27,21 @@
     background: rgba(11,14,20,.75); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
   #banner { position: absolute; left: 50%; top: 18px; transform: translateX(-50%) translateY(-30px); opacity: 0;
     transition: all .35s ease; pointer-events: none; min-width: 360px; max-width: 70%;
-    background: linear-gradient(180deg, #2a2412, #14110a); border: 2px solid var(--accent); border-radius: 8px;
-    box-shadow: 0 0 0 2px #000, 0 12px 40px rgba(0,0,0,.6); padding: 12px 18px; display: flex; gap: 14px; align-items: center; }
+    background: linear-gradient(180deg, #2a2412, #14110a); border: 3px solid #e8c65c; border-radius: 4px;
+    box-shadow: 0 0 0 3px #1b1b2a, inset 0 0 0 2px #7a5a2a, 0 12px 40px rgba(0,0,0,.6); padding: 12px 18px; display: flex; gap: 14px; align-items: center; }
   #banner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   #banner .icon { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 0 #000); }
   #banner .kicker { color: var(--accent); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
   #banner .title { font-size: 17px; font-weight: 700; }
   #banner .sub { color: var(--muted); font-size: 12px; }
+  #mm { position: absolute; left: 12px; top: 12px; width: 160px; height: 160px; image-rendering: pixelated; border: 2px solid #1b1b2a;
+    box-shadow: 0 0 0 1px var(--line), 0 6px 20px rgba(0,0,0,.5); border-radius: 4px; cursor: pointer; background: #000; }
+  #banner { image-rendering: auto; }
   #legend { position: absolute; right: 12px; top: 12px; background: rgba(11,14,20,.85); border: 1px solid var(--line);
     border-radius: 8px; padding: 8px 10px; min-width: 210px; max-height: 60%; overflow-y: auto; }
   #legend h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-  .fac { display: grid; grid-template-columns: 18px 1fr 44px; gap: 6px; align-items: center; padding: 2px 0; cursor: pointer; }
-  .fac canvas { image-rendering: pixelated; width: 18px; height: 18px; }
+  .fac { display: grid; grid-template-columns: 18px 1fr 44px; min-height: 26px; gap: 6px; align-items: center; padding: 2px 0; cursor: pointer; }
+  .fac canvas { image-rendering: pixelated; }
   .fac .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
   .fac .bar i { display: block; height: 100%; }
   .fac .n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; font-size: 11px; }
@@ -59,7 +62,7 @@
   .ev.major { font-weight: 600; }
   #leaders { border-top: 1px solid var(--line); padding: 8px 14px; max-height: 180px; overflow-y: auto; }
   .ld { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
-  .ld canvas { image-rendering: pixelated; width: 16px; height: 16px; }
+  .ld canvas { image-rendering: pixelated; }
   .ld .n { flex: 1; }
   .ld .f { color: var(--muted); font-variant-numeric: tabular-nums; }
   footer { grid-column: 1 / 3; display: flex; align-items: center; gap: 10px; padding: 0 14px;
@@ -103,6 +106,7 @@
   <div id="stage">
     <canvas id="gl"></canvas>
     <div id="legend"><h4 data-t="factions">Phe phái</h4><div id="factions"></div></div>
+    <canvas id="mm"></canvas>
     <div id="banner"><div class="icon" id="b-icon">★</div><div><div class="kicker" id="b-kicker"></div><div class="title" id="b-title"></div><div class="sub" id="b-sub"></div></div></div>
     <div id="hint" data-t="hint">kéo để di chuyển · lăn chuột để phóng · space phát/dừng · F bám thủ lĩnh · E bám sự kiện · L đổi ngôn ngữ · ← → từng khung</div>
     <div id="loader">
@@ -132,8 +136,7 @@
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const TILE = 8;          // terrain pixels per world cell
-const SPR = 16;          // character sprite size
+const TILE = 16;         // terrain pixels per world cell
 const ERA_COLORS = ['#3b4252','#5e81ac','#6be3a1','#a3be8c','#ebcb8b','#f2c14e','#d08770','#bf616a'];
 const PALETTE = ['#e04b4b','#4b8fe0','#4bd07a','#f2c14e','#c65cd6','#4bd6d0','#f28b3d','#7dd64b',
                  '#e04b9c','#8fa3ff','#d6b04b','#5ce0b8','#ff7a7a','#8f6bff','#b8e04b','#ff5cc8',
@@ -343,85 +346,147 @@ function agentsOf(idx) {
   state.agentCache.set(idx, a); return a;
 }
 
-// ---------- pixel art generation
+// ---------- pixel art generation (everything is drawn in code; no external assets)
 function px(ctx, x, y, c) { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); }
-function hash(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967296; }
+function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 1103515245) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967296; }
+const OUT = '#1b1b2a';
 
-// terrain tiles: index = kind*3 + variant
-const TK = { rock: 0, dirt: 1, grass0: 2, grass1: 3, grass2: 4, field0: 5, field1: 6, snow0: 7, snow1: 8, snowfield: 9 };
+// ---- terrain: 16x16 tiles. Kinds are ordered low to high; a higher kind overhangs a lower neighbour.
+const K = { water: 0, sand: 1, grass0: 2, grass1: 3, grass2: 4, field0: 5, field1: 6, field2: 7, snow: 8, snowfield: 9, ice: 10 };
+const NK = 11, NV = 4;
+const TP = {
+  water: ['#274a86', '#2f5a9c', '#3a6bb0', '#5d8fc9'], sand: ['#c9b47a', '#d9c58c', '#e4d39d', '#b89f66'],
+  grass0: ['#4f7a34', '#588a3b', '#639a43', '#3f6229'], grass1: ['#5a9640', '#66a848', '#73b852', '#487a33'], grass2: ['#68b04a', '#76c153', '#86d260', '#559440'],
+  field0: ['#6b4a2a', '#7a5631', '#8a6238', '#5c8a3a'], field1: ['#6b4a2a', '#7a5631', '#69a343', '#8ccc55'], field2: ['#6b4a2a', '#c9a23a', '#e0bf52', '#f0d878'],
+  snow: ['#c8d6e6', '#d8e4f0', '#e8f0f8', '#a9bccf'], snowfield: ['#7a6a58', '#c8d6e6', '#e8f0f8', '#9aa9b8'], ice: ['#8fb3d6', '#a6c4e2', '#bcd5ec', '#7ea0c4'],
+};
+const KNAMES = Object.keys(K);
 function makeTiles() {
-  const kinds = 10, vars = 3; const c = document.createElement('canvas'); c.width = TILE * vars; c.height = TILE * kinds; const g = c.getContext('2d');
-  const pal = {
-    rock: ['#1b2130', '#232a3c', '#2e3648', '#3a4358'], dirt: ['#4a3826', '#553f2b', '#614a33', '#6d5439'],
-    grass0: ['#3c5a2a', '#44662f', '#4c7034', '#557a3a'], grass1: ['#4a7d34', '#53893a', '#5c9640', '#66a247'], grass2: ['#5aa040', '#64ad47', '#6fba4f', '#7ac857'],
-    field0: ['#6b4a2a', '#7a5631', '#5c8a3a', '#8a6238'], field1: ['#8a6a2a', '#c9a23a', '#e0b84a', '#7a5a2a'],
-    snow0: ['#7a8ea0', '#8fa3b5', '#a3b7c8', '#b7cad9'], snow1: ['#8ea2b2', '#a7bbcb', '#bcd0df', '#d0e3f0'], snowfield: ['#6b5a4a', '#9aa9b8', '#b9c8d6', '#7a6a58'],
-  };
-  const names = Object.keys(TK);
-  for (let k = 0; k < kinds; k++) for (let v = 0; v < vars; v++) {
-    const p = pal[names[k]]; const ox = v * TILE, oy = k * TILE;
+  const c = document.createElement('canvas'); c.width = TILE * NV; c.height = TILE * NK; const g = c.getContext('2d');
+  for (let k = 0; k < NK; k++) for (let v = 0; v < NV; v++) {
+    const name = KNAMES[k], p = TP[name], ox = v * TILE, oy = k * TILE;
     for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
-      const r = hash(x + v * 31, y + k * 17);
-      let col = p[0];
-      if (names[k].startsWith('field')) { col = (y % 3 === 0) ? p[3] : (r < 0.35 ? p[2] : p[1]); if (names[k] === 'field1' && r < 0.2 && y % 3 !== 0) col = p[2]; }
-      else if (names[k] === 'snowfield') { col = (y % 3 === 0) ? p[3] : (r < 0.5 ? p[2] : p[1]); }
-      else { col = r < 0.55 ? p[0] : r < 0.8 ? p[1] : r < 0.93 ? p[2] : p[3]; if (names[k].startsWith('grass') && r > 0.97) col = '#d8e07a'; }
+      const r = hash(x + v * 31, y + k * 17, 3);
+      let col = r < 0.62 ? p[0] : r < 0.85 ? p[1] : r < 0.95 ? p[2] : p[3];
+      if (name.startsWith('grass')) {
+        // tufts and the odd flower
+        if (v >= 2 && hash(x, y, v + k) > 0.985) col = v === 2 ? '#f2e394' : '#f28ba8';
+        if (r > 0.9 && y > 2 && hash(x, y - 1, 9) > 0.5) col = p[3];
+      } else if (name.startsWith('field')) {
+        const row = (y + v) % 4;
+        col = row === 0 ? p[0] : row === 1 ? p[1] : p[1];
+        if (name !== 'field0' && row === 2 && hash(x, y, v) > (name === 'field1' ? 0.35 : 0.15)) col = p[2];
+        if (name === 'field2' && row === 3 && hash(x, y, v + 5) > 0.5) col = p[3];
+        if (name === 'field1' && row === 3 && hash(x, y, v + 5) > 0.7) col = p[3];
+      } else if (name === 'snowfield') {
+        const row = (y + v) % 4; col = row === 0 ? p[0] : (r < 0.7 ? p[1] : p[2]);
+      } else if (name === 'water' || name === 'ice') {
+        col = r < 0.75 ? p[0] : r < 0.92 ? p[1] : p[2];
+        if (((x + y * 3 + v * 5) % 16) === 0 && r > 0.4) col = p[3];
+      } else if (name === 'sand') {
+        if (r > 0.96) col = p[3];
+      }
       px(g, ox + x, oy + y, col);
     }
   }
   return c;
 }
-// characters: body atlas (skin/legs/hair) and tunic atlas (white + pattern) x 5 frames (4 walk + idle), 2 body variants (well, sick)
-const NFRAMES = 5, NPAT = 6;
-function makeCharacters() {
-  const c = document.createElement('canvas'); c.width = SPR * NFRAMES; c.height = SPR * (2 + NPAT); const g = c.getContext('2d');
-  const drawBody = (ox, oy, frame, sick) => {
-    const skin = sick ? '#a7c9a0' : '#e6b48c', skin2 = sick ? '#86a880' : '#c98f66', hair = '#3a2a1e', eye = '#1a1010', boot = '#3a2a1e';
-    const bob = frame === 4 ? 0 : (frame % 2 === 0 ? 0 : 1);
-    // head 6x6 at (5,2+bob)
-    for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) px(g, ox + 5 + x, oy + 2 + bob + y, (x === 0 || x === 5 || y === 0) ? skin2 : skin);
-    for (let x = 0; x < 6; x++) px(g, ox + 5 + x, oy + 2 + bob, hair); for (let x = 0; x < 6; x++) px(g, ox + 5 + x, oy + 1 + bob, hair);
-    px(g, ox + 7, oy + 5 + bob, eye); px(g, ox + 9, oy + 5 + bob, eye);
-    // arms
-    px(g, ox + 4, oy + 9 + bob, skin); px(g, ox + 4, oy + 10 + bob, skin); px(g, ox + 11, oy + 9 + bob, skin); px(g, ox + 11, oy + 10 + bob, skin);
-    // legs: frames 0..3 walk, 4 idle
-    const legs = [[6, 9], [7, 8], [6, 9], [5, 10], [6, 9]][frame];
-    const lift = [0, 1, 0, 1, 0][frame];
-    for (let y = 0; y < 3; y++) { px(g, ox + legs[0], oy + 12 + y, skin2); px(g, ox + legs[1], oy + 12 + y - lift, skin2); }
-    px(g, ox + legs[0], oy + 15, boot); px(g, ox + legs[1], oy + 15 - lift, boot);
-  };
-  const drawTunic = (ox, oy, frame, pat) => {
-    const bob = frame === 4 ? 0 : (frame % 2 === 0 ? 0 : 1);
-    for (let y = 0; y < 5; y++) for (let x = 0; x < 6; x++) {
-      let c2 = '#ffffff';
-      const edge = x === 0 || x === 5;
-      if (edge) c2 = '#b0b0b0';
-      // faction pattern in a darker shade so tint keeps it readable
-      const p = [ (x === 2 || x === 3) && y === 2, (x + y) % 2 === 0 && y > 0 && y < 4 && !edge, y === 2, x === 2 || x === 3, (x === 1 || x === 4) && y !== 2, y === 1 || y === 3 ][pat];
-      if (p && !edge) c2 = '#7a7a7a';
-      px(g, ox + 5 + x, oy + 8 + bob + y, c2);
-    }
-  };
-  for (let f = 0; f < NFRAMES; f++) { drawBody(f * SPR, 0, f, false); drawBody(f * SPR, SPR, f, true); }
-  for (let p = 0; p < NPAT; p++) for (let f = 0; f < NFRAMES; f++) drawTunic(f * SPR, (2 + p) * SPR, f, p);
+// water animation: 2 frames of a tiling texture
+function makeWater() {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 32; const g = c.getContext('2d');
+  for (let f = 0; f < 2; f++) for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+    const r = hash(x, y, 40 + f); let col = r < 0.8 ? '#274a86' : '#2f5a9c';
+    const wave = Math.sin((x + f * 4) * 0.6 + y * 0.9) > 0.92; if (wave) col = '#5d8fc9';
+    if (hash(x, y, 41 + f) > 0.985) col = '#8fb8e6';
+    px(g, f * 32 + x, y, col);
+  }
   return c;
 }
-// banners (leader flag, 6 glyphs, white for tint) and the storehouse
-function makeProps() {
-  const c = document.createElement('canvas'); c.width = SPR * 7; c.height = SPR * 2; const g = c.getContext('2d');
-  for (let p = 0; p < NPAT; p++) {
-    const ox = p * SPR;
-    for (let y = 2; y < 16; y++) px(g, ox + 4, y, '#6b4a2a');
-    for (let y = 2; y < 10; y++) for (let x = 5; x < 14 - (y > 6 ? (y - 6) * 2 : 0); x++) px(g, ox + x, y, '#ffffff');
-    const glyph = [[8, 5], [7, 5], [9, 5], [8, 4], [8, 6], [7, 4], [9, 6], [7, 6], [9, 4]];
-    const sets = [[0], [1, 2], [0, 1, 2], [0, 3, 4], [5, 6, 7, 8], [3, 4, 1, 2]][p];
-    for (const i of sets) px(g, ox + glyph[i][0], glyph[i][1], '#5a5a5a');
+// overhang edges: 16 masks for grass over sand and sand over water, wavy with an outline
+function makeEdges() {
+  const c = document.createElement('canvas'); c.width = TILE * 16; c.height = TILE * 2; const g = c.getContext('2d');
+  const sets = [{ p: TP.grass1, o: '#3f6229' }, { p: TP.sand, o: '#9c8550' }];
+  for (let s = 0; s < 2; s++) for (let m = 1; m < 16; m++) {
+    const ox = m * TILE, oy = s * TILE, p = sets[s].p;
+    const depth = (i, seed) => 3 + Math.floor(hash(i, seed, m) * 3);
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      const inN = (m & 1) && y < depth(x, 1), inE = (m & 2) && x >= TILE - depth(y, 2), inS = (m & 4) && y >= TILE - depth(x, 3), inW = (m & 8) && x < depth(y, 4);
+      if (!(inN || inE || inS || inW)) continue;
+      const edge = ((m & 1) && y === depth(x, 1) - 1 && !inE && !inW) || ((m & 4) && y === TILE - depth(x, 3) && !inE && !inW) || ((m & 2) && x === TILE - depth(y, 2)) || ((m & 8) && x === depth(y, 4) - 1);
+      const r = hash(x, y, 7 + s); px(g, ox + x, oy + y, edge ? sets[s].o : (r < 0.7 ? p[0] : p[1]));
+    }
   }
-  // storehouse at (6*16, 0): wooden granary with roof
-  const ox = 6 * SPR;
-  for (let y = 7; y < 16; y++) for (let x = 2; x < 14; x++) px(g, ox + x, y, (x % 3 === 0) ? '#6b4a2a' : '#8a6238');
-  for (let y = 2; y < 8; y++) for (let x = 1 + (7 - y); x < 15 - (7 - y); x++) px(g, ox + x, y, y % 2 ? '#a83a2a' : '#c9503a');
-  for (let y = 11; y < 16; y++) for (let x = 6; x < 10; x++) px(g, ox + x, y, '#3a2a1e');
+  return c;
+}
+// props: trees (2), pine, bush, rock, hut, granary, chief hut. Each cell is 24x32 in the atlas.
+const PW = 24, PH = 32, PROPS = ['tree0', 'tree1', 'pine', 'bush', 'rock', 'hut', 'granary', 'chief'];
+function makeProps() {
+  const c = document.createElement('canvas'); c.width = PW * PROPS.length; c.height = PH; const g = c.getContext('2d');
+  const blob = (ox, cx, cy, rx, ry, cols, seed) => { for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) { const d = (x * x) / (rx * rx) + (y * y) / (ry * ry); if (d > 1) continue; const r = hash(x, y, seed); const edge = d > 0.78; const light = (x - y) < -rx * 0.5; px(g, ox + cx + x, cy + y, edge ? cols[3] : light && r < 0.7 ? cols[2] : r < 0.7 ? cols[1] : cols[0]); } };
+  // trees
+  for (const [i, seed] of [[0, 11], [1, 12]]) { const ox = i * PW; for (let y = 20; y < 31; y++) for (let x = 10; x < 14; x++) px(g, ox + x, y, x === 10 || x === 13 ? '#3a2a1e' : '#6b4a2a'); blob(ox, 12, 13, 9, 8, ['#4d8a33', '#5fa842', '#7cc457', '#2f5a24'], seed); }
+  // pine
+  { const ox = 2 * PW; for (let y = 24; y < 31; y++) for (let x = 11; x < 13; x++) px(g, ox + x, y, '#4a3320'); for (let t = 0; t < 3; t++) { const cy = 8 + t * 6, w = 4 + t * 2; for (let y = 0; y < 7; y++) for (let x = -w * y / 7 - 1; x <= w * y / 7 + 1; x++) { const xi = Math.round(x); px(g, ox + 12 + xi, cy + y, Math.abs(xi) > w * y / 7 - 0.5 ? '#2a4a24' : (xi < 0 ? '#3d7a30' : '#2f6226')); } } }
+  // bush
+  { const ox = 3 * PW; blob(ox, 12, 24, 8, 5, ['#4d8a33', '#5fa842', '#7cc457', '#2f5a24'], 13); for (let k = 0; k < 4; k++) px(g, ox + 8 + k * 3, 23 + (k % 2), '#f28ba8'); }
+  // rock
+  { const ox = 4 * PW; blob(ox, 12, 25, 7, 4, ['#6b7280', '#8a92a3', '#a9b1c2', '#3e4452'], 14); }
+  // hut: round thatched
+  { const ox = 5 * PW; for (let y = 18; y < 30; y++) for (let x = 5; x < 19; x++) px(g, ox + x, y, (x === 5 || x === 18) ? OUT : (y % 3 === 0 ? '#8a6238' : '#a3784a')); for (let y = 6; y < 19; y++) { const w = 3 + Math.floor((y - 6) * 0.85); for (let x = 12 - w; x <= 12 + w; x++) px(g, ox + x, y, Math.abs(x - 12) === w ? '#6b4a2a' : (hash(x, y, 20) < 0.7 ? '#c9a23a' : '#e0bf52')); } for (let y = 24; y < 30; y++) for (let x = 10; x < 14; x++) px(g, ox + x, y, '#3a2a1e'); px(g, ox + 12, 27, '#f2c14e'); }
+  // granary: big, red-brown roof, grain sacks
+  { const ox = 6 * PW; for (let y = 16; y < 31; y++) for (let x = 2; x < 22; x++) px(g, ox + x, y, (x === 2 || x === 21 || y === 30) ? OUT : (x % 4 === 0 ? '#6b4a2a' : '#8a6238')); for (let y = 4; y < 17; y++) { const w = 4 + Math.floor((y - 4) * 0.75); for (let x = 12 - w; x <= 12 + w; x++) px(g, ox + x, y, Math.abs(x - 12) === w ? '#5a1e14' : (y % 2 ? '#a83a2a' : '#c9503a')); } for (let y = 22; y < 30; y++) for (let x = 9; x < 15; x++) px(g, ox + x, y, '#2a1a10'); for (let k = 0; k < 2; k++) blob(ox, 5 + k * 14, 27, 2, 2, ['#c9a23a', '#d9b24a', '#e8c65c', '#7a5a2a'], 30 + k); }
+  // chief hut: hut with a banner pole and a lighter roof trim
+  { const ox = 7 * PW; g.drawImage(c, 5 * PW, 0, PW, PH, ox, 0, PW, PH); for (let y = 0; y < 22; y++) px(g, ox + 20, y, '#6b4a2a'); for (let y = 1; y < 8; y++) for (let x = 21; x < 24; x++) px(g, ox + x, y, '#ffffff'); }
+  return c;
+}
+// characters: 16x24. Rows: [healthy, sick] x 4 hair colours = 8 body rows; then 6 tunic pattern rows. 7 frames: 4 walk, idle, attack, carry.
+const SPRW = 16, SPRH = 24, NF = 7, NPAT = 6, NHAIR = 4;
+const HAIR = ['#3a2a1e', '#6b4a2a', '#d9a95c', '#2a2a3a'];
+function makeCharacters() {
+  const c = document.createElement('canvas'); c.width = SPRW * NF; c.height = SPRH * (2 * NHAIR + NPAT); const g = c.getContext('2d');
+  const body = (ox, oy, f, sick, hair) => {
+    const sk = sick ? ['#c6dcb4', '#9fbf8a', '#7a9e66'] : ['#f1c6a0', '#d9a27b', '#b8805a'];
+    const walk = f < 4, bob = walk ? [0, 1, 0, 1][f] : 0;
+    // legs
+    const L = walk ? [[6, 9], [7, 8], [6, 9], [5, 10]][f] : [6, 9]; const lift = walk ? [0, 1, 0, 1][f] : 0;
+    for (let y = 18; y < 24; y++) { for (const [i, lx] of L.entries()) { const yy = y - (i === 1 ? lift : 0); if (yy < 18) continue; const boot = yy >= 22; px(g, ox + lx, oy + yy, boot ? '#3a2a1e' : sk[1]); px(g, ox + lx + 1, oy + yy, boot ? '#2a1a10' : sk[2]); } }
+    // torso outline drawn by tunic; neck
+    px(g, ox + 7, oy + 10 + bob, sk[1]); px(g, ox + 8, oy + 10 + bob, sk[1]);
+    // head with outline
+    for (let y = 2; y < 10; y++) for (let x = 4; x < 12; x++) {
+      const edge = x === 4 || x === 11 || y === 2 || y === 9; const hairy = y < 5 || (y === 5 && (x === 4 || x === 11));
+      px(g, ox + x, oy + y + bob, edge ? OUT : hairy ? HAIR[hair] : (x > 9 || y === 8 ? sk[1] : sk[0]));
+    }
+    px(g, ox + 6, oy + 6 + bob, OUT); px(g, ox + 9, oy + 6 + bob, OUT);
+    if (sick) px(g, ox + 12, oy + 4 + bob, '#7fd1ff');
+    // arms
+    if (f === 5) { for (let k = 0; k < 4; k++) px(g, ox + 12 + k, oy + 12 - k + bob, sk[1]); for (let k = 0; k < 5; k++) px(g, ox + 15, oy + 7 - k + bob, '#8a6238'); px(g, ox + 3, oy + 12 + bob, sk[1]); px(g, ox + 3, oy + 13 + bob, sk[1]); }
+    else if (f === 6) { for (let y = 12; y < 15; y++) { px(g, ox + 3, oy + y + bob, sk[1]); px(g, ox + 12, oy + y + bob, sk[1]); } for (let y = 13; y < 17; y++) for (let x = 1; x < 5; x++) px(g, ox + x, oy + y + bob, (y === 13 || x === 1) ? '#6b4a2a' : '#c9a23a'); }
+    else { const sw = walk ? [0, 1, 0, -1][f] : 0; for (let y = 11; y < 16; y++) { px(g, ox + 3, oy + y + sw + bob, sk[1]); px(g, ox + 12, oy + y - sw + bob, sk[1]); } }
+  };
+  const tunic = (ox, oy, f, pat) => {
+    const bob = f < 4 ? [0, 1, 0, 1][f] : 0;
+    for (let y = 11; y < 18; y++) for (let x = 4; x < 12; x++) {
+      const edge = x === 4 || x === 11 || y === 11 || y === 17; let col = edge ? '#2a2a2a' : (x > 9 ? '#a8a8a8' : '#ffffff');
+      if (y === 16 && !edge) col = '#5a5a5a';
+      const P = [(x === 7 || x === 8) && y === 13, (x + y) % 2 === 0 && y > 11 && y < 16 && !edge, y === 13 && !edge, (x === 7 || x === 8) && !edge, (x === 5 || x === 10) && y > 11 && y < 16, (y === 12 || y === 14) && !edge][pat];
+      if (P && !edge) col = '#6a6a6a';
+      px(g, ox + x, oy + y + bob, col);
+    }
+  };
+  for (let h = 0; h < NHAIR; h++) for (let sick = 0; sick < 2; sick++) for (let f = 0; f < NF; f++) body(f * SPRW, (h * 2 + sick) * SPRH, f, !!sick, h);
+  for (let p = 0; p < NPAT; p++) for (let f = 0; f < NF; f++) tunic(f * SPRW, (2 * NHAIR + p) * SPRH, f, p);
+  return c;
+}
+// banners: 16x24, 6 glyphs, white for tinting
+function makeBanners() {
+  const c = document.createElement('canvas'); c.width = SPRW * NPAT; c.height = SPRH; const g = c.getContext('2d');
+  for (let p = 0; p < NPAT; p++) {
+    const ox = p * SPRW; for (let y = 2; y < 24; y++) px(g, ox + 3, y, y % 2 ? '#6b4a2a' : '#8a6238');
+    for (let y = 2; y < 13; y++) for (let x = 4; x < 15 - (y > 8 ? (y - 8) * 2 : 0); x++) px(g, ox + x, y, (y === 2 || x === 4) ? '#dcdcdc' : '#ffffff');
+    const gl = [[8, 6], [7, 6], [9, 6], [8, 5], [8, 7], [7, 5], [9, 7], [7, 7], [9, 5]]; const sets = [[0], [1, 2], [0, 1, 2], [0, 3, 4], [5, 6, 7, 8], [3, 4, 1, 2]][p];
+    for (const i of sets) px(g, ox + gl[i][0], gl[i][1], '#4a4a4a');
+  }
   return c;
 }
 function factionColor(lineage) { return PALETTE[(lineage * 7) % PALETTE.length]; }
@@ -429,46 +494,85 @@ function factionPattern(lineage) { return (lineage * 5) % NPAT; }
 function hexToInt(h) { return parseInt(h.slice(1), 16); }
 
 // ---------- pixi scene
-let app, world, terrainSprite, terrainCanvas, terrainCtx, tiles, chars, props, bodies, tunics, fxLayer, labelLayer, storeLayer, bodyTex = [], tunicTex = [], bannerTex = [], storeTex;
+const CH = 48; // cells per terrain chunk
+let app, world, tiles, edges, props, chars, banners, waterTex = [], waterSprite, chunks = [], propLayer, bodies, tunics, fxLayer, labelLayer, storeLayer, tintOverlay, snowLayer, snowDots = [];
+let bodyTex = [], tunicTex = [], bannerTex = [], propTex = {};
 function initPixi() {
   if (app) { app.destroy(true, { children: true }); state.sprites.clear(); }
-  app = new PIXI.Application({ view: $('gl'), resizeTo: $('stage'), backgroundColor: 0x05070b, antialias: false, resolution: Math.min(devicePixelRatio, 2), autoDensity: true });
+  app = new PIXI.Application({ view: $('gl'), resizeTo: $('stage'), backgroundColor: 0x1d3c6b, antialias: false, resolution: Math.min(devicePixelRatio, 2), autoDensity: true });
   PIXI.BaseTexture.defaultOptions.scaleMode = PIXI.SCALE_MODES.NEAREST;
   world = new PIXI.Container(); app.stage.addChild(world);
-  tiles = makeTiles(); chars = makeCharacters(); props = makeProps();
-  terrainCanvas = document.createElement('canvas'); terrainCanvas.width = state.W * TILE; terrainCanvas.height = state.H * TILE; terrainCtx = terrainCanvas.getContext('2d');
-  terrainSprite = new PIXI.Sprite(PIXI.Texture.from(terrainCanvas)); world.addChild(terrainSprite);
-  const cb = PIXI.BaseTexture.from(chars); const pb = PIXI.BaseTexture.from(props);
-  bodyTex = [0, 1].map(v => Array.from({ length: NFRAMES }, (_, f) => new PIXI.Texture(cb, new PIXI.Rectangle(f * SPR, v * SPR, SPR, SPR))));
-  tunicTex = Array.from({ length: NPAT }, (_, p) => Array.from({ length: NFRAMES }, (_, f) => new PIXI.Texture(cb, new PIXI.Rectangle(f * SPR, (2 + p) * SPR, SPR, SPR))));
-  bannerTex = Array.from({ length: NPAT }, (_, p) => new PIXI.Texture(pb, new PIXI.Rectangle(p * SPR, 0, SPR, SPR)));
-  storeTex = new PIXI.Texture(pb, new PIXI.Rectangle(6 * SPR, 0, SPR, SPR));
+  tiles = makeTiles(); edges = makeEdges(); props = makeProps(); chars = makeCharacters(); banners = makeBanners();
+  const wb = PIXI.BaseTexture.from(makeWater()); waterTex = [0, 1].map(f => new PIXI.Texture(wb, new PIXI.Rectangle(f * 32, 0, 32, 32)));
+  waterSprite = new PIXI.TilingSprite(waterTex[0], state.W * TILE, state.H * TILE); world.addChild(waterSprite);
+  chunks = [];
+  const cols = Math.ceil(state.W / CH), rows = Math.ceil(state.H / CH);
+  for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
+    const cv = document.createElement('canvas'); cv.width = CH * TILE; cv.height = CH * TILE + PH; // room for trees overhanging the top row
+    const sp = new PIXI.Sprite(PIXI.Texture.from(cv)); sp.position.set(cx * CH * TILE, cy * CH * TILE - PH); world.addChild(sp);
+    chunks.push({ cx, cy, cv, g: cv.getContext('2d'), sp, dirty: true });
+  }
+  const cb = PIXI.BaseTexture.from(chars), bb = PIXI.BaseTexture.from(banners), pb = PIXI.BaseTexture.from(props);
+  bodyTex = []; for (let r = 0; r < 2 * NHAIR; r++) bodyTex.push(Array.from({ length: NF }, (_, f) => new PIXI.Texture(cb, new PIXI.Rectangle(f * SPRW, r * SPRH, SPRW, SPRH))));
+  tunicTex = Array.from({ length: NPAT }, (_, p) => Array.from({ length: NF }, (_, f) => new PIXI.Texture(cb, new PIXI.Rectangle(f * SPRW, (2 * NHAIR + p) * SPRH, SPRW, SPRH))));
+  bannerTex = Array.from({ length: NPAT }, (_, p) => new PIXI.Texture(bb, new PIXI.Rectangle(p * SPRW, 0, SPRW, SPRH)));
+  propTex = {}; PROPS.forEach((n, i) => propTex[n] = new PIXI.Texture(pb, new PIXI.Rectangle(i * PW, 0, PW, PH)));
+  propLayer = new PIXI.Container(); world.addChild(propLayer);
   storeLayer = new PIXI.Container(); world.addChild(storeLayer);
-  bodies = new PIXI.ParticleContainer(20000, { position: true, uvs: true, scale: true, alpha: true }); world.addChild(bodies);
-  tunics = new PIXI.ParticleContainer(20000, { position: true, uvs: true, scale: true, tint: true, alpha: true }); world.addChild(tunics);
+  bodies = new PIXI.ParticleContainer(30000, { position: true, uvs: true, scale: true, alpha: true }); world.addChild(bodies);
+  tunics = new PIXI.ParticleContainer(30000, { position: true, uvs: true, scale: true, tint: true, alpha: true }); world.addChild(tunics);
   fxLayer = new PIXI.Container(); world.addChild(fxLayer);
   labelLayer = new PIXI.Container(); world.addChild(labelLayer);
-  state.lastType = new Uint8Array(state.W * state.H).fill(255);
-  state.pixi = true;
+  tintOverlay = new PIXI.Sprite(PIXI.Texture.WHITE); tintOverlay.blendMode = PIXI.BLEND_MODES.MULTIPLY; tintOverlay.alpha = 0; app.stage.addChild(tintOverlay);
+  snowLayer = new PIXI.ParticleContainer(600, { position: true, alpha: true }); app.stage.addChild(snowLayer); snowDots = [];
+  for (let i = 0; i < 400; i++) { const d = new PIXI.Sprite(PIXI.Texture.WHITE); d.width = d.height = 2; d.alpha = 0; d.vx = (Math.random() - 0.5) * 20; d.vy = 30 + Math.random() * 40; d.x = Math.random() * 2000; d.y = Math.random() * 1200; snowLayer.addChild(d); snowDots.push(d); }
+  state.lastType = new Uint8Array(state.W * state.H).fill(255); state.lastMask = new Uint8Array(state.W * state.H).fill(255);
+  state.pixi = true; state.lastFrameDrawn = -1; state.lastPropsFrame = -1;
   app.ticker.add(tick);
 }
-function tileType(food, cult, fert, winter) {
-  if (fert < 8) return TK.rock; if (fert < 20) return TK.dirt;
-  if (cult >= 20) return winter ? TK.snowfield : TK.field1; if (cult >= 8) return winter ? TK.snowfield : TK.field0;
-  if (winter) return food >= 10 ? TK.snow1 : TK.snow0;
-  return food >= 16 ? TK.grass2 : food >= 6 ? TK.grass1 : TK.grass0;
+function tileKind(food, cult, fert, winter) {
+  if (fert < 8) return winter ? K.ice : K.water; if (fert < 20) return K.sand;
+  if (cult >= 26) return winter ? K.snowfield : K.field2; if (cult >= 12) return winter ? K.snowfield : K.field1; if (cult >= 5) return winter ? K.snowfield : K.field0;
+  if (winter) return K.snow;
+  return food >= 16 ? K.grass2 : food >= 6 ? K.grass1 : K.grass0;
 }
+const level = k => k === K.water || k === K.ice ? 0 : k === K.sand ? 1 : 2;
 function drawTerrain(idx) {
   const [food, cult, fert] = layersOf(idx); const f = state.frames[idx]; const winter = f.season < 0.42;
-  const W = state.W, H = state.H; let changed = 0;
+  const W = state.W, H = state.H; const kinds = state.kinds || (state.kinds = new Uint8Array(W * H));
+  for (let i = 0; i < W * H; i++) kinds[i] = tileKind(food[i], cult[i], fert[i], winter);
+  const cols = Math.ceil(W / CH);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = y * W + x; const k = tileType(food[i], cult[i], fert[i], winter);
-    if (state.lastType[i] === k) continue;
-    state.lastType[i] = k; changed++;
-    const v = (x * 7 + y * 13) % 3;
-    terrainCtx.drawImage(tiles, v * TILE, k * TILE, TILE, TILE, x * TILE, y * TILE, TILE, TILE);
+    const i = y * W + x, k = kinds[i], lv = level(k);
+    // overhang mask: which sides have a higher neighbour
+    let mask = 0; if (lv < 2) {
+      const n = kinds[((y - 1 + H) % H) * W + x], e = kinds[y * W + (x + 1) % W], s = kinds[((y + 1) % H) * W + x], w = kinds[y * W + (x - 1 + W) % W];
+      if (level(n) > lv) mask |= 1; if (level(e) > lv) mask |= 2; if (level(s) > lv) mask |= 4; if (level(w) > lv) mask |= 8;
+    }
+    if (state.lastType[i] === k && state.lastMask[i] === mask) continue;
+    state.lastType[i] = k; state.lastMask[i] = mask;
+    const ch = chunks[Math.floor(y / CH) * cols + Math.floor(x / CH)]; ch.dirty = true;
+    const lx = (x % CH) * TILE, ly = (y % CH) * TILE + PH; const g = ch.g;
+    g.clearRect(lx, ly, TILE, TILE);
+    if (k !== K.water) g.drawImage(tiles, ((x * 7 + y * 13) % NV) * TILE, k * TILE, TILE, TILE, lx, ly, TILE, TILE);
+    if (mask) g.drawImage(edges, mask * TILE, (lv === 0 ? 1 : 0) * TILE, TILE, TILE, lx, ly, TILE, TILE);
+    // static props baked into the chunk: trees, bushes and rocks on wild land
+    if (k >= K.grass0 && k <= K.grass2 || k === K.snow) {
+      const r = hash(x, y, 77); const dens = 0.02 + 0.10 * (fert[i] / 63);
+      if (r < dens) { const kind = r < dens * 0.15 ? 'rock' : r < dens * 0.3 ? 'bush' : (fert[i] < 40 ? 'pine' : (hash(x, y, 78) < 0.5 ? 'tree0' : 'tree1')); ch.props = ch.props || []; ch.props.push({ x, y, kind }); }
+    }
   }
-  if (changed) terrainSprite.texture.baseTexture.update();
+  // props are redrawn per dirty chunk after tiles so that tall ones overlap the row above
+  for (const ch of chunks) {
+    if (!ch.dirty) continue; ch.dirty = false;
+    if (ch.props) { ch.props.sort((a, b) => a.y - b.y); const seen = new Set(); ch.props = ch.props.filter(p => { const key = p.y * W + p.x; if (seen.has(key)) return false; seen.add(key); const k = kinds[key]; return (k >= K.grass0 && k <= K.grass2) || k === K.snow; });
+      for (const p of ch.props) ch.g.drawImage(props, PROPS.indexOf(p.kind) * PW, 0, PW, PH, (p.x % CH) * TILE - 4, (p.y % CH) * TILE + PH - PH + TILE - 2 - (PH - TILE), PW, PH); }
+    ch.sp.texture.baseTexture.update();
+  }
+  // season tint and snow
+  tintOverlay.width = app.screen.width; tintOverlay.height = app.screen.height;
+  if (winter) { tintOverlay.tint = 0xb7c7e6; tintOverlay.alpha = 0.45; } else if (f.climate < 0.5) { tintOverlay.tint = 0xe6c9a0; tintOverlay.alpha = 0.35; } else { tintOverlay.alpha = 0; }
+  state.snowing = winter;
 }
 
 // ---------- per-render update
@@ -486,6 +590,9 @@ function tick() {
     }
     applyFollow();
   }
+  waterSprite.texture = waterTex[Math.floor(animClock * 2) % 2];
+  const sw = app.screen.width, sh = app.screen.height;
+  for (const d of snowDots) { if (!state.snowing) { d.alpha = 0; continue; } d.alpha = 0.7; d.x += d.vx * dt; d.y += d.vy * dt; if (d.y > sh) { d.y = -4; d.x = Math.random() * sw; } if (d.x > sw) d.x = 0; if (d.x < 0) d.x = sw; }
   draw(false);
 }
 function checkMajor() {
@@ -509,50 +616,53 @@ function draw(force) {
   if (!state.pixi) return;
   const idx = state.frame; const f = state.frames[idx]; const A = agentsOf(idx); const B = idx + 1 < state.frames.length ? agentsOf(idx + 1) : null;
   const s = state.sub;
-  if (force || state.lastFrameDrawn !== idx) { drawTerrain(idx); state.lastFrameDrawn = idx; updateHud(f, A); renderLeaders(A); renderFactions(A); markEvents(f.tick); drawTimeline(); }
-  // camera
+  if (force || state.lastFrameDrawn !== idx) { drawTerrain(idx); state.lastFrameDrawn = idx; updateHud(f, A); renderLeaders(A); renderFactions(A); markEvents(f.tick); drawTimeline(); drawMinimap(idx, A); }
   const z = state.cam.zoom / TILE; world.scale.set(z);
-  world.position.set(app.screen.width / 2 - state.cam.x * TILE * z, app.screen.height / 2 - state.cam.y * TILE * z);
-  // sprites: reconcile by id
+  world.position.set(Math.round(app.screen.width / 2 - state.cam.x * TILE * z), Math.round(app.screen.height / 2 - state.cam.y * TILE * z));
   const alive = new Set(); const W = state.W, H = state.H;
-  const walkFrame = Math.floor(animClock * 8) % 4;
-  const detail = state.cam.zoom >= 3;
+  const walkFrame = Math.floor(animClock * 9) % 4;
+  const detail = state.cam.zoom >= 2.5 ? 1 : 0.7;
   for (let i = 0; i < A.n; i++) {
     const id = A.id[i]; alive.add(id);
     let sp = state.sprites.get(id);
+    const hair = id % NHAIR, pat = factionPattern(A.lineage[i]);
     if (!sp) {
-      sp = { body: new PIXI.Sprite(bodyTex[0][4]), tunic: new PIXI.Sprite(tunicTex[factionPattern(A.lineage[i])][4]) };
+      sp = { body: new PIXI.Sprite(bodyTex[hair * 2][4]), tunic: new PIXI.Sprite(tunicTex[pat][4]) };
       sp.body.anchor.set(0.5, 1); sp.tunic.anchor.set(0.5, 1); sp.tunic.tint = hexToInt(factionColor(A.lineage[i]));
       bodies.addChild(sp.body); tunics.addChild(sp.tunic); state.sprites.set(id, sp);
     }
     let x = A.x[i], y = A.y[i], moving = false, dx = A.mdx[i];
-    if (B) { const j = B.index.get(id); if (j !== undefined) { let ddx = B.x[j] - x, ddy = B.y[j] - y; if (Math.abs(ddx) < W / 2 && Math.abs(ddy) < H / 2) { x += ddx * s; y += ddy * s; moving = ddx * ddx + ddy * ddy > 0.05; if (Math.abs(ddx) > 0.05) dx = ddx; } } }
-    const sick = A.flags[i] & 1; const fr = moving ? walkFrame : 4;
-    sp.body.texture = bodyTex[sick ? 1 : 0][fr]; sp.tunic.texture = tunicTex[factionPattern(A.lineage[i])][fr];
-    const sx = (dx < 0 ? -1 : 1) * (detail ? 1 : 0.6);
-    sp.body.scale.set(sx, detail ? 1 : 0.6); sp.tunic.scale.set(sx, detail ? 1 : 0.6);
-    const bob = moving ? 0 : Math.sin(animClock * 3 + id) * 0.4;
-    sp.body.position.set(x * TILE, y * TILE + bob + 2); sp.tunic.position.set(x * TILE, y * TILE + bob + 2);
+    if (B) { const j = B.index.get(id); if (j !== undefined) { const ddx = B.x[j] - x, ddy = B.y[j] - y; if (Math.abs(ddx) < W / 2 && Math.abs(ddy) < H / 2) { x += ddx * s; y += ddy * s; moving = ddx * ddx + ddy * ddy > 0.04; if (Math.abs(ddx) > 0.05) dx = ddx; } } }
+    const sick = A.flags[i] & 1; const act = A.action[i];
+    const fr = moving ? walkFrame : act === 1 ? 5 : act === 0 ? 6 : 4;
+    sp.body.texture = bodyTex[hair * 2 + (sick ? 1 : 0)][fr]; sp.tunic.texture = tunicTex[pat][fr];
+    const sx = (dx < 0 ? -1 : 1) * detail;
+    sp.body.scale.set(sx, detail); sp.tunic.scale.set(sx, detail);
+    const bob = moving ? 0 : Math.sin(animClock * 3 + id) * 0.5;
+    const py = y * TILE + bob + 4; sp.body.position.set(x * TILE, py); sp.tunic.position.set(x * TILE, py);
     const a = A.energy[i] < 15 ? 0.55 : 1; sp.body.alpha = a; sp.tunic.alpha = a;
   }
   for (const [id, sp] of state.sprites) if (!alive.has(id)) { bodies.removeChild(sp.body); tunics.removeChild(sp.tunic); sp.body.destroy(); sp.tunic.destroy(); state.sprites.delete(id); }
-  // stores, banners, labels: rebuilt per frame change only
   if (force || state.lastPropsFrame !== idx) {
     state.lastPropsFrame = idx;
-    storeLayer.removeChildren().forEach(c => c.destroy({ children: true })); fxLayer.removeChildren().forEach(c => c.destroy({ children: true })); labelLayer.removeChildren().forEach(c => c.destroy({ children: true }));
+    for (const L of [storeLayer, fxLayer, labelLayer, propLayer]) L.removeChildren().forEach(c => c.destroy({ children: true }));
+    // huts where people have settled: one per 5x5 block with at least four settled agents, placed by hash
+    const blocks = new Map();
+    for (let i = 0; i < A.n; i++) if (A.flags[i] & 4) { const k = Math.floor(A.y[i] / 5) * 1000 + Math.floor(A.x[i] / 5); blocks.set(k, (blocks.get(k) || 0) + 1); }
+    for (const [k, n] of blocks) { if (n < 4) continue; const bx = k % 1000, by = Math.floor(k / 1000); const h = new PIXI.Sprite(propTex.hut); h.anchor.set(0.5, 1); h.position.set(bx * 5 * TILE + TILE * (1 + hash(bx, by, 5) * 3), by * 5 * TILE + TILE * (1 + hash(bx, by, 6) * 3) + 6); propLayer.addChild(h); }
     for (const st of A.stores) {
-      const sp = new PIXI.Sprite(storeTex); sp.anchor.set(0.5, 1); sp.position.set(st.x * TILE, st.y * TILE + 2); storeLayer.addChild(sp);
+      const sp = new PIXI.Sprite(propTex.granary); sp.anchor.set(0.5, 1); sp.position.set(st.x * TILE, st.y * TILE + 8); storeLayer.addChild(sp);
       const g = new PIXI.Graphics(); const fill = Math.min(1, st.food / 3000);
-      g.beginFill(0x000000).drawRect(-7, 3, 14, 3).endFill(); g.beginFill(hexToInt(factionColor(st.lineage))).drawRect(-6, 4, 12 * fill, 1).endFill(); g.position.set(st.x * TILE, st.y * TILE); storeLayer.addChild(g);
+      g.beginFill(0x000000).drawRect(-10, 9, 20, 4).endFill(); g.beginFill(hexToInt(factionColor(st.lineage))).drawRect(-9, 10, 18 * fill, 2).endFill(); g.position.set(st.x * TILE, st.y * TILE); storeLayer.addChild(g);
     }
     const leaders = []; for (let i = 0; i < A.n; i++) if (A.flags[i] & 2) leaders.push(i);
     leaders.sort((a, b) => A.followers[b] - A.followers[a]);
-    const style = new PIXI.TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 11, fill: '#f2c14e', stroke: '#000', strokeThickness: 3 });
+    const style = new PIXI.TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 11, fontWeight: '600', fill: '#fff3c4', stroke: '#1b1b2a', strokeThickness: 3 });
     for (const [k, i] of leaders.entries()) {
-      const fl = new PIXI.Sprite(bannerTex[factionPattern(A.lineage[i])]); fl.anchor.set(0.25, 1); fl.tint = hexToInt(factionColor(A.lineage[i]));
-      const sc = Math.min(2.2, 0.8 + Math.sqrt(A.followers[i]) * 0.12); fl.scale.set(sc); fl.position.set(A.x[i] * TILE, A.y[i] * TILE - 12); fxLayer.addChild(fl);
-      const ord = A.under[i]; if (ord) { const gl = new PIXI.Text(['⌂','➜','⚔','✋','⇅'][ord - 1], new PIXI.TextStyle({ fontSize: 10, fill: '#fff', stroke: '#000', strokeThickness: 2 })); gl.anchor.set(0.5, 1); gl.position.set(A.x[i] * TILE + 10, A.y[i] * TILE - 12 * sc + 2); fxLayer.addChild(gl); }
-      if (k < 40 && A.name[i] && (A.followers[i] >= 15 || k < 12)) { const nm = (state.meta.names || {})[A.name[i]] || `#${A.name[i]}`; const tx = new PIXI.Text(nm, style); tx.anchor.set(0.5, 1); tx.scale.set(1 / Math.max(1, z * 0.9)); tx.position.set(A.x[i] * TILE, A.y[i] * TILE - 14 * sc - 2); labelLayer.addChild(tx); }
+      const fl = new PIXI.Sprite(bannerTex[factionPattern(A.lineage[i])]); fl.anchor.set(0.2, 1); fl.tint = hexToInt(factionColor(A.lineage[i]));
+      const sc = Math.min(2, 0.8 + Math.sqrt(A.followers[i]) * 0.1); fl.scale.set(sc); fl.position.set(A.x[i] * TILE + 6, A.y[i] * TILE - 6); fxLayer.addChild(fl);
+      const ord = A.under[i]; if (ord) { const gl = new PIXI.Text(['⌂', '➜', '⚔', '✋', '⇅'][ord - 1], new PIXI.TextStyle({ fontSize: 10, fill: '#fff', stroke: '#000', strokeThickness: 2 })); gl.anchor.set(0.5, 1); gl.position.set(A.x[i] * TILE + 14, A.y[i] * TILE - 20 * sc); fxLayer.addChild(gl); }
+      if (k < 40 && A.name[i] && (A.followers[i] >= 15 || k < 12)) { const nm = (state.meta.names || {})[A.name[i]] || `#${A.name[i]}`; const tx = new PIXI.Text(nm, style); tx.anchor.set(0.5, 1); tx.scale.set(1 / Math.max(1, z * 0.9)); tx.position.set(A.x[i] * TILE, A.y[i] * TILE - 22 * sc - 4); labelLayer.addChild(tx); }
     }
   }
 }
@@ -565,15 +675,33 @@ function updateHud(f, A) {
   let L = 0; for (let i = 0; i < A.n; i++) if (A.flags[i] & 2) L++; $('s-leaders').textContent = L;
   $('era').textContent = T[lang].eras[f.era] || f.era; $('era').style.borderColor = ERA_COLORS[f.era] || '#666';
 }
+// minimap: terrain colours plus faction dots and the view rectangle
+function drawMinimap(idx, A) {
+  const mm = $('mm'), g = mm.getContext('2d'); const W = state.W, H = state.H; mm.width = W; mm.height = H;
+  const img = g.createImageData(W, H); const d = img.data; const kinds = state.kinds;
+  const colors = [[39, 74, 134], [201, 180, 122], [79, 122, 52], [90, 150, 64], [104, 176, 74], [107, 74, 42], [122, 86, 49], [201, 162, 58], [200, 214, 230], [154, 169, 184], [143, 179, 214]];
+  for (let i = 0; i < W * H; i++) { const c = colors[kinds[i]] || [0, 0, 0]; d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255; }
+  g.putImageData(img, 0, 0);
+  for (let i = 0; i < A.n; i += 2) { g.fillStyle = factionColor(A.lineage[i]); g.fillRect(A.x[i] | 0, A.y[i] | 0, 1, 1); }
+  state.mmView = true;
+  drawMinimapView();
+}
+function drawMinimapView() {
+  const mm = $('mm'), g = mm.getContext('2d'); if (!app) return;
+  const vw = app.screen.width / state.cam.zoom, vh = app.screen.height / state.cam.zoom;
+  g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.strokeRect(state.cam.x - vw / 2, state.cam.y - vh / 2, vw, vh);
+}
+$('mm').addEventListener('click', e => { const r = $('mm').getBoundingClientRect(); state.cam.tx = (e.clientX - r.left) / r.width * state.W; state.cam.ty = (e.clientY - r.top) / r.height * state.H; state.follow = null; syncButtons(); });
 
 // ---------- panels
-function swatch(lineage, size) {
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16; const g = c.getContext('2d');
-  g.drawImage(chars, 4 * SPR, 0, SPR, SPR, 0, 0, 16, 16);
-  const tc = document.createElement('canvas'); tc.width = 16; tc.height = 16; const tg = tc.getContext('2d');
-  tg.drawImage(chars, 4 * SPR, (2 + factionPattern(lineage)) * SPR, SPR, SPR, 0, 0, 16, 16);
-  tg.globalCompositeOperation = 'multiply'; tg.fillStyle = factionColor(lineage); tg.fillRect(0, 0, 16, 16);
-  tg.globalCompositeOperation = 'destination-in'; tg.drawImage(chars, 4 * SPR, (2 + factionPattern(lineage)) * SPR, SPR, SPR, 0, 0, 16, 16);
+function swatch(lineage) {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 24; c.style.width = '16px'; c.style.height = '24px'; const g = c.getContext('2d');
+  const pat = factionPattern(lineage);
+  g.drawImage(chars, 4 * SPRW, 0, SPRW, SPRH, 0, 0, 16, 24);
+  const tc = document.createElement('canvas'); tc.width = 16; tc.height = 24; const tg = tc.getContext('2d');
+  tg.drawImage(chars, 4 * SPRW, (2 * NHAIR + pat) * SPRH, SPRW, SPRH, 0, 0, 16, 24);
+  tg.globalCompositeOperation = 'multiply'; tg.fillStyle = factionColor(lineage); tg.fillRect(0, 0, 16, 24);
+  tg.globalCompositeOperation = 'destination-in'; tg.drawImage(chars, 4 * SPRW, (2 * NHAIR + pat) * SPRH, SPRW, SPRH, 0, 0, 16, 24);
   g.drawImage(tc, 0, 0); return c;
 }
 function renderFactions(A) {
@@ -635,7 +763,7 @@ function applyFollow() {
   else if (state.follow === 'event') { const tk = state.frames[state.frame].tick; let last = null; for (const e of state.events) { if (e.tick <= tk && e.x != null) last = e; if (e.tick > tk) break; } if (last) { state.cam.tx = last.x; state.cam.ty = last.y; } }
 }
 app = null;
-setInterval(() => { if (state.cam.tx != null) { state.cam.x += (state.cam.tx - state.cam.x) * 0.15; state.cam.y += (state.cam.ty - state.cam.y) * 0.15; if (Math.abs(state.cam.tx - state.cam.x) < 0.05 && !state.follow) state.cam.tx = null; } }, 33);
+setInterval(() => { if (state.mmView) drawMinimapView(); if (state.cam.tx != null) { state.cam.x += (state.cam.tx - state.cam.x) * 0.15; state.cam.y += (state.cam.ty - state.cam.y) * 0.15; if (Math.abs(state.cam.tx - state.cam.x) < 0.05 && !state.follow) state.cam.tx = null; } }, 33);
 const gl = $('gl');
 gl.addEventListener('mousedown', e => { state.drag = { x: e.clientX, y: e.clientY, cx: state.cam.x, cy: state.cam.y }; });
 window.addEventListener('mousemove', e => { if (!state.drag) return; state.follow = null; state.cam.tx = null; syncButtons(); state.cam.x = state.drag.cx - (e.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (e.clientY - state.drag.y) / state.cam.zoom; });

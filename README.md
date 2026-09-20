@@ -14,6 +14,7 @@ chỉ có xuất ảnh PPM, CSV, sử ký, và bảng kết cục khi chạy nhi
 ## Xem bằng mắt
 
 ![viewer](docs/viewer.png)
+![map](docs/viewer-map.png)
 
 ```bash
 cd sim && ./target/release/sim --seed 2 --ticks 20000 --snapshot-every 25 --out ../viewer/out
@@ -24,9 +25,15 @@ python3 ../viewer/serve.py            # rồi mở http://127.0.0.1:8765/index.h
 `viewer/index.html` là game viewer 2D pixel art chạy trong trình duyệt bằng **PixiJS** (WebGL, đã kèm sẵn
 trong `viewer/lib`, không cần mạng). Toàn bộ hình ảnh sinh bằng code lúc mở trang nên không vướng bản quyền:
 
-- **Đất** là tile 8x8: đá, đất cằn, ba mức cỏ theo thức ăn, ruộng có luống, phủ tuyết mùa đông.
-- **Nhân vật** 16x16 có hoạt ảnh đi bộ bốn khung và nhịp thở khi đứng, quay mặt theo hướng đi. Vị trí nội suy
-  giữa hai khung chụp nên đi lại mượt dù chỉ chụp mỗi 25 tick. Người ốm da xanh, người đói mờ đi.
+- **Bản đồ** là tile 16x16 nhiều tông có viền: đất cằn nhất thành biển có sóng động, đất nghèo thành bờ cát,
+  ba mức cỏ theo thức ăn có bụi cỏ và hoa, ruộng có luống và cây trồng lớn dần theo mức canh tác, mùa đông
+  phủ tuyết và biển đóng băng. Bờ biển và mép cỏ được autotile theo bốn hướng nên đường bờ uốn lượn tự nhiên.
+  Cây, thông, bụi, đá rải theo độ màu mỡ trên đất hoang. Làng có nhà tranh mái rơm, kho là nhà kho lớn mái đỏ.
+- **Nhân vật** 16x24 có viền và bóng, bốn màu tóc, đai lưng, ủng; đi bộ bốn khung với tay vung, thở khi đứng,
+  tư thế vung gậy khi đánh, mang giỏ khi hái, quay mặt theo hướng đi. Vị trí nội suy giữa hai khung chụp nên
+  đi lại mượt dù chỉ chụp mỗi 25 tick. Người ốm da xanh có giọt mồ hôi, người đói mờ đi.
+- **Minimap** góc trái với địa hình và chấm phe, bấm để bay tới. Tông màu đổi theo mùa và hạn hán, tuyết rơi
+  mùa đông. Bản đồ chia 16 mảnh, chỉ mảnh có ô đổi mới được vẽ lại.
 - **Phe phái** là dòng họ. Mỗi dòng họ có màu áo riêng từ bảng 24 màu và một hoạ tiết trên áo trong sáu mẫu,
   nên phân biệt được cả khi mù màu. Bảng phe phái bên phải hiện thị phần, thủ lĩnh và sprite mẫu, bấm để bay tới.
 - **Thủ lĩnh** có cờ hiệu màu phe, to theo số người theo, kèm tên và biểu tượng mệnh lệnh đang ra.
