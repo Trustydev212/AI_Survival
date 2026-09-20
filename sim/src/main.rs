@@ -32,6 +32,9 @@ struct Outcome {
     lived_soil: f32,
     obedience: f32,
     order: String,
+    custom: String,
+    breed_rate: f32,
+    swing: f32,
     settled: f32,
     top_leader: String,
     events: usize,
@@ -64,8 +67,8 @@ fn main() {
     summarize(&sim);
     println!("\nOutcome: {} after {} ticks. Peak pop {}, final pop {}, {} innovations, {:.1} known per head,",
         o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known);
-    println!("soil {:.0}% overall and {:.0}% where people live, {:.0}% of orders obeyed (mostly {}), era {} (peak {}).",
-        o.soil * 100.0, o.lived_soil * 100.0, o.obedience * 100.0, o.order, stats::ERA_NAMES[o.final_level], stats::ERA_NAMES[o.peak_level]);
+    println!("soil {:.0}% overall and {:.0}% where people live, {:.0}% of orders obeyed (mostly {}), custom {}, {:.1} births per 1000 fertile ticks, swing x{:.1}, era {} (peak {}).",
+        o.soil * 100.0, o.lived_soil * 100.0, o.obedience * 100.0, o.order, o.custom, o.breed_rate, o.swing, stats::ERA_NAMES[o.final_level], stats::ERA_NAMES[o.peak_level]);
 }
 
 /// Run one world to its end. Returns the outcome and the finished sim for summaries.
@@ -97,13 +100,14 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
             let m = stats::compute(
                 t, sim.world.season(t), sim.world.climate, &sim.agents, sim.world.total_food(), sim.world.soil_health(),
                 sim.regions.inhabited_soil(&sim.agents), sim.innovations.len(), sim.world.cultivated_cells(),
-                sim.settled_share(), sim.order_mix(), window,
+                sim.settled_share(), sim.order_mix(), sim.custom_mix(), window,
             );
             if !cfg.quiet {
                 stats::print_row(&m);
             }
             stats::csv_row(&mut csv, &m).unwrap();
-            sim.events.check_window(&m, &sim.agents, &sim.innovations, cfg.log_every);
+            sim.events.check_window(&m, &sim.agents, &sim.innovations, cfg.log_every, &sim.defected);
+            sim.defected.clear();
             peak_level = peak_level.max(m.level);
             pops.push(m.pop);
             last = Some(m);
@@ -165,6 +169,9 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         lived_soil: m.lived_soil,
         obedience: m.obedience,
         order: stats::dominant_order(&m.order_mix),
+        custom: stats::dominant_order(&m.custom_mix),
+        breed_rate: m.breed_rate,
+        swing,
         settled: m.settled,
         top_leader,
         events: sim.events.events.len(),
@@ -190,6 +197,7 @@ fn experiment(cfg: &Config, a: u64, b: u64) {
                 let mut c = cfg.clone();
                 c.seed = seeds[k];
                 c.quiet = true;
+                c.threads = 1;
                 let (o, _) = run_one(c);
                 eprintln!("  seed {:>4}: {:<26} {:>6} ticks, pop {:>4}, era {}", o.seed, o.label, o.ticks, o.final_pop, stats::ERA_NAMES[o.final_level]);
                 outcomes.lock().unwrap().push(o);
@@ -200,13 +208,13 @@ fn experiment(cfg: &Config, a: u64, b: u64) {
     outcomes.sort_by_key(|o| o.seed);
     let secs = start.elapsed().as_secs_f64();
 
-    println!("\n{:>5} {:<26} {:>6} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:<12} {:<9} {:<9} {}",
-        "seed", "outcome", "ticks", "peak", "final", "innov", "known", "soil%", "lsoil", "stay%", "obey", "order", "era", "peak era", "greatest leader");
+    println!("\n{:>5} {:<26} {:>6} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:<12} {:<12} {:>5} {:>5} {:<8} {}",
+        "seed", "outcome", "ticks", "peak", "final", "innov", "known", "soil%", "lsoil", "stay%", "obey", "order", "custom", "breed", "swing", "era", "greatest leader");
     for o in &outcomes {
-        println!("{:>5} {:<26} {:>6} {:>5} {:>5} {:>5} {:>5.1} {:>5.0} {:>5.0} {:>5.0} {:>5.2} {:<12} {:<9} {:<9} {}",
+        println!("{:>5} {:<26} {:>6} {:>5} {:>5} {:>5} {:>5.1} {:>5.0} {:>5.0} {:>5.0} {:>5.2} {:<12} {:<12} {:>5.1} {:>5.1} {:<8} {}",
             o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil * 100.0,
-            o.lived_soil * 100.0, o.settled * 100.0, o.obedience, o.order,
-            stats::ERA_NAMES[o.final_level], stats::ERA_NAMES[o.peak_level], o.top_leader);
+            o.lived_soil * 100.0, o.settled * 100.0, o.obedience, o.order, o.custom, o.breed_rate, o.swing,
+            stats::ERA_NAMES[o.final_level], o.top_leader);
     }
     let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
     for o in &outcomes {
@@ -217,9 +225,9 @@ fn experiment(cfg: &Config, a: u64, b: u64) {
 
     let path = format!("{}/experiment_{}_{}.csv", cfg.out_dir, a, b);
     let mut f = BufWriter::new(std::fs::File::create(&path).expect("create experiment csv"));
-    writeln!(f, "seed,outcome,ticks,peak_pop,final_pop,innovations,mean_known,soil_health,lived_soil,settled_share,obedience,dominant_order,final_level,peak_level,greatest_leader,events").unwrap();
+    writeln!(f, "seed,outcome,ticks,peak_pop,final_pop,innovations,mean_known,soil_health,lived_soil,settled_share,obedience,dominant_order,dominant_custom,breed_rate,swing,final_level,peak_level,greatest_leader,events").unwrap();
     for o in &outcomes {
-        writeln!(f, "{},{},{},{},{},{},{:.3},{:.4},{:.4},{:.4},{:.4},{},{},{},{},{}", o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil, o.lived_soil, o.settled, o.obedience, o.order, o.final_level, o.peak_level, o.top_leader, o.events).unwrap();
+        writeln!(f, "{},{},{},{},{},{},{:.3},{:.4},{:.4},{:.4},{:.4},{},{},{:.4},{:.3},{},{},{},{}", o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil, o.lived_soil, o.settled, o.obedience, o.order, o.custom, o.breed_rate, o.swing, o.final_level, o.peak_level, o.top_leader, o.events).unwrap();
     }
     println!("written to {path}");
 }
@@ -268,7 +276,7 @@ fn summarize(sim: &sim::Sim) {
         println!("  {:<10} lineage {:>3}  {:>3} followers at tick {}", agent::name_of(*name), lineage, peak, tick);
     }
 
-    let noisy = ["famine", "war", "plague toll", "raids", "drought", "a year of plenty", "plague:", "flood", "wildfire", "bounty", "harsh year", "leader ", "innovation:", "lineage "];
+    let noisy = ["famine", "war", "plague toll", "raids", "drought", "a year of plenty", "plague:", "flood", "wildfire", "bounty", "harsh year", "leader ", "innovation:", "lineage ", "rivalry:"];
     println!("\nHistory ({} events):", sim.events.events.len());
     for e in sim.events.events.iter().filter(|e| !noisy.iter().any(|p| e.text.starts_with(p))) {
         println!("  tick {:>6}: {}", e.tick, e.text);

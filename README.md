@@ -25,8 +25,10 @@ Một run kết thúc sớm nếu tuyệt chủng. Kết cục được phân lo
 một phần tư giai đoạn tốt nhất), `boom and bust` (dao động trên bốn lần ở cuối run), `fallen` (tụt thời đại),
 `surviving`, `flourishing`, và biến thể `on dying land` khi đất đã cạn quá nửa.
 
-1000 agent, 20.000 tick chạy khoảng 25 giây trên một nhân CPU (khoảng 800 tick/giây,
-lúc cao điểm hơn 3000 agent). Không phụ thuộc crate ngoài.
+Không phụ thuộc crate ngoài. Phần cảm nhận và tiếp xúc chạy song song trên mọi nhân bằng
+`--threads N`, chia agent thành khối cố định 256 với RNG riêng từng khối, nên kết quả giống hệt
+từng byte dù chạy bao nhiêu luồng. Một thế giới 20.000 tick với đỉnh 5.500 agent mất khoảng 50 giây
+trên 4 nhân. Không còn trần dân số: đất là giới hạn duy nhất (`--max-agents 0`, mặc định).
 
 Kết quả ghi vào `out/`:
 
@@ -120,6 +122,31 @@ và nó nhìn thấy lệnh đó dưới dạng input. Tuân lệnh làm tăng g
 thủ lĩnh mất uy tín. Vì vậy thủ lĩnh ra lệnh sai sẽ mất người theo. Tỉ lệ tuân lệnh của cả xã hội là một
 chỉ số được đo, và khi một loại lệnh chiếm quá nửa với tỉ lệ tuân trên 40% thì sử ký ghi nhận một **tập quán**
 đã hình thành, ví dụ "tập quán ở lại" hay "tập quán kiềm chế".
+
+## Tập quán: lệnh sống lâu hơn người ra lệnh
+
+Một mệnh lệnh được tuân đi tuân lại sẽ thành **tập quán** của người tuân: agent giữ nó trong đầu với một
+độ bền, và khi không có thủ lĩnh nào trong tầm nhìn thì tập quán lên tiếng thay, với đúng các phần thưởng
+của mệnh lệnh đó. Tập quán lan giữa họ hàng như meme, người giữ chắc truyền cho người giữ lỏng. Cãi lại
+tập quán của chính mình làm nó mòn, và nó phai dần theo thời gian nếu không được củng cố. Vì vậy một
+xã hội có thể giữ thói quen kiềm chế hay ở lại sau khi thủ lĩnh đã chết. Sử ký ghi khi một tập quán được
+trên 30% dân số giữ mà không cần thủ lĩnh.
+
+## Xung đột giữa thủ lĩnh
+
+Người theo so sánh thủ lĩnh hiện tại với ứng viên tốt nhất trong tầm nhìn, và chỉ đổi phe khi ứng viên hơn
+một biên độ phụ thuộc gắn bó của chính họ, nên các băng không lật cùng lúc. Mỗi người **đào ngũ** làm
+thủ lĩnh cũ mất uy tín và thủ lĩnh mới được một nửa số đó. Một thủ lĩnh có tên đi theo thủ lĩnh khác là
+**sáp nhập**, kéo theo cả băng. Lệnh đột kích chỉ được coi là tuân khi đánh người ngoài dòng họ, nên
+chiến tranh do thủ lĩnh phát động là chiến tranh giữa các nhóm, không phải nội chiến. Sử ký ghi các đợt
+đổi phe trên 15 người và các băng trên 10 người sáp nhập.
+
+## Bùng-vỡ và kiềm chế
+
+Không có trần dân số nữa nên bùng-vỡ là kết cục tự nhiên: dân số bùng lên trong năm được mùa rồi chết
+đói khi mùa đông tới. Chỉ số **breed** đo số ca sinh trên 1.000 lượt agent đủ năng lượng để sinh, và
+**swing** đo dân số cao nhất chia thấp nhất ở phần ba cuối run. Câu hỏi để thí nghiệm là xã hội có tiến hoá
+ra cách tự hãm sinh sản khi đông không, vì não nhìn thấy mật độ cả cục bộ lẫn theo vùng.
 
 ## Học tập, rèn luyện, lãnh đạo
 
@@ -256,8 +283,6 @@ sim/src/
 
 ## Bước tiếp theo
 
-1. Bỏ trần dân số cứng 4.000 để sức chứa hoàn toàn do đất quyết định. Cần tối ưu tốc độ trước.
-2. Dao động bùng-vỡ đang là kết cục phổ biến. Cần xem xã hội có tiến hoá ra cách tự hãm sinh sản không.
-3. Tập quán lan truyền như meme, độc lập với phát minh và với thủ lĩnh đang sống.
-4. Xung đột giữa các thủ lĩnh: tranh giành người theo, liên minh, chia tách.
-5. Lớp hiển thị bằng Godot 4 đọc trạng thái từ lõi này, camera bám sử ký và thủ lĩnh.
+1. Song song hoá nốt phần hành động và trao đổi chất, hiện mới được hai phần ba thời gian mỗi tick.
+2. Kho chung của làng: thức ăn tích trữ chung do thủ lĩnh phân phối, để mùa đông không thành nạn đói.
+3. Lớp hiển thị bằng Godot 4 đọc trạng thái từ lõi này, camera bám sử ký, thủ lĩnh và tập quán.

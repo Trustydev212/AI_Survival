@@ -36,6 +36,12 @@ pub struct Window {
     pub orders: [u32; N_ORDER],
     pub obeyed: u32,
     pub defied: u32,
+    pub custom_acts: u32,
+    pub custom_spread: u32,
+    pub defections: u32,
+    pub mergers: u32,
+    pub fertile: u32,
+    pub restrained: u32,
 }
 
 pub struct Metrics {
@@ -65,6 +71,9 @@ pub struct Metrics {
     /// Share of orders obeyed this window, and what leaders are calling for.
     pub obedience: f32,
     pub order_mix: [f32; N_ORDER],
+    /// Share of agents holding each custom; and births per 1000 agent-ticks spent able to breed.
+    pub custom_mix: [f32; N_ORDER],
+    pub breed_rate: f32,
     /// Mean soil health of the regions agents actually live in.
     pub lived_soil: f32,
     pub level: usize,
@@ -87,7 +96,7 @@ pub fn level_of(mean_known: f32, settled: f32) -> usize {
 #[allow(clippy::too_many_arguments)]
 pub fn compute(
     tick: u64, season: f32, climate: f32, agents: &[Agent], food: f32, soil: f32, lived_soil: f32,
-    innovations: usize, cultivated: usize, settled: f32, order_mix: [f32; N_ORDER], w: Window,
+    innovations: usize, cultivated: usize, settled: f32, order_mix: [f32; N_ORDER], custom_mix: [f32; N_ORDER], w: Window,
 ) -> Metrics {
     let pop = agents.len();
     let n = pop.max(1) as f32;
@@ -113,6 +122,7 @@ pub fn compute(
     }
     let under = (w.obeyed + w.defied).max(1) as f32;
     let obedience = w.obeyed as f32 / under;
+    let breed_rate = 1000.0 * w.births as f32 / w.fertile.max(1) as f32;
     let leaders = agents.iter().filter(|a| a.is_leader).count();
     let max_followers = agents.iter().map(|a| a.followers).max().unwrap_or(0);
 
@@ -193,6 +203,8 @@ pub fn compute(
         max_followers,
         obedience,
         order_mix,
+        custom_mix,
+        breed_rate,
         lived_soil,
         level,
         era: ERA_NAMES[level],
@@ -202,10 +214,10 @@ pub fn compute(
 
 pub fn print_header() {
     println!(
-        "{:>7} {:>4} {:>5} {:>6} {:>4} {:>5} {:>4} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:<9} {:<8} {}",
+        "{:>7} {:>4} {:>5} {:>6} {:>4} {:>5} {:>4} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:<9} {:<12} {:>5} {:<8} {}",
         "tick", "clim", "pop", "energy", "soil", "lsoil", "lin", "gini", "born", "starv", "kill", "plag", "attk",
         "share", "strat", "innov", "known", "field", "stay", "fear", "angr", "joy", "bond", "skil", "lead", "obey",
-        "order", "era", "dominant strategies"
+        "order", "custom", "breed", "era", "dominant strategies"
     );
 }
 
@@ -219,12 +231,12 @@ pub fn print_row(m: &Metrics) {
         .map(|s| format!("[{:.0}% {}]", 100.0 * s.count as f32 / counted as f32, strategy::describe(&s.centroid)))
         .collect();
     println!(
-        "{:>7} {:>4.2} {:>5} {:>6.1} {:>4.2} {:>5.2} {:>4} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5} {:>5.1} {:>5} {:>4.0} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4} {:>4.2} {:<9} {:<8} {}",
+        "{:>7} {:>4.2} {:>5} {:>6.1} {:>4.2} {:>5.2} {:>4} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5} {:>5.1} {:>5} {:>4.0} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4} {:>4.2} {:<9} {:<12} {:>5.1} {:<8} {}",
         m.tick, m.climate, m.pop, m.mean_energy, m.soil, m.lived_soil, m.lineages, m.gini, m.w.births, m.w.starved,
         m.w.killed, m.w.plague_deaths, m.w.attacks, m.w.shares, m.strat.effective, m.innovations, m.mean_known,
         m.cultivated, m.settled * 100.0, m.emotion[0], m.emotion[1], m.emotion[2], m.emotion[3],
-        (m.skill[0] + m.skill[1] + m.skill[2]) / 3.0, m.leaders, m.obedience, dominant_order(&m.order_mix), m.era,
-        strats.join(" ")
+        (m.skill[0] + m.skill[1] + m.skill[2]) / 3.0, m.leaders, m.obedience, dominant_order(&m.order_mix),
+        dominant_order(&m.custom_mix), m.breed_rate, m.era, strats.join(" ")
     );
 }
 
@@ -250,7 +262,8 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "shares", "immigrants", "innovations", "mean_known", "discoveries", "learned", "cultivated_cells",
         "settled_share", "sick_share", "droughts", "outbreaks", "infections", "windfalls", "accidents",
         "fields_burned", "floods", "wildfires", "harsh_winters", "bounties", "imitations", "leaders",
-        "max_followers", "leader_deaths", "level",
+        "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
+        "breed_rate",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -258,6 +271,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
     c.extend(EMO_NAMES.iter().map(|e| format!("mean_{e}")));
     c.extend(SKILL_NAMES.iter().map(|e| format!("skill_{e}")));
     c.extend(Order::ALL.iter().map(|o| format!("order_{}", o.name())));
+    c.extend(Order::ALL.iter().map(|o| format!("custom_{}", o.name())));
     c.extend(Action::ALL.iter().map(|a| a.name().to_string()));
     c.push("era".to_string());
     writeln!(out, "{}", c.join(","))
@@ -306,6 +320,11 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     n(m.max_followers as f32);
     n(w.leader_deaths as f32);
     n(m.level as f32);
+    n(w.custom_acts as f32);
+    n(w.custom_spread as f32);
+    n(w.defections as f32);
+    n(w.mergers as f32);
+    n(m.breed_rate);
     for v in m.emotion {
         n(v);
     }
@@ -313,6 +332,9 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
         n(v);
     }
     for v in m.order_mix {
+        n(v);
+    }
+    for v in m.custom_mix {
         n(v);
     }
     for v in w.actions {

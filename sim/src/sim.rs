@@ -29,6 +29,8 @@ pub struct Sim {
     pub regions: RegionGrid,
     spatial: SpatialHash,
     followers: Vec<u16>,
+    /// Followers lost this window, by (old leader name, new leader name).
+    pub defected: std::collections::HashMap<(u32, u32), u32>,
     learned: Vec<(u32, u64)>,
     infected: Vec<u32>,
     apprentice: Vec<(u32, [f32; N_SKILL])>,
@@ -51,7 +53,7 @@ impl Sim {
             rng,
             world,
             regions,
-            agents: Vec::with_capacity(cfg.max_agents),
+            agents: Vec::with_capacity(cfg.agents * 4),
             tick: 0,
             window: Window::default(),
             events,
@@ -60,11 +62,12 @@ impl Sim {
             hall: std::collections::HashMap::new(),
             spatial,
             followers: Vec::new(),
+            defected: std::collections::HashMap::new(),
             learned: Vec::new(),
             infected: Vec::new(),
             apprentice: Vec::new(),
             imitations: Vec::new(),
-            decisions: Vec::with_capacity(cfg.max_agents),
+            decisions: Vec::with_capacity(cfg.agents * 4),
             next_lineage: 0,
             next_name: 0,
             cfg,
@@ -108,30 +111,13 @@ impl Sim {
     /// Place a coordinate inside the map, wrapping or clamping per config.
     #[inline]
     fn place(&self, v: f32, size: usize) -> f32 {
-        let s = size as f32;
-        if self.cfg.wrap {
-            let r = v.rem_euclid(s);
-            if r >= s { 0.0 } else { r }
-        } else {
-            v.clamp(0.0, s - 0.001)
-        }
+        Geo { wrap: self.cfg.wrap }.place(v, size)
     }
 
     /// Shortest signed delta from a to b along one axis.
     #[inline]
     fn delta(&self, a: f32, b: f32, size: usize) -> f32 {
-        let d = b - a;
-        if !self.cfg.wrap {
-            return d;
-        }
-        let s = size as f32;
-        if d > s * 0.5 {
-            d - s
-        } else if d < -s * 0.5 {
-            d + s
-        } else {
-            d
-        }
+        Geo { wrap: self.cfg.wrap }.delta(a, b, size)
     }
 
     fn new_lineage(&mut self) -> u32 {
@@ -174,6 +160,10 @@ impl Sim {
             order_dy: 0.0,
             under: None,
             obeyed: false,
+            custom: None,
+            custom_dx: 0.0,
+            custom_dy: 0.0,
+            custom_strength: 0.0,
         }
     }
 
@@ -291,177 +281,39 @@ impl Sim {
     }
 
     fn sense_and_think(&mut self, season: f32) {
+        let n = self.agents.len();
+        self.decisions.clear();
+        self.decisions.resize(n, Decision::default());
         let cfg = &self.cfg;
         let world = &self.world;
         let agents = &self.agents;
-        let vision2 = cfg.vision * cfg.vision;
-        self.decisions.clear();
-        for (i, a) in agents.iter().enumerate() {
-            // Nearest neighbour, crowd composition, and the most prestigious kin in sight.
-            let mut best_d2 = f32::MAX;
-            let mut nearest = u32::MAX;
-            let mut crowd = 0.0f32;
-            let mut kin = 0.0f32;
-            let mut foe = 0.0f32;
-            let mut sick_near = 0.0f32;
-            let own_score = a.prestige * (0.5 + a.genome.charisma());
-            let mut leader = NO_LEADER;
-            let mut leader_score = own_score.max(cfg.leader_min_prestige);
-            let prev_leader = a.leader;
-            let mut prev_score = 0.0f32;
-            self.spatial.for_each_near(a.x, a.y, |j| {
-                if j == i {
-                    return;
-                }
-                let o = &agents[j];
-                let dx = self.delta(a.x, o.x, cfg.width);
-                let dy = self.delta(a.y, o.y, cfg.height);
-                let d2 = dx * dx + dy * dy;
-                if d2 > vision2 {
-                    return;
-                }
-                crowd += 1.0;
-                if a.genome.kinship(&o.genome) >= cfg.kin_threshold {
-                    kin += 1.0;
-                    let score = o.prestige * (0.5 + o.genome.charisma());
-                    if j as u32 == prev_leader {
-                        prev_score = score;
-                    }
-                    if score > leader_score {
-                        leader_score = score;
-                        leader = j as u32;
-                    }
-                } else {
-                    foe += 1.0;
-                }
-                if o.sick > 0 {
-                    sick_near = 1.0;
-                }
-                if d2 < best_d2 {
-                    best_d2 = d2;
-                    nearest = j as u32;
-                }
-            });
-            // Loyalty: keep the current leader unless a rival is clearly better.
-            if prev_score > 0.0 && prev_score >= own_score.max(cfg.leader_min_prestige) && prev_score * 1.25 >= leader_score {
-                leader = prev_leader;
+        let spatial = &self.spatial;
+        let regions = &self.regions;
+        let threads = cfg.threads.max(1);
+        if threads == 1 || n < 2 * CHUNK {
+            for (i, d) in self.decisions.iter_mut().enumerate() {
+                *d = decide(i, cfg, world, agents, spatial, regions, season);
             }
-
-            // Food gradient from four sample points at vision/2.
-            let r = cfg.vision * 0.5;
-            let here = world.idx(a.x, a.y);
-            let sample = |x: f32, y: f32| world.food[world.idx(self.place(x, cfg.width), self.place(y, cfg.height))];
-            let gx = (sample(a.x + r, a.y) - sample(a.x - r, a.y)) / cfg.max_food;
-            let gy = (sample(a.x, a.y + r) - sample(a.x, a.y - r)) / cfg.max_food;
-
-            let mut input = [0.0f32; N_IN];
-            input[0] = a.energy / cfg.max_energy;
-            input[1] = a.age as f32 / cfg.max_age as f32;
-            input[2] = a.inventory / cfg.inv_cap;
-            input[3] = world.food[here] / cfg.max_food;
-            input[4] = gx;
-            input[5] = gy;
-            if nearest != u32::MAX {
-                let o = &agents[nearest as usize];
-                let d = best_d2.sqrt();
-                input[6] = 1.0;
-                input[7] = self.delta(a.x, o.x, cfg.width) / cfg.vision;
-                input[8] = self.delta(a.y, o.y, cfg.height) / cfg.vision;
-                input[9] = d / cfg.vision;
-                input[10] = a.genome.kinship(&o.genome);
-                input[11] = (o.energy - a.energy) / cfg.max_energy;
-                input[12] = o.inventory / cfg.inv_cap;
-            }
-            input[13] = (crowd / 10.0).min(2.0);
-            input[14] = (kin / 10.0).min(2.0);
-            input[15] = (foe / 10.0).min(2.0);
-            input[16] = season;
-            input[17] = if a.attacked_timer > 0 { 1.0 } else { 0.0 };
-            input[18] = world.fertility[here];
-            input[19] = 1.0;
-            // What I can do, summed from what I know.
-            input[20] = a.caps[E_GATHER];
-            input[21] = a.caps[E_FARM];
-            input[22] = a.caps[E_ATTACK];
-            input[23] = world.cultivation[here];
-            input[24] = a.emotion[FEAR];
-            input[25] = a.emotion[ANGER];
-            input[26] = a.emotion[JOY];
-            input[27] = a.emotion[BOND];
-            input[28..32].copy_from_slice(&a.memory);
-            if a.has_home {
-                input[32] = 1.0;
-                input[33] = (self.delta(a.x, a.home_x, cfg.width) / cfg.vision).clamp(-2.0, 2.0);
-                input[34] = (self.delta(a.y, a.home_y, cfg.height) / cfg.vision).clamp(-2.0, 2.0);
-            }
-            input[35] = if a.sick > 0 { 1.0 } else { 0.0 };
-            input[36] = sick_near;
-            input[37] = a.caps[E_DEFENSE];
-            input[38] = a.caps[E_METABOLISM];
-            input[39] = (a.known_count() as f32 / 10.0).min(2.0);
-            input[40] = world.climate - 1.0;
-            if leader != NO_LEADER {
-                let l = &agents[leader as usize];
-                input[41] = 1.0;
-                input[42] = self.delta(a.x, l.x, cfg.width) / cfg.vision;
-                input[43] = self.delta(a.y, l.y, cfg.height) / cfg.vision;
-                input[44] = if l.last_action == Action::Attack { 1.0 } else { 0.0 };
-                input[45] = if l.last_action == Action::Share { 1.0 } else { 0.0 };
-            }
-            input[46] = (a.prestige / 20.0).min(2.0);
-            input[47] = a.genome.charisma();
-            input[48] = if a.is_leader { 1.0 } else { 0.0 };
-            input[49] = a.skill[SK_GATHER];
-            input[50] = a.skill[SK_FIGHT];
-            input[51] = a.skill[SK_FARM];
-            input[52] = (a.followers as f32 / 10.0).min(2.0);
-            // The land beyond arm's reach: is this region tired, is anywhere better?
-            let r = self.regions.index(a.x, a.y);
-            input[53] = self.regions.soil[r];
-            input[54] = self.regions.food[r];
-            input[55] = self.regions.crowd[r];
-            input[56] = self.regions.best_dx[r];
-            input[57] = self.regions.best_dy[r];
-            input[58] = self.regions.best_gain[r];
-            // What I have been told to do, by my leader or, if I lead, by myself.
-            // An order only carries from someone the group already recognises as a leader.
-            let (under, under_dx, under_dy) = if cfg.no_orders {
-                (None, 0.0, 0.0)
-            } else if leader != NO_LEADER && agents[leader as usize].is_leader {
-                let l = &agents[leader as usize];
-                (Some(l.order), l.order_dx, l.order_dy)
-            } else if a.is_leader {
-                (Some(a.order), a.order_dx, a.order_dy)
-            } else {
-                (None, 0.0, 0.0)
-            };
-            if let Some(o) = under {
-                input[59 + o as usize] = 1.0;
-                input[64] = under_dx;
-                input[65] = under_dy;
-            }
-
-            let mut t = a.genome.think(&input);
-            // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
-            if t.mx * t.mx + t.my * t.my < 0.09 {
-                t.mx = 0.0;
-                t.my = 0.0;
-            }
-            self.decisions.push(Decision {
-                mx: t.mx,
-                my: t.my,
-                action: t.action,
-                target: nearest,
-                memory: t.memory,
-                leader,
-                order: t.order,
-                odx: t.odx,
-                ody: t.ody,
-                under,
-                under_dx,
-                under_dy,
-            });
+            return;
         }
+        // Fixed-size chunks handed out to a pool: the result never depends on thread count.
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let slots: Vec<std::sync::Mutex<&mut [Decision]>> =
+            self.decisions.chunks_mut(CHUNK).map(std::sync::Mutex::new).collect();
+        std::thread::scope(|scope| {
+            for _ in 0..threads {
+                scope.spawn(|| loop {
+                    let c = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if c >= slots.len() {
+                        break;
+                    }
+                    let mut slot = slots[c].lock().unwrap();
+                    for (k, d) in slot.iter_mut().enumerate() {
+                        *d = decide(c * CHUNK + k, cfg, world, agents, spatial, regions, season);
+                    }
+                });
+            }
+        });
     }
 
     /// Who leads whom this tick: a follower's chosen leader gets a follower; enough
@@ -470,10 +322,38 @@ impl Sim {
         let n = self.decisions.len();
         self.followers.clear();
         self.followers.resize(n, 0);
+        let mut moves: Vec<(usize, u32, u32)> = Vec::new(); // (agent, old leader, new leader)
         for (i, d) in self.decisions.iter().enumerate() {
-            self.agents[i].leader = d.leader;
+            let old = self.agents[i].leader;
             if d.leader != NO_LEADER {
                 self.followers[d.leader as usize] = self.followers[d.leader as usize].saturating_add(1);
+                if old != NO_LEADER && old != d.leader && (old as usize) < n {
+                    moves.push((i, old, d.leader));
+                }
+            }
+            self.agents[i].leader = d.leader;
+        }
+        // Defections and mergers: people change leaders, and whole bands change hands.
+        for (i, old, new) in moves {
+            let (old_ok, new_ok) = (self.agents[old as usize].is_leader, self.agents[new as usize].is_leader);
+            if !(old_ok && new_ok) {
+                continue;
+            }
+            let was_leader = self.agents[i].is_leader && self.agents[i].name != 0;
+            let (old_name, new_name) = (self.agents[old as usize].name, self.agents[new as usize].name);
+            self.agents[old as usize].prestige -= self.cfg.defection_cost;
+            self.agents[new as usize].prestige += self.cfg.defection_cost * 0.5;
+            self.window.defections += 1;
+            if old_name != 0 && new_name != 0 {
+                *self.defected.entry((old_name, new_name)).or_default() += 1;
+            }
+            if was_leader && new_name != 0 {
+                self.window.mergers += 1;
+                let me = self.agents[i].name;
+                let f = self.agents[i].followers;
+                if f >= 10 {
+                    self.events.fire(self.tick, "", format!("{} and {} followers went over to {}", name_of(me), f, name_of(new_name)));
+                }
             }
         }
         let min = self.cfg.leader_min_followers;
@@ -521,10 +401,15 @@ impl Sim {
             let d = self.decisions[i];
             self.window.actions[d.action as usize] += 1;
             // Obedience is a choice, made by the same brain that chose the action.
-            let obeyed = match d.under {
+            // A raid is only a raid when it falls on outsiders; striking kin is not obedience.
+            let mut obeyed = match d.under {
                 Some(o) => o.obeyed(d.action, d.mx, d.my, d.under_dx, d.under_dy),
                 None => false,
             };
+            if obeyed && d.under == Some(Order::Raid) {
+                obeyed = d.target != u32::MAX
+                    && self.agents[i].genome.kinship(&self.agents[d.target as usize].genome) < self.cfg.kin_threshold;
+            }
             if let Some(o) = d.under {
                 self.window.orders[o as usize] += 1;
                 if obeyed {
@@ -532,8 +417,19 @@ impl Sim {
                 } else {
                     self.window.defied += 1;
                 }
+                if !d.from_leader {
+                    self.window.custom_acts += 1;
+                }
+            }
+            // Restraint: could have bred, chose not to.
+            if self.agents[i].energy >= self.cfg.repro_threshold {
+                self.window.fertile += 1;
+                if d.action != Action::Reproduce {
+                    self.window.restrained += 1;
+                }
             }
             {
+                let cfg = &self.cfg;
                 let a = &mut self.agents[i];
                 a.last_action = d.action;
                 a.memory = d.memory;
@@ -551,9 +447,40 @@ impl Sim {
                         a.feel(BOND, -0.03);
                     }
                 }
+                // Internalisation: an order obeyed again and again becomes a custom,
+                // one that will speak even when no leader is left to give it.
+                if let (Some(o), true) = (d.under, d.from_leader) {
+                    if obeyed {
+                        if a.custom == Some(o) {
+                            a.custom_strength = (a.custom_strength + cfg.custom_gain).min(1.0);
+                            a.custom_dx = d.under_dx;
+                            a.custom_dy = d.under_dy;
+                        } else {
+                            a.custom_strength -= cfg.custom_gain;
+                            if a.custom_strength <= 0.0 {
+                                a.custom = Some(o);
+                                a.custom_strength = cfg.custom_gain;
+                                a.custom_dx = d.under_dx;
+                                a.custom_dy = d.under_dy;
+                            }
+                        }
+                    } else if a.custom == Some(o) {
+                        a.custom_strength -= 2.0 * cfg.custom_gain;
+                    }
+                } else if let (Some(o), false, false) = (d.under, d.from_leader, obeyed) {
+                    // Breaking with one's own custom weakens it.
+                    if a.custom == Some(o) {
+                        a.custom_strength -= cfg.custom_gain;
+                    }
+                }
+                a.custom_strength *= cfg.custom_decay;
+                if a.custom_strength <= 0.0 {
+                    a.custom = None;
+                    a.custom_strength = 0.0;
+                }
             }
             // A leader whose people ignore it loses standing.
-            if !obeyed && d.leader != NO_LEADER {
+            if !obeyed && d.from_leader && d.leader != NO_LEADER {
                 if let Some(l) = self.agents.get_mut(d.leader as usize) {
                     l.prestige -= self.cfg.defiance_cost;
                 }
@@ -599,7 +526,8 @@ impl Sim {
                 }
                 Action::Reproduce => {
                     let cfg = &self.cfg;
-                    if self.agents[i].energy >= cfg.repro_threshold && n + births.len() < cfg.max_agents {
+                    let room = cfg.max_agents == 0 || n + births.len() < cfg.max_agents;
+                    if self.agents[i].energy >= cfg.repro_threshold && room {
                         let child_genome = self.agents[i].genome.mutated(&mut self.rng, cfg.p_mut, cfg.sigma);
                         let (px, py) = (self.agents[i].x, self.agents[i].y);
                         let (nx, ny) = (self.rng.normal(), self.rng.normal());
@@ -765,92 +693,68 @@ impl Sim {
 
     /// Everything that passes between neighbours: knowledge, skill, habits and disease.
     fn contact(&mut self) {
-        let cfg = &self.cfg;
         let n = self.decisions.len(); // agents present in the spatial hash this tick
-        let range2 = cfg.learn_range * cfg.learn_range;
         let all_known: u64 = if self.innovations.len() >= 64 { u64::MAX } else { (1u64 << self.innovations.len()) - 1 };
         self.learned.clear();
         self.infected.clear();
         self.apprentice.clear();
         self.imitations.clear();
-        let mut rng = self.rng.clone();
-        for i in 0..n {
-            let a = &self.agents[i];
-            let can_learn = a.known != all_known;
-            let can_catch = a.sick == 0 && a.immune == 0;
-            let wealth = a.energy + a.inventory;
-            let resist = (1.0 + a.caps[E_RESIST]).max(0.2);
-            let mut gained = 0u64;
-            let mut caught = false;
-            let mut skills = [0.0f32; N_SKILL];
-            let mut model = NO_LEADER;
-            let agents = &self.agents;
-            self.spatial.for_each_near(a.x, a.y, |j| {
-                if j == i || j >= n {
-                    return;
-                }
-                let o = &agents[j];
-                let missing = if can_learn { o.known & !a.known & !gained } else { 0 };
-                let contagious = can_catch && !caught && o.sick > 0;
-                let dx = self.delta(a.x, o.x, cfg.width);
-                let dy = self.delta(a.y, o.y, cfg.height);
-                if dx * dx + dy * dy > range2 {
-                    return;
-                }
-                let kin = a.genome.kinship(&o.genome) >= cfg.kin_threshold;
-                let is_leader = a.leader == j as u32;
-                if kin {
-                    // Apprenticeship: watching a more skilled relative rubs off.
-                    for k in 0..N_SKILL {
-                        if o.skill[k] > a.skill[k] + 0.1 {
-                            skills[k] += cfg.skill_gain * 0.25;
+        let cfg = &self.cfg;
+        let agents = &self.agents;
+        let spatial = &self.spatial;
+        let seed = cfg.seed ^ self.tick.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        let chunks = n.div_ceil(CHUNK);
+        let threads = cfg.threads.max(1);
+        let mut results: Vec<Vec<(u32, Contact)>> = Vec::with_capacity(chunks);
+        if threads == 1 || n < 2 * CHUNK {
+            for c in 0..chunks {
+                results.push(contact_chunk(c, n, seed, all_known, cfg, agents, spatial));
+            }
+        } else {
+            let slots: Vec<std::sync::Mutex<Option<Vec<(u32, Contact)>>>> = (0..chunks).map(|_| std::sync::Mutex::new(None)).collect();
+            let next = std::sync::atomic::AtomicUsize::new(0);
+            std::thread::scope(|scope| {
+                for _ in 0..threads {
+                    scope.spawn(|| loop {
+                        let c = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if c >= chunks {
+                            break;
                         }
-                    }
-                    // Imitation: copy a little of a clearly more successful relative's mind.
-                    if model == NO_LEADER && o.energy + o.inventory > 1.5 * wealth {
-                        let p = if is_leader { cfg.p_imitate * 3.0 } else { cfg.p_imitate };
-                        if rng.f32() < p {
-                            model = j as u32;
-                        }
-                    }
-                }
-                if missing == 0 && !contagious {
-                    return;
-                }
-                if missing != 0 {
-                    let mut p = if kin { cfg.p_learn } else { cfg.p_learn * 0.25 };
-                    p *= 0.5 + a.emotion[BOND];
-                    p *= (1.0 + a.caps[E_TEACH] + o.caps[E_TEACH]).max(0.2);
-                    if is_leader {
-                        p *= 2.0;
-                    }
-                    let mut bits = missing;
-                    while bits != 0 {
-                        let b = bits & bits.wrapping_neg();
-                        bits &= bits - 1;
-                        if rng.f32() < p {
-                            gained |= b;
-                        }
-                    }
-                }
-                if contagious && rng.f32() < cfg.p_infect / resist {
-                    caught = true;
+                        let r = contact_chunk(c, n, seed, all_known, cfg, agents, spatial);
+                        *slots[c].lock().unwrap() = Some(r);
+                    });
                 }
             });
-            if gained != 0 {
-                self.learned.push((i as u32, gained));
-            }
-            if caught {
-                self.infected.push(i as u32);
-            }
-            if skills.iter().any(|g| *g > 0.0) {
-                self.apprentice.push((i as u32, skills));
-            }
-            if model != NO_LEADER {
-                self.imitations.push((i as u32, model));
+            for slot in slots {
+                results.push(slot.into_inner().unwrap().unwrap_or_default());
             }
         }
-        self.rng = rng;
+        for (i, r) in results.into_iter().flatten() {
+            if r.gained != 0 {
+                self.learned.push((i, r.gained));
+            }
+            if r.caught {
+                self.infected.push(i);
+            }
+            if r.skills.iter().any(|g| *g > 0.0) {
+                self.apprentice.push((i, r.skills));
+            }
+            if r.model != NO_LEADER {
+                self.imitations.push((i, r.model));
+            }
+            if let Some((o, dx, dy)) = r.custom {
+                let a = &mut self.agents[i as usize];
+                if a.custom == Some(o) {
+                    a.custom_strength = (a.custom_strength + 0.05).min(1.0);
+                } else {
+                    a.custom = Some(o);
+                    a.custom_strength = 0.1;
+                    a.custom_dx = dx;
+                    a.custom_dy = dy;
+                }
+                self.window.custom_spread += 1;
+            }
+        }
         for &(i, bits) in &self.learned {
             let a = &mut self.agents[i as usize];
             a.known |= bits;
@@ -1038,6 +942,18 @@ impl Sim {
         mix
     }
 
+    /// Share of agents holding each custom firmly enough for it to speak.
+    pub fn custom_mix(&self) -> [f32; N_ORDER] {
+        let mut mix = [0.0f32; N_ORDER];
+        let n = self.agents.len().max(1) as f32;
+        for a in &self.agents {
+            if let (Some(c), true) = (a.custom, a.custom_strength >= self.cfg.custom_min) {
+                mix[c as usize] += 1.0 / n;
+            }
+        }
+        mix
+    }
+
     pub fn settled_share(&self) -> f32 {
         let n = self.agents.len().max(1) as f32;
         self.agents.iter().filter(|a| a.still >= self.cfg.settle_ticks).count() as f32 / n
@@ -1046,4 +962,314 @@ impl Sim {
     pub fn take_window(&mut self) -> Window {
         std::mem::take(&mut self.window)
     }
+}
+
+/// Agents are handled in fixed chunks so parallel runs stay deterministic.
+const CHUNK: usize = 256;
+
+/// Map geometry shared by the free per-agent functions.
+#[derive(Clone, Copy)]
+struct Geo {
+    wrap: bool,
+}
+
+impl Geo {
+    #[inline]
+    fn place(self, v: f32, size: usize) -> f32 {
+        let s = size as f32;
+        if self.wrap {
+            let r = v.rem_euclid(s);
+            if r >= s { 0.0 } else { r }
+        } else {
+            v.clamp(0.0, s - 0.001)
+        }
+    }
+
+    #[inline]
+    fn delta(self, a: f32, b: f32, size: usize) -> f32 {
+        let d = b - a;
+        if !self.wrap {
+            return d;
+        }
+        let s = size as f32;
+        if d > s * 0.5 {
+            d - s
+        } else if d < -s * 0.5 {
+            d + s
+        } else {
+            d
+        }
+    }
+}
+
+/// One agent senses its surroundings and its brain decides. Pure: reads the world, writes nothing.
+fn decide(
+    i: usize, cfg: &Config, world: &World, agents: &[Agent], spatial: &SpatialHash, regions: &RegionGrid, season: f32,
+) -> Decision {
+    let geo = Geo { wrap: cfg.wrap };
+    let vision2 = cfg.vision * cfg.vision;
+    let a = &agents[i];
+        // Nearest neighbour, crowd composition, and the most prestigious kin in sight.
+        let mut best_d2 = f32::MAX;
+        let mut nearest = u32::MAX;
+        let mut crowd = 0.0f32;
+        let mut kin = 0.0f32;
+        let mut foe = 0.0f32;
+        let mut sick_near = 0.0f32;
+        let own_score = a.prestige * (0.5 + a.genome.charisma());
+        let mut leader = NO_LEADER;
+        let mut leader_score = own_score.max(cfg.leader_min_prestige);
+        let prev_leader = a.leader;
+        let mut prev_score = 0.0f32;
+        spatial.for_each_near(a.x, a.y, |j| {
+            if j == i {
+                return;
+            }
+            let o = &agents[j];
+            let dx = geo.delta(a.x, o.x, cfg.width);
+            let dy = geo.delta(a.y, o.y, cfg.height);
+            let d2 = dx * dx + dy * dy;
+            if d2 > vision2 {
+                return;
+            }
+            crowd += 1.0;
+            if a.genome.kinship(&o.genome) >= cfg.kin_threshold {
+                kin += 1.0;
+                let score = o.prestige * (0.5 + o.genome.charisma());
+                if j as u32 == prev_leader {
+                    prev_score = score;
+                }
+                if score > leader_score {
+                    leader_score = score;
+                    leader = j as u32;
+                }
+            } else {
+                foe += 1.0;
+            }
+            if o.sick > 0 {
+                sick_near = 1.0;
+            }
+            if d2 < best_d2 {
+                best_d2 = d2;
+                nearest = j as u32;
+            }
+        });
+        // Loyalty: keep the current leader unless a rival is clearly better. How much
+        // better depends on the follower's attachment, so bands do not flip all at once.
+        let margin = 1.1 + 0.5 * a.emotion[BOND];
+        if prev_score > 0.0 && prev_score >= own_score.max(cfg.leader_min_prestige) && prev_score * margin >= leader_score {
+            leader = prev_leader;
+        }
+
+        // Food gradient from four sample points at vision/2.
+        let r = cfg.vision * 0.5;
+        let here = world.idx(a.x, a.y);
+        let sample = |x: f32, y: f32| world.food[world.idx(geo.place(x, cfg.width), geo.place(y, cfg.height))];
+        let gx = (sample(a.x + r, a.y) - sample(a.x - r, a.y)) / cfg.max_food;
+        let gy = (sample(a.x, a.y + r) - sample(a.x, a.y - r)) / cfg.max_food;
+
+        let mut input = [0.0f32; N_IN];
+        input[0] = a.energy / cfg.max_energy;
+        input[1] = a.age as f32 / cfg.max_age as f32;
+        input[2] = a.inventory / cfg.inv_cap;
+        input[3] = world.food[here] / cfg.max_food;
+        input[4] = gx;
+        input[5] = gy;
+        if nearest != u32::MAX {
+            let o = &agents[nearest as usize];
+            let d = best_d2.sqrt();
+            input[6] = 1.0;
+            input[7] = geo.delta(a.x, o.x, cfg.width) / cfg.vision;
+            input[8] = geo.delta(a.y, o.y, cfg.height) / cfg.vision;
+            input[9] = d / cfg.vision;
+            input[10] = a.genome.kinship(&o.genome);
+            input[11] = (o.energy - a.energy) / cfg.max_energy;
+            input[12] = o.inventory / cfg.inv_cap;
+        }
+        input[13] = (crowd / 10.0).min(2.0);
+        input[14] = (kin / 10.0).min(2.0);
+        input[15] = (foe / 10.0).min(2.0);
+        input[16] = season;
+        input[17] = if a.attacked_timer > 0 { 1.0 } else { 0.0 };
+        input[18] = world.fertility[here];
+        input[19] = 1.0;
+        // What I can do, summed from what I know.
+        input[20] = a.caps[E_GATHER];
+        input[21] = a.caps[E_FARM];
+        input[22] = a.caps[E_ATTACK];
+        input[23] = world.cultivation[here];
+        input[24] = a.emotion[FEAR];
+        input[25] = a.emotion[ANGER];
+        input[26] = a.emotion[JOY];
+        input[27] = a.emotion[BOND];
+        input[28..32].copy_from_slice(&a.memory);
+        if a.has_home {
+            input[32] = 1.0;
+            input[33] = (geo.delta(a.x, a.home_x, cfg.width) / cfg.vision).clamp(-2.0, 2.0);
+            input[34] = (geo.delta(a.y, a.home_y, cfg.height) / cfg.vision).clamp(-2.0, 2.0);
+        }
+        input[35] = if a.sick > 0 { 1.0 } else { 0.0 };
+        input[36] = sick_near;
+        input[37] = a.caps[E_DEFENSE];
+        input[38] = a.caps[E_METABOLISM];
+        input[39] = (a.known_count() as f32 / 10.0).min(2.0);
+        input[40] = world.climate - 1.0;
+        if leader != NO_LEADER {
+            let l = &agents[leader as usize];
+            input[41] = 1.0;
+            input[42] = geo.delta(a.x, l.x, cfg.width) / cfg.vision;
+            input[43] = geo.delta(a.y, l.y, cfg.height) / cfg.vision;
+            input[44] = if l.last_action == Action::Attack { 1.0 } else { 0.0 };
+            input[45] = if l.last_action == Action::Share { 1.0 } else { 0.0 };
+        }
+        input[46] = (a.prestige / 20.0).min(2.0);
+        input[47] = a.genome.charisma();
+        input[48] = if a.is_leader { 1.0 } else { 0.0 };
+        input[49] = a.skill[SK_GATHER];
+        input[50] = a.skill[SK_FIGHT];
+        input[51] = a.skill[SK_FARM];
+        input[52] = (a.followers as f32 / 10.0).min(2.0);
+        // The land beyond arm's reach: is this region tired, is anywhere better?
+        let r = regions.index(a.x, a.y);
+        input[53] = regions.soil[r];
+        input[54] = regions.food[r];
+        input[55] = regions.crowd[r];
+        input[56] = regions.best_dx[r];
+        input[57] = regions.best_dy[r];
+        input[58] = regions.best_gain[r];
+        // What I have been told to do, by my leader or, if I lead, by myself.
+        // An order only carries from someone the group already recognises as a leader.
+        // With no leader in sight, a custom the agent has internalised speaks instead.
+        let (under, under_dx, under_dy, from_leader) = if cfg.no_orders {
+            (None, 0.0, 0.0, false)
+        } else if leader != NO_LEADER && agents[leader as usize].is_leader {
+            let l = &agents[leader as usize];
+            (Some(l.order), l.order_dx, l.order_dy, true)
+        } else if a.is_leader {
+            (Some(a.order), a.order_dx, a.order_dy, true)
+        } else if let (Some(c), true) = (a.custom, a.custom_strength >= cfg.custom_min) {
+            (Some(c), a.custom_dx, a.custom_dy, false)
+        } else {
+            (None, 0.0, 0.0, false)
+        };
+        if let Some(o) = under {
+            input[59 + o as usize] = 1.0;
+            input[64] = under_dx;
+            input[65] = under_dy;
+        }
+
+        let mut t = a.genome.think(&input);
+        // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
+        if t.mx * t.mx + t.my * t.my < 0.09 {
+            t.mx = 0.0;
+            t.my = 0.0;
+        }
+    Decision {
+        mx: t.mx,
+        my: t.my,
+        action: t.action,
+        target: nearest,
+        memory: t.memory,
+        leader,
+        order: t.order,
+        odx: t.odx,
+        ody: t.ody,
+        under,
+        under_dx,
+        under_dy,
+        from_leader,
+    }
+}
+
+/// What one agent picked up from its neighbours this tick.
+#[derive(Clone, Copy, Default)]
+struct Contact {
+    gained: u64,
+    caught: bool,
+    skills: [f32; N_SKILL],
+    model: u32,
+    custom: Option<(Order, f32, f32)>,
+}
+
+/// Contacts for one fixed chunk of agents, with a chunk-local RNG so the outcome
+/// is the same whatever the thread count.
+fn contact_chunk(
+    c: usize, n: usize, seed: u64, all_known: u64, cfg: &Config, agents: &[Agent], spatial: &SpatialHash,
+) -> Vec<(u32, Contact)> {
+    let geo = Geo { wrap: cfg.wrap };
+    let range2 = cfg.learn_range * cfg.learn_range;
+    let mut rng = Rng::new(seed ^ (c as u64 + 1).wrapping_mul(0xD6E8_FEB8_6659_FD93));
+    let mut out = Vec::new();
+    for i in c * CHUNK..((c + 1) * CHUNK).min(n) {
+        let a = &agents[i];
+        let can_learn = a.known != all_known;
+        let can_catch = a.sick == 0 && a.immune == 0;
+        let wealth = a.energy + a.inventory;
+        let resist = (1.0 + a.caps[E_RESIST]).max(0.2);
+        let mut gained = 0u64;
+        let mut caught = false;
+        let mut skills = [0.0f32; N_SKILL];
+        let mut model = NO_LEADER;
+        let mut custom: Option<(Order, f32, f32)> = None;
+        spatial.for_each_near(a.x, a.y, |j| {
+            if j == i || j >= n {
+                return;
+            }
+            let o = &agents[j];
+            let missing = if can_learn { o.known & !a.known & !gained } else { 0 };
+            let contagious = can_catch && !caught && o.sick > 0;
+            let dx = geo.delta(a.x, o.x, cfg.width);
+            let dy = geo.delta(a.y, o.y, cfg.height);
+            if dx * dx + dy * dy > range2 {
+                return;
+            }
+            let kin = a.genome.kinship(&o.genome) >= cfg.kin_threshold;
+            let is_leader = a.leader == j as u32;
+            if kin {
+                // Apprenticeship: watching a more skilled relative rubs off.
+                for k in 0..N_SKILL {
+                    if o.skill[k] > a.skill[k] + 0.1 {
+                        skills[k] += cfg.skill_gain * 0.25;
+                    }
+                }
+                // Customs pass between kin: a firmly held way of doing things is catching.
+                if o.custom.is_some() && o.custom_strength > a.custom_strength + 0.2 && rng.f32() < cfg.p_learn * (0.5 + a.emotion[BOND]) {
+                    custom = Some((o.custom.unwrap(), o.custom_dx, o.custom_dy));
+                }
+                // Imitation: copy a little of a clearly more successful relative's mind.
+                if model == NO_LEADER && o.energy + o.inventory > 1.5 * wealth {
+                    let p = if is_leader { cfg.p_imitate * 3.0 } else { cfg.p_imitate };
+                    if rng.f32() < p {
+                        model = j as u32;
+                    }
+                }
+            }
+            if missing == 0 && !contagious {
+                return;
+            }
+            if missing != 0 {
+                let mut p = if kin { cfg.p_learn } else { cfg.p_learn * 0.25 };
+                p *= 0.5 + a.emotion[BOND];
+                p *= (1.0 + a.caps[E_TEACH] + o.caps[E_TEACH]).max(0.2);
+                if is_leader {
+                    p *= 2.0;
+                }
+                let mut bits = missing;
+                while bits != 0 {
+                    let b = bits & bits.wrapping_neg();
+                    bits &= bits - 1;
+                    if rng.f32() < p {
+                        gained |= b;
+                    }
+                }
+            }
+            if contagious && rng.f32() < cfg.p_infect / resist {
+                caught = true;
+            }
+        });
+        if gained != 0 || caught || model != NO_LEADER || custom.is_some() || skills.iter().any(|g| *g > 0.0) {
+            out.push((i as u32, Contact { gained, caught, skills, model, custom }));
+        }
+    }
+    out
 }

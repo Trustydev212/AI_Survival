@@ -58,7 +58,10 @@ impl EventLog {
     }
 
     /// Called once per stats window; derives crises, social firsts and era changes.
-    pub fn check_window(&mut self, m: &Metrics, agents: &[Agent], innovations: &[Innovation], window_len: u64) {
+    pub fn check_window(
+        &mut self, m: &Metrics, agents: &[Agent], innovations: &[Innovation], window_len: u64,
+        defected: &std::collections::HashMap<(u32, u32), u32>,
+    ) {
         let tick = m.tick;
         let w: &Window = &m.w;
         let pop = agents.len();
@@ -168,6 +171,20 @@ impl EventLog {
                 Order::Pool => "a custom of pooling: leaders call for food to be shared and it is",
             };
             self.fire(tick, "", format!("{} ({:.0}% of orders, {:.0}% obeyed)", what, m.order_mix[o] * 100.0, m.obedience * 100.0));
+        }
+
+        // Customs: an order that has outlived the need for a leader to give it.
+        for o in 0..N_ORDER {
+            if m.custom_mix[o] >= 0.3 {
+                let key = format!("custom:{o}");
+                self.fire(tick, &key, format!("a {} custom took root: {:.0}% of people keep it with no leader present", Order::ALL[o].name(), m.custom_mix[o] * 100.0));
+            }
+        }
+        // Rivalry: bands that changed hands this window.
+        let mut big: Vec<(&(u32, u32), &u32)> = defected.iter().filter(|(_, n)| **n >= 15).collect();
+        big.sort_by(|a, b| b.1.cmp(a.1));
+        for ((from, to), n) in big.into_iter().take(3) {
+            self.fire(tick, "", format!("rivalry: {} lost {} followers to {}", crate::agent::name_of(*from), n, crate::agent::name_of(*to)));
         }
 
         // Eras, collapses and forgetting.

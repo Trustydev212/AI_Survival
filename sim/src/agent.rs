@@ -96,6 +96,11 @@ pub struct Agent {
     /// The order this agent was under when it last acted, and whether it obeyed.
     pub under: Option<Order>,
     pub obeyed: bool,
+    /// A custom: an order internalised from leaders, kept and spread without them.
+    pub custom: Option<Order>,
+    pub custom_dx: f32,
+    pub custom_dy: f32,
+    pub custom_strength: f32,
 }
 
 impl Agent {
@@ -150,4 +155,26 @@ pub struct Decision {
     pub under: Option<Order>,
     pub under_dx: f32,
     pub under_dy: f32,
+    /// Whether that order came from a living leader (true) or from custom (false).
+    pub from_leader: bool,
+}
+
+impl Default for Decision {
+    fn default() -> Self {
+        Decision {
+            mx: 0.0,
+            my: 0.0,
+            action: Action::Rest,
+            target: u32::MAX,
+            memory: [0.0; N_MEM],
+            leader: NO_LEADER,
+            order: Order::Hold,
+            odx: 0.0,
+            ody: 0.0,
+            under: None,
+            under_dx: 0.0,
+            under_dy: 0.0,
+            from_leader: false,
+        }
+    }
 }

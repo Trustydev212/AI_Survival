@@ -6,6 +6,8 @@ pub struct Config {
     pub seed: u64,
     pub seeds: Option<(u64, u64)>,
     pub quiet: bool,
+    /// Worker threads inside one world. Results do not depend on this.
+    pub threads: usize,
     pub width: usize,
     pub height: usize,
     pub agents: usize,
@@ -99,6 +101,12 @@ pub struct Config {
     pub conserve_saving: f32,
     /// Control switch: leaders still form, but no order ever reaches anyone.
     pub no_orders: bool,
+    pub defection_cost: f32,
+
+    // customs
+    pub custom_gain: f32,
+    pub custom_decay: f32,
+    pub custom_min: f32,
 
     // perception
     pub region_side: usize,
@@ -111,11 +119,12 @@ impl Default for Config {
             seed: 42,
             seeds: None,
             quiet: false,
+            threads: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
             width: 192,
             height: 192,
             agents: 1000,
             tribes: 20,
-            max_agents: 4000,
+            max_agents: 0,
             min_pop: 0,
             ticks: 20_000,
             log_every: 500,
@@ -194,6 +203,11 @@ impl Default for Config {
             march_saving: 0.3,
             conserve_saving: 0.5,
             no_orders: false,
+            defection_cost: 0.03,
+
+            custom_gain: 0.01,
+            custom_decay: 0.9995,
+            custom_min: 0.2,
 
             region_side: 12,
             region_refresh: 50,
@@ -237,6 +251,7 @@ impl Config {
                     }
                     c.seeds = Some((a, b));
                 }
+                "--threads" => set!(threads),
                 "--width" => set!(width),
                 "--height" => set!(height),
                 "--agents" => set!(agents),
@@ -282,6 +297,8 @@ impl Config {
                 "--hold-bonus" => set!(hold_bonus),
                 "--march-saving" => set!(march_saving),
                 "--conserve-saving" => set!(conserve_saving),
+                "--custom-gain" => set!(custom_gain),
+                "--custom-decay" => set!(custom_decay),
                 "--region-side" => set!(region_side),
                 "--region-refresh" => set!(region_refresh),
                 _ => return Err(format!("unknown flag {key}\n{HELP}")),
@@ -299,11 +316,12 @@ USAGE: sim [--flag value ...]
   --seed N          RNG seed (default 42)
   --seeds A-B       run every seed from A to B in parallel and print an outcome table
   --quiet           no per-window rows or live events (implied by --seeds)
+  --threads N       worker threads inside one world (all cores); results never depend on it
   --agents N        initial agents (1000)
   --tribes N        founding tribes, agents spawn clustered per tribe (20)
   --ticks N         ticks to run (20000); a run ends early on extinction
   --width/--height  map size in cells (192)
-  --max-agents N    hard population cap (4000)
+  --max-agents N    hard population cap; 0 = none, the land is the only limit (0)
   --min-pop N       below this, random immigrants arrive; 0 = extinction is final (0)
   --log-every N     stats interval (500)
   --image-every N   write out/frame_XXXXXX.ppm every N ticks (0 = off)
@@ -331,6 +349,7 @@ USAGE: sim [--flag value ...]
   --raid-bonus F --hold-bonus F --march-saving F --conserve-saving F
                     what obeying each kind of order is worth (12 / 1.5 / 0.3 / 0.5)
   --no-orders       control run: leaders still form but their orders reach no one
+  --custom-gain F   how fast an obeyed order becomes a custom (0.01); --custom-decay F per tick (0.9995)
   --region-side N   world cells per side of a perception region (12)
   --region-refresh N   ticks between coarse-map refreshes (50)
 ";
