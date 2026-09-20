@@ -1,0 +1,16 @@
+[package]
+name = "ai_survival_sim"
+version = "0.1.0"
+edition = "2021"
+description = "Headless evolutionary agent simulation core for AI Survival"
+
+[[bin]]
+name = "sim"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
