@@ -286,6 +286,28 @@ thì các thế giới mới rẽ nhánh. Đó là điều kiện để thí ngh
 - Seed 7 giữ đất 100% mà vẫn bùng-vỡ: sụp không phải vì đất mà vì mùa đông và dịch đúng lúc dân đông.
   Kho chung là bước tiếp theo hợp lý.
 
+### Đối chứng: có mệnh lệnh và không có mệnh lệnh
+
+Cùng 12 seed, 30.000 tick, một nhánh mặc định, một nhánh `--no-orders` (thủ lĩnh vẫn hình thành
+nhưng lệnh không tới ai). Mọi thứ khác giữ nguyên.
+
+| | Có lệnh | Không lệnh |
+|---|---|---|
+| Đất còn lại (trung vị) | 87% | 66% |
+| Dân số cuối (trung vị) | 1.060 | 859 |
+| Đỉnh dân số (trung vị) | 5.194 | 6.522 |
+| Dao động cuối run (trung vị) | 2,6 lần | 3,3 lần |
+| Kết cục xấu (sụp, bùng-vỡ, đất chết) | 3 / 12 | 5 / 12 |
+| Kiến thức mỗi đầu người (trung vị) | 12,4 | 12,4 |
+
+So theo từng seed: nhánh có lệnh giữ đất tốt hơn ở 9 trên 12 thế giới và dân số cuối cao hơn ở 8 trên 12.
+
+Cách đọc: thủ lĩnh không làm xã hội **lớn** hơn, đỉnh dân số còn thấp hơn. Thủ lĩnh làm xã hội **bền** hơn:
+đất còn nhiều hơn, dao động nhỏ hơn, ít sụp hơn. Tức là mệnh lệnh đang hoạt động như một cái phanh
+tập thể, kìm bùng nổ để tránh vỡ. Kiến thức không đổi, nên hiệu ứng không đến từ dạy học nhanh hơn
+mà từ phối hợp hành vi. Tỉ lệ tuân lệnh trung bình vẫn thấp, phần lớn dưới 10%, nên chỉ một thiểu số
+nghe lời đã đủ tạo khác biệt. Mẫu 12 còn nhỏ, chưa phải kết luận thống kê, nhưng chiều hướng nhất quán.
+
 ### Ba bài học khi cân bằng
 
 1. Xác suất khám phá phải tính theo agent-tick. 1000 agent với xác suất 0,0002 mỗi tick tìm ra công cụ ngay tick 1.
