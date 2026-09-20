@@ -3,10 +3,10 @@
 
 use crate::rng::Rng;
 
-pub const N_IN: usize = 20;
+pub const N_IN: usize = 24;
 pub const N_HID: usize = 16;
 pub const N_ACT: usize = 5;
-pub const N_OUT: usize = 2 + N_ACT; // move_x, move_y, then action scores
+pub const N_OUT: usize = 3 + N_ACT; // move_x, move_y, go/stay, then action scores
 pub const N_WEIGHTS: usize = N_IN * N_HID + N_HID + N_HID * N_OUT + N_OUT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,7 +65,8 @@ impl Genome {
         1.0 - d / 1.732
     }
 
-    /// Forward pass. Returns (move_x, move_y, action).
+    /// Forward pass. Returns (move_x, move_y, action). Movement is zero when the
+    /// go/stay output is negative, so staying put is one sign flip away from roaming.
     pub fn think(&self, input: &[f32; N_IN]) -> (f32, f32, Action) {
         let w = &self.weights;
         let mut hidden = [0.0f32; N_HID];
@@ -96,9 +97,12 @@ impl Genome {
         }
         let mut best = 0;
         for a in 1..N_ACT {
-            if out[2 + a] > out[2 + best] {
+            if out[3 + a] > out[3 + best] {
                 best = a;
             }
+        }
+        if out[2] <= 0.0 {
+            return (0.0, 0.0, Action::ALL[best]);
         }
         (fast_tanh(out[0]), fast_tanh(out[1]), Action::ALL[best])
     }

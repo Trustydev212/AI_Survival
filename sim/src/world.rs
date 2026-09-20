@@ -8,13 +8,17 @@ pub struct World {
     pub height: usize,
     pub fertility: Vec<f32>,
     pub food: Vec<f32>,
+    /// How tended a cell is, 0..1. Raised by farmers standing on it, decays otherwise.
+    pub cultivation: Vec<f32>,
+    pub farm_boost: f32,
+    pub cult_decay: f32,
     pub max_food: f32,
     pub regrow: f32,
     pub season_len: f32,
 }
 
 impl World {
-    pub fn generate(width: usize, height: usize, max_food: f32, regrow: f32, season_len: f32, rng: &mut Rng) -> World {
+    pub fn generate(width: usize, height: usize, max_food: f32, regrow: f32, season_len: f32, farm_boost: f32, cult_decay: f32, rng: &mut Rng) -> World {
         let mut fertility = vec![0.0f32; width * height];
         // Two octaves of value noise, bilinearly interpolated.
         let octaves = [(24usize, 1.0f32), (8usize, 0.35f32)];
@@ -45,7 +49,8 @@ impl World {
             *f = t * t * (3.0 - 2.0 * t); // smoothstep
         }
         let food = fertility.iter().map(|f| f * max_food * 0.8).collect();
-        World { width, height, fertility, food, max_food, regrow, season_len }
+        let cultivation = vec![0.0; width * height];
+        World { width, height, fertility, food, cultivation, farm_boost, cult_decay, max_food, regrow, season_len }
     }
 
     #[inline]
@@ -64,16 +69,83 @@ impl World {
     pub fn regrow(&mut self, season: f32) {
         let r = self.regrow * season;
         let max_food = self.max_food;
-        for (food, fert) in self.food.iter_mut().zip(self.fertility.iter()) {
-            let cap = max_food * fert;
+        let boost = self.farm_boost;
+        let decay = self.cult_decay;
+        for ((food, fert), cult) in self.food.iter_mut().zip(self.fertility.iter()).zip(self.cultivation.iter_mut()) {
+            if *cult > 0.0 {
+                *cult *= decay;
+                if *cult < 0.001 {
+                    *cult = 0.0;
+                }
+            }
+            let cap = max_food * fert * (1.0 + 2.0 * *cult);
             if cap <= 0.0 {
                 continue;
             }
-            *food += r * fert * (1.0 - *food / cap);
+            *food += r * fert * (1.0 + boost * *cult) * (1.0 - *food / cap);
             if *food > cap {
                 *food = cap;
             }
         }
+    }
+
+    /// Take up to `rate` food from the agent's cell first, then from the 8 cells around it,
+    /// but the ring only where it is a worked field (cultivated). Wild land is picked cell by cell.
+    pub fn harvest(&mut self, x: f32, y: f32, rate: f32, wrap: bool) -> f32 {
+        let cx = (x as isize).min(self.width as isize - 1);
+        let cy = (y as isize).min(self.height as isize - 1);
+        let mut left = rate;
+        let mut got = 0.0;
+        const ORDER: [(isize, isize); 9] = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)];
+        for (dx, dy) in ORDER {
+            if left <= 0.0 {
+                break;
+            }
+            let (mut nx, mut ny) = (cx + dx, cy + dy);
+            if wrap {
+                nx = nx.rem_euclid(self.width as isize);
+                ny = ny.rem_euclid(self.height as isize);
+            } else if nx < 0 || ny < 0 || nx >= self.width as isize || ny >= self.height as isize {
+                continue;
+            }
+            let i = ny as usize * self.width + nx as usize;
+            if (dx != 0 || dy != 0) && self.cultivation[i] < 0.2 {
+                continue;
+            }
+            let take = self.food[i].min(left);
+            self.food[i] -= take;
+            left -= take;
+            got += take;
+        }
+        got
+    }
+
+    /// A farmer tends the 3x3 block around them: full gain on their cell, half on the ring.
+    pub fn tend(&mut self, x: f32, y: f32, gain: f32, wrap: bool) {
+        let cx = (x as isize).min(self.width as isize - 1);
+        let cy = (y as isize).min(self.height as isize - 1);
+        for dy in -1..=1isize {
+            for dx in -1..=1isize {
+                let (mut nx, mut ny) = (cx + dx, cy + dy);
+                if wrap {
+                    nx = nx.rem_euclid(self.width as isize);
+                    ny = ny.rem_euclid(self.height as isize);
+                } else if nx < 0 || ny < 0 || nx >= self.width as isize || ny >= self.height as isize {
+                    continue;
+                }
+                let i = ny as usize * self.width + nx as usize;
+                if self.fertility[i] <= 0.05 {
+                    continue; // nothing grows on barren rock
+                }
+                let g = if dx == 0 && dy == 0 { gain } else { gain * 0.5 };
+                let c = &mut self.cultivation[i];
+                *c = (*c + g).min(1.0);
+            }
+        }
+    }
+
+    pub fn cultivated_cells(&self) -> usize {
+        self.cultivation.iter().filter(|c| **c > 0.2).count()
     }
 
     pub fn total_food(&self) -> f32 {

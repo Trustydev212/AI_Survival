@@ -1,6 +1,6 @@
 //! Windowed counters and population-level metrics, printed as a table and CSV.
 
-use crate::agent::Agent;
+use crate::agent::{Agent, N_TECH, TECH_BITS, TECH_NAMES};
 use crate::brain::{Action, N_ACT};
 use crate::strategy::{self, StrategyReport};
 use std::collections::HashMap;
@@ -17,6 +17,8 @@ pub struct Window {
     pub shares: u32,
     pub immigrants: u32,
     pub actions: [u32; N_ACT],
+    pub discoveries: [u32; N_TECH],
+    pub learned: [u32; N_TECH],
 }
 
 pub struct Metrics {
@@ -32,12 +34,19 @@ pub struct Metrics {
     pub marker_spread: f32,
     pub gini: f32,
     pub strat: StrategyReport,
+    pub tech: [f32; N_TECH],
+    pub cultivated: usize,
+    pub settled: f32,
     pub w: Window,
 }
 
-pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, w: Window) -> Metrics {
+pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, cultivated: usize, settled: f32, w: Window) -> Metrics {
     let pop = agents.len();
     let n = pop.max(1) as f32;
+    let mut tech = [0.0f32; N_TECH];
+    for (t, &bit) in TECH_BITS.iter().enumerate() {
+        tech[t] = agents.iter().filter(|a| a.knows(bit)).count() as f32 / n;
+    }
     let mean_energy = agents.iter().map(|a| a.energy).sum::<f32>() / n;
     let mean_inv = agents.iter().map(|a| a.inventory).sum::<f32>() / n;
 
@@ -95,6 +104,9 @@ pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, w: Window) -
     Metrics {
         tick,
         strat,
+        tech,
+        cultivated,
+        settled,
         season,
         pop,
         mean_energy,
@@ -111,8 +123,8 @@ pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, w: Window) -
 
 pub fn print_header() {
     println!(
-        "{:>7} {:>5} {:>5} {:>6} {:>6} {:>8} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5}  {}",
-        "tick", "seas", "pop", "energy", "inv", "food", "lin", "top%", "gini", "born", "starv", "aged", "kill", "attk", "share", "strat", "dominant strategies (share% label)"
+        "{:>7} {:>5} {:>5} {:>6} {:>6} {:>8} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5}  {}",
+        "tick", "seas", "pop", "energy", "inv", "food", "lin", "top%", "gini", "born", "starv", "aged", "kill", "attk", "share", "strat", "tool%", "farm%", "weap%", "cook%", "field", "stay%", "dominant strategies (share% label)"
     );
 }
 
@@ -126,7 +138,7 @@ pub fn print_row(m: &Metrics) {
         .map(|s| format!("[{:.0}% {}]", 100.0 * s.count as f32 / counted as f32, strategy::describe(&s.centroid)))
         .collect();
     println!(
-        "{:>7} {:>5.2} {:>5} {:>6.1} {:>6.1} {:>8.0} {:>5} {:>5.0} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1}  {}",
+        "{:>7} {:>5.2} {:>5} {:>6.1} {:>6.1} {:>8.0} {:>5} {:>5.0} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5.0} {:>5.0} {:>5.0} {:>5.0} {:>5} {:>5.0}  {}",
         m.tick,
         m.season,
         m.pop,
@@ -143,24 +155,33 @@ pub fn print_row(m: &Metrics) {
         m.w.attacks,
         m.w.shares,
         m.strat.effective,
+        m.tech[0] * 100.0,
+        m.tech[1] * 100.0,
+        m.tech[2] * 100.0,
+        m.tech[3] * 100.0,
+        m.cultivated,
+        m.settled * 100.0,
         strats.join(" ")
     );
 }
 
 pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
     let acts: Vec<&str> = Action::ALL.iter().map(|a| a.name()).collect();
+    let techs: Vec<String> = TECH_NAMES.iter().map(|t| format!("{t}_share")).collect();
     writeln!(
         out,
-        "tick,season,pop,mean_energy,mean_inventory,food,lineages,top_lineage_share,gini,action_entropy,marker_spread,strategy_entropy,effective_strategies,births,starved,aged,killed,attacks,attack_wins,shares,immigrants,{}",
+        "tick,season,pop,mean_energy,mean_inventory,food,lineages,top_lineage_share,gini,action_entropy,marker_spread,strategy_entropy,effective_strategies,births,starved,aged,killed,attacks,attack_wins,shares,immigrants,cultivated_cells,settled_share,{},{}",
+        techs.join(","),
         acts.join(",")
     )
 }
 
 pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     let acts: Vec<String> = m.w.actions.iter().map(|c| c.to_string()).collect();
+    let techs: Vec<String> = m.tech.iter().map(|t| format!("{t:.4}")).collect();
     writeln!(
         out,
-        "{},{:.3},{},{:.2},{:.2},{:.1},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{},{},{},{},{},{},{},{},{}",
+        "{},{:.3},{},{:.2},{:.2},{:.1},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{},{},{},{},{},{},{},{},{},{:.4},{},{}",
         m.tick,
         m.season,
         m.pop,
@@ -182,6 +203,9 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
         m.w.attack_wins,
         m.w.shares,
         m.w.immigrants,
+        m.cultivated,
+        m.settled,
+        techs.join(","),
         acts.join(",")
     )
 }

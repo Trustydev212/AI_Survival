@@ -51,6 +51,20 @@ pub struct Config {
     // evolution
     pub p_mut: f32,
     pub sigma: f32,
+
+    // culture
+    pub p_discover: f32,
+    pub p_learn: f32,
+    pub learn_range: f32,
+    pub tools_gather_mult: f32,
+    pub farm_boost: f32,
+    pub cult_gain: f32,
+    pub settle_ticks: u16,
+    pub cult_decay: f32,
+    pub weapon_mult: f32,
+    pub cooking_saving: f32,
+    /// Tech bitmask founders start with (1 tools, 2 farming, 4 weapons, 8 cooking).
+    pub start_tech: u8,
 }
 
 impl Default for Config {
@@ -99,6 +113,18 @@ impl Default for Config {
 
             p_mut: 0.08,
             sigma: 0.15,
+
+            p_discover: 0.000002,
+            p_learn: 0.01,
+            learn_range: 2.5,
+            tools_gather_mult: 1.5,
+            farm_boost: 12.0,
+            cult_gain: 0.02,
+            settle_ticks: 5,
+            cult_decay: 0.99,
+            weapon_mult: 1.5,
+            cooking_saving: 0.25,
+            start_tech: 0,
         }
     }
 }
@@ -140,6 +166,12 @@ impl Config {
                 "--steal" => set!(steal),
                 "--p-mut" => set!(p_mut),
                 "--sigma" => set!(sigma),
+                "--p-discover" => set!(p_discover),
+                "--p-learn" => set!(p_learn),
+                "--farm-boost" => set!(farm_boost),
+                "--settle-ticks" => set!(settle_ticks),
+                "--start-tech" => set!(start_tech),
+                "--cult-decay" => set!(cult_decay),
                 _ => return Err(format!("unknown flag {key}\n{HELP}")),
             }
             i += 2;
@@ -169,4 +201,11 @@ USAGE: sim [--flag value ...]
   --base-cost F     energy burned per tick (0.15)
   --max-age N       ticks before dying of old age (3000)
   --attack-damage F --steal F --p-mut F --sigma F
+  --p-discover F    per agent-tick chance of discovering tools while gathering (2e-6);
+                    farming and cooking are half as likely, weapons 20x per attack
+  --p-learn F       chance per tick of learning a tech from an adjacent kin (0.01)
+  --farm-boost F    regrowth multiplier of a fully cultivated cell (12)
+  --cult-decay F    cultivation kept per tick when untended (0.99)
+  --settle-ticks N  ticks an agent must stay still before its farming takes effect (5)
+  --start-tech N    tech bitmask founders begin with: 1 tools, 2 farming, 4 weapons, 8 cooking (0)
 ";

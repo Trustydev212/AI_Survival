@@ -1,6 +1,7 @@
 //! One tick of the world: regrow, sense, think, act, die, immigrate.
 
-use crate::agent::{Agent, Decision};
+use crate::agent::{Agent, Decision, COOKING, FARMING, N_TECH, TECH_BITS, TOOLS, WEAPONS};
+use crate::events::EventLog;
 use crate::brain::{Action, Genome, N_IN};
 use crate::config::Config;
 use crate::rng::Rng;
@@ -15,15 +16,19 @@ pub struct Sim {
     pub agents: Vec<Agent>,
     pub tick: u64,
     pub window: Window,
+    pub events: EventLog,
     spatial: SpatialHash,
+    learned: Vec<(u32, u8)>,
     decisions: Vec<Decision>,
     next_lineage: u32,
 }
 
 impl Sim {
-    pub fn new(cfg: Config) -> Sim {
+    pub fn new(cfg: Config, events: EventLog) -> Sim {
         let mut rng = Rng::new(cfg.seed);
-        let world = World::generate(cfg.width, cfg.height, cfg.max_food, cfg.regrow, cfg.season_len, &mut rng);
+        let world = World::generate(
+            cfg.width, cfg.height, cfg.max_food, cfg.regrow, cfg.season_len, cfg.farm_boost, cfg.cult_decay, &mut rng,
+        );
         let spatial = SpatialHash::new(cfg.width as f32, cfg.height as f32, cfg.vision, cfg.wrap);
         let mut sim = Sim {
             rng,
@@ -31,7 +36,9 @@ impl Sim {
             agents: Vec::with_capacity(cfg.max_agents),
             tick: 0,
             window: Window::default(),
+            events,
             spatial,
+            learned: Vec::new(),
             decisions: Vec::with_capacity(cfg.max_agents),
             next_lineage: 0,
             cfg,
@@ -55,7 +62,9 @@ impl Sim {
                 let x = self.place(hx + nx * 4.0, self.cfg.width);
                 let y = self.place(hy + ny * 4.0, self.cfg.height);
                 let genome = ancestor.mutated(&mut self.rng, 0.5, 0.3);
-                self.agents.push(self.make_agent(x, y, genome, lineage));
+                let mut a = self.make_agent(x, y, genome, lineage);
+                a.tech = self.cfg.start_tech;
+                self.agents.push(a);
             }
         }
     }
@@ -118,6 +127,8 @@ impl Sim {
             last_action: Action::Rest,
             children: 0,
             profile: [0.0; crate::agent::N_PROFILE],
+            tech: 0,
+            still: 0,
         }
     }
 
@@ -127,6 +138,7 @@ impl Sim {
         self.spatial.rebuild(self.agents.iter().map(|a| (a.x, a.y)));
         self.sense_and_think(season);
         self.act();
+        self.transmit_culture();
         self.metabolise_and_die();
         self.immigrate();
         self.tick += 1;
@@ -200,8 +212,17 @@ impl Sim {
             input[17] = if a.attacked_timer > 0 { 1.0 } else { 0.0 };
             input[18] = world.fertility[world.idx(a.x, a.y)];
             input[19] = 1.0;
+            input[20] = if a.knows(TOOLS) { 1.0 } else { 0.0 };
+            input[21] = if a.knows(FARMING) { 1.0 } else { 0.0 };
+            input[22] = if a.knows(WEAPONS) { 1.0 } else { 0.0 };
+            input[23] = world.cultivation[world.idx(a.x, a.y)];
 
-            let (mx, my, action) = a.genome.think(&input);
+            let (mut mx, mut my, action) = a.genome.think(&input);
+            // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
+            if mx * mx + my * my < 0.09 {
+                mx = 0.0;
+                my = 0.0;
+            }
             self.decisions.push(Decision { mx, my, action, target: nearest });
         }
     }
@@ -228,19 +249,34 @@ impl Sim {
             match d.action {
                 Action::Gather => {
                     let cfg = &self.cfg;
+                    let cell = self.world.idx(self.agents[i].x, self.agents[i].y);
+                    let rate = if self.agents[i].knows(TOOLS) { cfg.gather_rate * cfg.tools_gather_mult } else { cfg.gather_rate };
+                    let take = self.world.harvest(self.agents[i].x, self.agents[i].y, rate, cfg.wrap);
                     let a = &mut self.agents[i];
-                    let cell = self.world.idx(a.x, a.y);
-                    let take = self.world.food[cell].min(cfg.gather_rate);
-                    self.world.food[cell] -= take;
                     a.energy += take;
                     if a.energy > cfg.max_energy {
                         a.inventory = (a.inventory + a.energy - cfg.max_energy).min(cfg.inv_cap);
                         a.energy = cfg.max_energy;
                     }
+                    if a.knows(FARMING) && a.still >= cfg.settle_ticks {
+                        let (ax, ay) = (a.x, a.y);
+                        self.world.tend(ax, ay, cfg.cult_gain, cfg.wrap);
+                    }
+                    // Discovery while working: tools from bare hands, farming from tools on good land.
+                    let fert = self.world.fertility[cell];
+                    if !a.knows(TOOLS) && self.rng.f32() < cfg.p_discover {
+                        self.discover(i, 0);
+                    } else if a.knows(TOOLS) && !a.knows(FARMING) && fert > 0.5 && self.rng.f32() < cfg.p_discover * 0.5 {
+                        self.discover(i, 1);
+                    }
                 }
                 Action::Attack => {
                     if d.target != u32::MAX {
                         self.resolve_attack(i, d.target as usize);
+                        let a = &self.agents[i];
+                        if a.knows(TOOLS) && !a.knows(WEAPONS) && self.rng.f32() < self.cfg.p_discover * 20.0 {
+                            self.discover(i, 2);
+                        }
                     }
                 }
                 Action::Share => {
@@ -266,7 +302,16 @@ impl Sim {
                         self.window.births += 1;
                     }
                 }
-                Action::Rest => {}
+                Action::Rest => {
+                    let cfg = &self.cfg;
+                    let a = &self.agents[i];
+                    if a.knows(FARMING) && a.still >= cfg.settle_ticks {
+                        self.world.tend(a.x, a.y, cfg.cult_gain, cfg.wrap);
+                    }
+                    if a.knows(TOOLS) && !a.knows(COOKING) && self.rng.f32() < cfg.p_discover * 0.5 {
+                        self.discover(i, 3);
+                    }
+                }
             }
         }
         self.agents.extend(births);
@@ -287,16 +332,19 @@ impl Sim {
         }
         self.window.attacks += 1;
         self.agents[i].energy -= cfg.attack_cost;
-        // Stronger fighter usually wins; sigmoid of energy difference.
-        let p_win = 1.0 / (1.0 + (-(ae - de) / 25.0).exp());
+        // Stronger fighter usually wins; sigmoid of energy difference. Weapons count as strength.
+        let armed_a = if self.agents[i].knows(WEAPONS) { 20.0 } else { 0.0 };
+        let armed_d = if self.agents[j].knows(WEAPONS) { 20.0 } else { 0.0 };
+        let p_win = 1.0 / (1.0 + (-((ae + armed_a) - (de + armed_d)) / 25.0).exp());
         if self.rng.f32() < p_win {
             self.window.attack_wins += 1;
-            let stolen = self.agents[j].inventory.min(cfg.steal);
+            let mult = if self.agents[i].knows(WEAPONS) { cfg.weapon_mult } else { 1.0 };
+            let stolen = self.agents[j].inventory.min(cfg.steal * mult);
             self.agents[j].inventory -= stolen;
-            self.agents[j].energy -= cfg.attack_damage;
+            self.agents[j].energy -= cfg.attack_damage * mult;
             self.agents[j].attacked_timer = 30;
             let a = &mut self.agents[i];
-            a.energy += stolen + cfg.attack_damage * 0.5;
+            a.energy += stolen + cfg.attack_damage * mult * 0.5;
             if a.energy > cfg.max_energy {
                 a.inventory = (a.inventory + a.energy - cfg.max_energy).min(cfg.inv_cap);
                 a.energy = cfg.max_energy;
@@ -343,6 +391,9 @@ impl Sim {
             if resting {
                 cost *= cfg.rest_factor;
             }
+            if a.knows(COOKING) {
+                cost *= 1.0 - cfg.cooking_saving;
+            }
             a.energy -= cost;
             if a.energy < cfg.eat_below && a.inventory > 0.0 {
                 let eat = a.inventory.min(cfg.eat_amount);
@@ -387,6 +438,78 @@ impl Sim {
             self.agents.push(a);
             self.window.immigrants += 1;
         }
+    }
+
+    fn discover(&mut self, i: usize, tech: usize) {
+        let a = &mut self.agents[i];
+        a.tech |= TECH_BITS[tech];
+        self.window.discoveries[tech] += 1;
+        let (lineage, x, y) = (a.lineage, a.x, a.y);
+        self.events.discovery(self.tick, tech, lineage, x, y);
+    }
+
+    /// Knowledge spreads by proximity. Kin teach readily; strangers rarely.
+    fn transmit_culture(&mut self) {
+        let cfg = &self.cfg;
+        let n = self.decisions.len(); // agents present in the spatial hash this tick
+        let range2 = cfg.learn_range * cfg.learn_range;
+        self.learned.clear();
+        for i in 0..n {
+            let a = &self.agents[i];
+            if a.tech == 0x0F {
+                continue;
+            }
+            let mut gained = 0u8;
+            let agents = &self.agents;
+            let mut rng = self.rng.clone();
+            self.spatial.for_each_near(a.x, a.y, |j| {
+                if j == i || j >= n {
+                    return;
+                }
+                let o = &agents[j];
+                let missing = o.tech & !a.tech & !gained;
+                if missing == 0 {
+                    return;
+                }
+                let dx = self.delta(a.x, o.x, cfg.width);
+                let dy = self.delta(a.y, o.y, cfg.height);
+                if dx * dx + dy * dy > range2 {
+                    return;
+                }
+                let p = if a.genome.kinship(&o.genome) >= cfg.kin_threshold { cfg.p_learn } else { cfg.p_learn * 0.25 };
+                for &bit in &TECH_BITS {
+                    if missing & bit != 0 && rng.f32() < p {
+                        gained |= bit;
+                    }
+                }
+            });
+            self.rng = rng;
+            if gained != 0 {
+                self.learned.push((i as u32, gained));
+            }
+        }
+        for &(i, bits) in &self.learned {
+            self.agents[i as usize].tech |= bits;
+            for (t, &bit) in TECH_BITS.iter().enumerate() {
+                if bits & bit != 0 {
+                    self.window.learned[t] += 1;
+                }
+            }
+        }
+    }
+
+    pub fn settled_share(&self) -> f32 {
+        let n = self.agents.len().max(1) as f32;
+        self.agents.iter().filter(|a| a.still >= self.cfg.settle_ticks).count() as f32 / n
+    }
+
+    pub fn tech_share(&self) -> [f32; N_TECH] {
+        let mut out = [0.0; N_TECH];
+        let n = self.agents.len().max(1) as f32;
+        for (t, &bit) in TECH_BITS.iter().enumerate() {
+            out[t] = self.agents.iter().filter(|a| a.knows(bit)).count() as f32 / n;
+        }
+        out
     }
 
     pub fn take_window(&mut self) -> Window {

@@ -14,8 +14,9 @@ pub fn write_ppm(path: &str, world: &World, agents: &[Agent], scale: usize) -> s
             let i = y * world.width + x;
             let fert = world.fertility[i];
             let food = world.food[i] / world.max_food;
-            let r = (18.0 + 30.0 * fert) as u8;
-            let g = (22.0 + 40.0 * fert + 150.0 * food) as u8;
+            let cult = world.cultivation[i];
+            let r = (18.0 + 30.0 * fert + 160.0 * cult) as u8;
+            let g = (22.0 + 40.0 * fert + 150.0 * food.min(1.0)) as u8;
             let b = (28.0 + 10.0 * fert) as u8;
             fill(&mut px, w, x * scale, y * scale, scale, [r, g, b]);
         }

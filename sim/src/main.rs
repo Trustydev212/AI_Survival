@@ -1,6 +1,7 @@
 mod agent;
 mod brain;
 mod config;
+mod events;
 mod render;
 mod rng;
 mod sim;
@@ -34,7 +35,8 @@ fn main() {
         brain::N_IN, brain::N_HID, brain::N_OUT, brain::N_WEIGHTS
     );
 
-    let mut sim = sim::Sim::new(cfg.clone());
+    let events_path = format!("{}/events_seed{}.txt", cfg.out_dir, cfg.seed);
+    let mut sim = sim::Sim::new(cfg.clone(), events::EventLog::new(Some(&events_path)));
     stats::print_header();
     let start = Instant::now();
 
@@ -47,12 +49,14 @@ fn main() {
         }
         if t % cfg.log_every == 0 {
             let window = sim.take_window();
-            let m = stats::compute(t, sim.world.season(t), &sim.agents, sim.world.total_food(), window);
+            let m = stats::compute(t, sim.world.season(t), &sim.agents, sim.world.total_food(), sim.world.cultivated_cells(), sim.settled_share(), window);
             stats::print_row(&m);
             stats::csv_row(&mut csv, &m).unwrap();
+            sim.events.check_window(t, &sim.agents, &m.w, &m.strat, cfg.log_every);
         }
     }
     csv.flush().unwrap();
+    sim.events.flush();
 
     let secs = start.elapsed().as_secs_f64();
     eprintln!(
@@ -61,6 +65,15 @@ fn main() {
     );
     summarize(&sim);
     summarize_strategies(&sim);
+    let share = sim.tech_share();
+    println!(
+        "\nTechnology at end: {}",
+        agent::TECH_NAMES.iter().zip(share.iter()).map(|(n, s)| format!("{n} {:.0}%", s * 100.0)).collect::<Vec<_>>().join("  ")
+    );
+    println!("\nHistory ({} events, written to {}):", sim.events.events.len(), events_path);
+    for e in sim.events.events.iter().filter(|e| !e.text.starts_with("famine") && !e.text.starts_with("war")) {
+        println!("  tick {:>6}: {}", e.tick, e.text);
+    }
 }
 
 fn summarize_strategies(sim: &sim::Sim) {
