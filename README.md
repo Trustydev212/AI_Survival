@@ -132,13 +132,16 @@ thức ăn, thì hồi phục chậm về tiềm năng. Đất cạn hẳn hồi
 thường cũng làm đất mòn nhanh hơn. Đây là thứ để mất: xã hội thành công quá nhanh có thể tự huỷ diệt.
 
 **Agent** có năng lượng, kho dự trữ, tuổi, dòng họ, kiến thức, và một bộ gen. Gen gồm trọng số
-của một mạng thần kinh 24 input, 16 ẩn, 8 output (536 tham số) cộng một "màu" ba chiều.
+của một mạng thần kinh hồi quy 75 input, 16 ẩn, 19 output (1.539 tham số), 9 gen tính khí, cộng một
+"màu" ba chiều.
 Nhận diện họ hàng dựa trên khoảng cách màu.
 
 **Mỗi tick**, agent nhìn thấy: năng lượng, tuổi, kho, thức ăn tại chỗ và gradient thức ăn,
 agent gần nhất (hướng, khoảng cách, độ họ hàng, chênh lệch sức mạnh, kho của nó),
 số hàng xóm là họ hàng và không họ hàng, mùa, mình vừa bị đánh hay chưa, mình biết công nghệ gì,
-và ô đang đứng có phải ruộng không.
+ô đang đứng có phải ruộng không, cảm xúc, ký ức, nhà, bệnh, thủ lĩnh và lệnh, kho gần nhất, vùng đất
+quanh đây, và **biển**: bờ cách bao xa về bốn hướng (trong tầm 4 ô) và vùng mình đứng có bao nhiêu phần
+là nước. Không có phát minh đi biển; não chỉ học nơi đất kết thúc.
 Não trả về hướng di chuyển, một cổng đi hay ở, và một trong năm hành động:
 
 | Hành động | Tác dụng |
@@ -376,6 +379,13 @@ thì các thế giới mới rẽ nhánh. Đó là điều kiện để thí ngh
   30% dân số trong 30.000 tick.
 - Seed 7 giữ đất 100% mà vẫn bùng-vỡ: sụp không phải vì đất mà vì mùa đông và dịch đúng lúc dân đông.
   Kho chung là bước tiếp theo hợp lý.
+
+### Sau khi có biển
+
+Chạy lại 8 thế giới 20.000 tick sau khi thêm biển không đi qua được và năm đầu vào về bờ biển: 5 hưng thịnh,
+2 bùng-vỡ, 1 sụp đổ (seed 4 chết đói ở tick đầu vì bộ tộc sinh ra trên một đảo nhỏ, dân về 19). Đỉnh dân số
+từ 3.500 đến 10.000, kiến thức 9 đến 18 phát minh mỗi đầu người ở các thế giới sống sót. Biển chia bản đồ
+thành lục địa và hồ, nên chiến tranh và dịch bệnh lan chậm hơn giữa các bờ, còn đảo nhỏ là bẫy.
 
 ### Đối chứng: có mệnh lệnh và không có mệnh lệnh
 

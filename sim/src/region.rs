@@ -19,6 +19,8 @@ pub struct RegionGrid {
     pub best_dx: Vec<f32>,
     pub best_dy: Vec<f32>,
     pub best_gain: Vec<f32>,
+    /// Fraction of the region that is sea (fixed at generation).
+    pub water: Vec<f32>,
 }
 
 /// How attractive a region is to live in.
@@ -33,6 +35,20 @@ impl RegionGrid {
         let cols = world.width.div_ceil(side);
         let rows = world.height.div_ceil(side);
         let n = cols * rows;
+        let mut water = vec![0.0f32; n];
+        let mut cells = vec![0.0f32; n];
+        for y in 0..world.height {
+            for x in 0..world.width {
+                let r = (y / side).min(rows - 1) * cols + (x / side).min(cols - 1);
+                cells[r] += 1.0;
+                if world.water[y * world.width + x] {
+                    water[r] += 1.0;
+                }
+            }
+        }
+        for r in 0..n {
+            water[r] = if cells[r] > 0.0 { water[r] / cells[r] } else { 0.0 };
+        }
         RegionGrid {
             cols,
             rows,
@@ -43,6 +59,7 @@ impl RegionGrid {
             best_dx: vec![0.0; n],
             best_dy: vec![0.0; n],
             best_gain: vec![0.0; n],
+            water,
         }
     }
 

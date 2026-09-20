@@ -1299,6 +1299,26 @@ fn decide(
         input[69] = (stores.list[nb.idx].food / cfg.store_cap).min(2.0);
     }
 
+    // The sea: how close the coast is in each direction (1 = next cell, 0 = none within reach), and how
+    // much of this region is water. Sailing is not invented; the brain only learns where the land ends.
+    {
+        const REACH: i32 = 4;
+        let dirs = [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)];
+        for (k, (dx, dy)) in dirs.iter().enumerate() {
+            let mut v = 0.0;
+            for step in 1..=REACH {
+                let x = geo.place(a.x + (*dx * step) as f32, cfg.width);
+                let y = geo.place(a.y + (*dy * step) as f32, cfg.height);
+                if world.is_water(x, y) {
+                    v = 1.0 - (step - 1) as f32 / REACH as f32;
+                    break;
+                }
+            }
+            input[70 + k] = v;
+        }
+        input[74] = regions.water[regions.index(a.x, a.y)];
+    }
+
         let mut t = a.genome.think(&input);
         // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
         if t.mx * t.mx + t.my * t.my < 0.09 {
