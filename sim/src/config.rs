@@ -111,6 +111,16 @@ pub struct Config {
     // perception
     pub region_side: usize,
     pub region_refresh: u64,
+
+    // storehouses
+    pub store_min_followers: u16,
+    pub store_range: f32,
+    pub store_cap: f32,
+    pub store_decay: f32,
+    pub loot: f32,
+
+    // viewer output
+    pub snapshot_every: u64,
 }
 
 impl Default for Config {
@@ -211,6 +221,14 @@ impl Default for Config {
 
             region_side: 12,
             region_refresh: 50,
+
+            store_min_followers: 10,
+            store_range: 8.0,
+            store_cap: 3000.0,
+            store_decay: 0.9997,
+            loot: 40.0,
+
+            snapshot_every: 0,
         }
     }
 }
@@ -299,6 +317,11 @@ impl Config {
                 "--conserve-saving" => set!(conserve_saving),
                 "--custom-gain" => set!(custom_gain),
                 "--custom-decay" => set!(custom_decay),
+                "--store-min-followers" => set!(store_min_followers),
+                "--store-range" => set!(store_range),
+                "--store-cap" => set!(store_cap),
+                "--store-decay" => set!(store_decay),
+                "--snapshot-every" => set!(snapshot_every),
                 "--region-side" => set!(region_side),
                 "--region-refresh" => set!(region_refresh),
                 _ => return Err(format!("unknown flag {key}\n{HELP}")),
@@ -350,6 +373,9 @@ USAGE: sim [--flag value ...]
                     what obeying each kind of order is worth (12 / 1.5 / 0.3 / 0.5)
   --no-orders       control run: leaders still form but their orders reach no one
   --custom-gain F   how fast an obeyed order becomes a custom (0.01); --custom-decay F per tick (0.9995)
+  --store-min-followers N   settled followers a named leader needs to raise a storehouse (10)
+  --store-range F --store-cap F --store-decay F   reach (8), capacity (3000), spoilage kept per tick (0.9997)
+  --snapshot-every N   write out/snap_seedN.bin every N ticks for the browser viewer (0 = off)
   --region-side N   world cells per side of a perception region (12)
   --region-refresh N   ticks between coarse-map refreshes (50)
 ";

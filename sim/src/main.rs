@@ -8,7 +8,9 @@ mod render;
 mod region;
 mod rng;
 mod sim;
+mod snapshot;
 mod spatial;
+mod store;
 mod stats;
 mod strategy;
 mod world;
@@ -82,6 +84,13 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         stats::print_header();
     }
 
+    let mut snap = if cfg.snapshot_every > 0 {
+        let path = format!("{}/snap_seed{}.bin", cfg.out_dir, cfg.seed);
+        Some(snapshot::Snapshot::create(&path, &sim.world).expect("create snapshot"))
+    } else {
+        None
+    };
+    let mut last_metrics: (f32, f32, f32) = (1.0, 0.0, 0.0); // soil, obedience, mean_known
     let mut peak_pop = sim.agents.len();
     let mut peak_level = 0;
     let mut last: Option<stats::Metrics> = None;
@@ -91,6 +100,14 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         sim.step();
         let t = sim.tick;
         peak_pop = peak_pop.max(sim.agents.len());
+        if let Some(sn) = snap.as_mut() {
+            if t % cfg.snapshot_every == 0 || sim.agents.is_empty() {
+                let (soil, obey, known) = last_metrics;
+                let era = stats::level_of(known, sim.settled_share()) as u8;
+                sn.frame(t, era, &sim.world, &sim.agents, &sim.stores.list, soil, obey, known, sim.world.season(t), cfg.settle_ticks, cfg.custom_min)
+                    .expect("write snapshot frame");
+            }
+        }
         if cfg.image_every > 0 && t % cfg.image_every == 0 {
             let path = format!("{}/frame_{:06}.ppm", cfg.out_dir, t);
             render::write_ppm(&path, &sim.world, &sim.agents, 3).expect("write ppm");
@@ -100,7 +117,7 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
             let m = stats::compute(
                 t, sim.world.season(t), sim.world.climate, &sim.agents, sim.world.total_food(), sim.world.soil_health(),
                 sim.regions.inhabited_soil(&sim.agents), sim.innovations.len(), sim.world.cultivated_cells(),
-                sim.settled_share(), sim.order_mix(), sim.custom_mix(), window,
+                sim.settled_share(), sim.order_mix(), sim.custom_mix(), sim.stores.list.len(), sim.stores.total_food(), window,
             );
             if !cfg.quiet {
                 stats::print_row(&m);
@@ -109,6 +126,7 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
             sim.events.check_window(&m, &sim.agents, &sim.innovations, cfg.log_every, &sim.defected);
             sim.defected.clear();
             peak_level = peak_level.max(m.level);
+            last_metrics = (m.soil, m.obedience, m.mean_known);
             pops.push(m.pop);
             last = Some(m);
         }
@@ -120,6 +138,14 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
     }
     csv.flush().unwrap();
     sim.events.flush();
+    if let Some(sn) = snap {
+        let frames = sn.frames;
+        sn.finish().expect("finish snapshot");
+        let mut names: Vec<(u32, String)> = sim.hall.keys().map(|id| (*id, agent::name_of(*id))).collect();
+        names.sort();
+        let meta = format!("{}/meta_seed{}.json", cfg.out_dir, cfg.seed);
+        snapshot::write_meta(&meta, cfg.width, cfg.height, frames, &names, &stats::ERA_NAMES, cfg.seed).expect("write meta");
+    }
 
     let m = last.expect("at least one stats window");
     // Population swings within a year and between booms, so judge the end against the

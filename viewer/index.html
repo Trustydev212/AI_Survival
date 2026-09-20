@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Survival viewer</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #131822; --panel2: #1a2130; --line: #26304a;
+    --text: #e6ebf5; --muted: #8b96b0; --accent: #f2c14e; --danger: #ff6b6b; --ok: #6be3a1;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  #app { display: grid; grid-template-columns: 1fr 340px; grid-template-rows: 48px 1fr 56px; height: 100vh; }
+  header { grid-column: 1 / 3; display: flex; align-items: center; gap: 18px; padding: 0 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line); }
+  header .title { font-weight: 700; letter-spacing: .04em; color: var(--accent); }
+  header .stat { color: var(--muted); }
+  header .stat b { color: var(--text); font-weight: 600; margin-left: 4px; }
+  header .era { padding: 2px 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); }
+  #stage { position: relative; background: #05070b; overflow: hidden; }
+  canvas { display: block; }
+  #hint { position: absolute; left: 12px; bottom: 12px; color: var(--muted); font-size: 12px;
+    background: rgba(11,14,20,.75); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  aside h3 { margin: 0; padding: 10px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    border-bottom: 1px solid var(--line); }
+  #events { flex: 1; overflow-y: auto; padding: 6px 0; min-height: 0; }
+  .ev { padding: 6px 14px; border-left: 3px solid transparent; cursor: default; color: var(--muted); }
+  .ev.past { color: var(--text); }
+  .ev.now { border-left-color: var(--accent); background: var(--panel2); }
+  .ev.locatable { cursor: pointer; }
+  .ev .t { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .ev.crisis .t { color: var(--danger); }
+  .ev.good .t { color: var(--ok); }
+  #leaders { border-top: 1px solid var(--line); padding: 8px 14px; max-height: 190px; overflow-y: auto; }
+  .ld { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
+  .ld .sw { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #000; }
+  .ld .n { flex: 1; }
+  .ld .f { color: var(--muted); font-variant-numeric: tabular-nums; }
+  footer { grid-column: 1 / 3; display: flex; align-items: center; gap: 12px; padding: 0 16px;
+    background: var(--panel); border-top: 1px solid var(--line); }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 10px; cursor: pointer; font: inherit; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  #timeline { flex: 1; height: 26px; position: relative; cursor: pointer; }
+  #timeline canvas { width: 100%; height: 100%; }
+  #speed { color: var(--muted); min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+  #loader { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(11,14,20,.92); z-index: 10; flex-direction: column; gap: 12px; text-align: center; padding: 24px; }
+  #loader.hidden { display: none; }
+  #loader input { color: var(--muted); }
+  #loader .big { font-size: 18px; font-weight: 600; }
+  #loader .small { color: var(--muted); max-width: 520px; }
+  @media (max-width: 800px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 200px 56px; }
+    header { grid-column: 1; } footer { grid-column: 1; }
+    aside { border-left: none; border-top: 1px solid var(--line); }
+    header .stat:nth-child(n+6) { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="title">AI SURVIVAL</span>
+    <span class="era" id="era">–</span>
+    <span class="stat">tick<b id="s-tick">0</b></span>
+    <span class="stat">dân<b id="s-pop">0</b></span>
+    <span class="stat">đất<b id="s-soil">–</b></span>
+    <span class="stat">khí hậu<b id="s-clim">–</b></span>
+    <span class="stat">tuân lệnh<b id="s-obey">–</b></span>
+    <span class="stat">kiến thức<b id="s-known">–</b></span>
+    <span class="stat">kho<b id="s-stores">0</b></span>
+    <span class="stat">thủ lĩnh<b id="s-leaders">0</b></span>
+  </header>
+  <div id="stage">
+    <canvas id="map"></canvas>
+    <div id="hint">kéo để di chuyển · lăn chuột để phóng · space phát/dừng · F bám thủ lĩnh lớn nhất · E bám sự kiện · click sự kiện để bay tới</div>
+    <div id="loader">
+      <div class="big">AI Survival viewer</div>
+      <div class="small" id="loadmsg">Đang tải out/snap_seed…</div>
+      <div class="small">Hoặc kéo thả ba file <code>snap_seedN.bin</code>, <code>meta_seedN.json</code>, <code>events_seedN.txt</code> vào đây.</div>
+      <input type="file" id="files" multiple>
+    </div>
+  </div>
+  <aside>
+    <h3>Sử ký</h3>
+    <div id="events"></div>
+    <h3>Thủ lĩnh đang dẫn dắt</h3>
+    <div id="leaders"></div>
+  </aside>
+  <footer>
+    <button id="play">▶</button>
+    <button id="slower">−</button><span id="speed">1 f/s</span><button id="faster">+</button>
+    <div id="timeline"><canvas id="tl"></canvas></div>
+    <button id="followLeader">F thủ lĩnh</button>
+    <button id="followEvent">E sự kiện</button>
+    <button id="reset">⌂</button>
+  </footer>
+</div>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const ERA_COLORS = ['#3b4252','#5e81ac','#6be3a1','#a3be8c','#ebcb8b','#f2c14e','#d08770','#bf616a'];
+const state = {
+  buf: null, dv: null, W: 0, H: 0, maxFood: 10, frames: [], meta: null, events: [],
+  frame: 0, playing: false, fps: 1, acc: 0,
+  cam: { x: 0, y: 0, zoom: 4 }, follow: null, drag: null, lastEvent: -1,
+  world: null, worldFrame: -1,
+};
+
+// ---------- loading
+async function loadFromServer() {
+  const q = new URLSearchParams(location.search);
+  const seed = q.get('seed') || '2';
+  const dir = q.get('dir') || 'out';
+  $('loadmsg').textContent = `Đang tải ${dir}/snap_seed${seed}.bin …`;
+  try {
+    const [bin, meta, ev] = await Promise.all([
+      fetch(`${dir}/snap_seed${seed}.bin`).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }),
+      fetch(`${dir}/meta_seed${seed}.json`).then(r => r.ok ? r.json() : null),
+      fetch(`${dir}/events_seed${seed}.txt`).then(r => r.ok ? r.text() : ''),
+    ]);
+    boot(bin, meta, ev);
+  } catch (e) {
+    $('loadmsg').textContent = 'Không tìm thấy dữ liệu trên server. Kéo thả file vào đây.';
+  }
+}
+$('files').addEventListener('change', async e => {
+  let bin = null, meta = null, ev = '';
+  for (const f of e.target.files) {
+    if (f.name.endsWith('.bin')) bin = await f.arrayBuffer();
+    else if (f.name.endsWith('.json')) meta = JSON.parse(await f.text());
+    else if (f.name.endsWith('.txt')) ev = await f.text();
+  }
+  if (bin) boot(bin, meta, ev);
+});
+$('stage').addEventListener('dragover', e => e.preventDefault());
+$('stage').addEventListener('drop', async e => {
+  e.preventDefault();
+  let bin = null, meta = null, ev = '';
+  for (const f of e.dataTransfer.files) {
+    if (f.name.endsWith('.bin')) bin = await f.arrayBuffer();
+    else if (f.name.endsWith('.json')) meta = JSON.parse(await f.text());
+    else if (f.name.endsWith('.txt')) ev = await f.text();
+  }
+  if (bin) boot(bin, meta, ev);
+});
+
+function boot(bin, meta, evText) {
+  state.buf = bin; state.dv = new DataView(bin);
+  const dv = state.dv;
+  if (String.fromCharCode(...new Uint8Array(bin, 0, 4)) !== 'AISV') { $('loadmsg').textContent = 'File không đúng định dạng.'; return; }
+  const version = dv.getUint32(4, true);
+  state.W = dv.getUint16(8, true); state.H = dv.getUint16(10, true); state.maxFood = dv.getFloat32(12, true);
+  state.meta = meta || { names: {}, eras: ['wild','kindled','rooted','woven','layered','soaring','radiant','beyond'] };
+  // index frames
+  const n = state.W * state.H;
+  const storeBytes = version >= 2 ? 16 : 12;
+  let off = 16; state.frames = [];
+  while (off + 33 <= bin.byteLength) {
+    const tick = dv.getUint32(off, true), era = dv.getUint8(off + 4);
+    const pop = dv.getUint32(off + 5, true), stores = dv.getUint32(off + 9, true);
+    const f = { off, tick, era, pop, stores,
+      soil: dv.getFloat32(off + 13, true), climate: dv.getFloat32(off + 17, true),
+      obedience: dv.getFloat32(off + 21, true), known: dv.getFloat32(off + 25, true), season: dv.getFloat32(off + 29, true) };
+    f.world = off + 33; f.agents = f.world + n * 3; f.storesOff = f.agents + pop * 17;
+    const end = f.storesOff + stores * storeBytes;
+    if (end > bin.byteLength) break;
+    state.frames.push(f); off = end;
+  }
+  state.storeBytes = storeBytes;
+  // events
+  state.events = evText.split('\n').filter(l => l.includes('\t')).map(l => {
+    const [t, text] = l.split('\t');
+    const m = text.match(/\((\d+),\s*(\d+)\)/);
+    const lower = text.toLowerCase();
+    return { tick: +t, text, x: m ? +m[1] : null, y: m ? +m[2] : null,
+      cls: /famine|war:|plague|collapse|extinct|dust|exhausted|flood|wildfire|forgetting|died|looted/.test(lower) ? 'crisis'
+         : /innovation|custom|era:|first|granary|storehouse|great leader|plenty|bounty|took root/.test(lower) ? 'good' : '' };
+  });
+  renderEventList();
+  state.frame = 0; state.worldFrame = -1;
+  resetCamera();
+  $('loader').classList.add('hidden');
+  resize(); draw();
+}
+
+// ---------- frame access
+function agentsOf(f) {
+  const out = new Array(f.pop); const dv = state.dv; let o = f.agents;
+  for (let i = 0; i < f.pop; i++, o += 17) {
+    out[i] = { x: dv.getUint16(o, true) / 64, y: dv.getUint16(o + 2, true) / 64,
+      r: dv.getUint8(o + 4), g: dv.getUint8(o + 5), b: dv.getUint8(o + 6), flags: dv.getUint8(o + 7),
+      lineage: dv.getUint16(o + 8, true), name: dv.getUint32(o + 10, true), followers: dv.getUint16(o + 14, true), energy: dv.getUint8(o + 16) };
+  }
+  return out;
+}
+function storesOf(f) {
+  const out = []; const dv = state.dv; let o = f.storesOff;
+  for (let i = 0; i < f.stores; i++, o += state.storeBytes) {
+    out.push({ x: dv.getUint16(o, true) / 64, y: dv.getUint16(o + 2, true) / 64, food: dv.getFloat32(o + 4, true),
+      r: dv.getUint8(o + 8), g: dv.getUint8(o + 9), b: dv.getUint8(o + 10),
+      owner: state.storeBytes >= 16 ? dv.getUint32(o + 12, true) : 0 });
+  }
+  return out;
+}
+
+// ---------- world layer
+function worldImage(f) {
+  if (state.worldFrame === state.frame && state.world) return state.world;
+  const { W, H } = state; const n = W * H;
+  const food = new Uint8Array(state.buf, f.world, n), cult = new Uint8Array(state.buf, f.world + n, n), fert = new Uint8Array(state.buf, f.world + 2 * n, n);
+  if (!state.world) { state.world = document.createElement('canvas'); state.world.width = W; state.world.height = H; }
+  const ctx = state.world.getContext('2d'); const img = ctx.createImageData(W, H); const d = img.data;
+  const winter = f.season < 0.45;
+  for (let i = 0; i < n; i++) {
+    const fe = fert[i] / 255, fo = food[i] / 255, cu = cult[i] / 255;
+    // barren rock is blue-black; fertile land brown-green; standing food glows green; fields go gold.
+    let r = 14 + 38 * fe + 120 * cu, g = 18 + 46 * fe + 150 * fo * (winter ? 0.55 : 1) + 60 * cu, b = 26 + 8 * fe;
+    if (winter) { r += 10; b += 22; }
+    d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; d[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  state.worldFrame = state.frame; return state.world;
+}
+
+// ---------- drawing
+const cv = $('map'), ctx = cv.getContext('2d');
+function resize() {
+  const r = $('stage').getBoundingClientRect();
+  cv.width = Math.floor(r.width * devicePixelRatio); cv.height = Math.floor(r.height * devicePixelRatio);
+  cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
+  draw(); drawTimeline();
+}
+function resetCamera() {
+  const r = $('stage').getBoundingClientRect();
+  state.cam.zoom = Math.max(1, Math.min(r.width / state.W, r.height / state.H));
+  state.cam.x = state.W / 2; state.cam.y = state.H / 2; state.follow = null; syncButtons();
+}
+function toScreen(x, y) {
+  const r = { w: cv.width / devicePixelRatio, h: cv.height / devicePixelRatio };
+  return [(x - state.cam.x) * state.cam.zoom + r.w / 2, (y - state.cam.y) * state.cam.zoom + r.h / 2];
+}
+function draw() {
+  if (!state.frames.length) return;
+  const f = state.frames[state.frame];
+  const z = state.cam.zoom, dpr = devicePixelRatio;
+  const w = cv.width / dpr, h = cv.height / dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = z < 3;
+  const [ox, oy] = toScreen(0, 0);
+  ctx.drawImage(worldImage(f), ox, oy, state.W * z, state.H * z);
+
+  const agents = agentsOf(f), stores = storesOf(f);
+  // stores: a square with a fill bar
+  for (const s of stores) {
+    const [sx, sy] = toScreen(s.x, s.y); const size = Math.max(6, 2.2 * z);
+    ctx.fillStyle = '#1a1206'; ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+    ctx.strokeStyle = `rgb(${s.r},${s.g},${s.b})`; ctx.lineWidth = 1.5; ctx.strokeRect(sx - size / 2, sy - size / 2, size, size);
+    const fill = Math.min(1, s.food / 3000);
+    ctx.fillStyle = '#f2c14e'; ctx.fillRect(sx - size / 2 + 1.5, sy + size / 2 - 1.5 - (size - 3) * fill, size - 3, (size - 3) * fill);
+  }
+  // agents
+  const a = Math.max(1, Math.min(z * 0.8, 6));
+  const leaders = [];
+  for (const p of agents) {
+    const [sx, sy] = toScreen(p.x, p.y);
+    if (sx < -10 || sy < -10 || sx > w + 10 || sy > h + 10) continue;
+    if (p.flags & 1) ctx.fillStyle = '#ffffff';
+    else ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+    if (p.flags & 4) { ctx.fillRect(sx - a / 2, sy - a / 2, a, a); }
+    else { ctx.beginPath(); ctx.arc(sx, sy, a / 2, 0, 6.283); ctx.fill(); }
+    if (p.flags & 2) leaders.push(p);
+  }
+  // leaders: ring scaled by following, and a name when it matters
+  leaders.sort((x, y) => y.followers - x.followers);
+  ctx.font = `${Math.max(10, Math.min(13, z * 1.4))}px system-ui, sans-serif`; ctx.textAlign = 'center';
+  for (const p of leaders) {
+    const [sx, sy] = toScreen(p.x, p.y); const rr = Math.max(4, Math.min(3 + Math.sqrt(p.followers) * 0.9 * Math.min(z / 4, 1.5), 40));
+    ctx.strokeStyle = 'rgba(242,193,78,.9)'; ctx.lineWidth = p.followers >= 40 ? 2 : 1;
+    ctx.beginPath(); ctx.arc(sx, sy, rr, 0, 6.283); ctx.stroke();
+    if (p.name && (p.followers >= 20 || z >= 6)) {
+      const name = (state.meta.names || {})[p.name] || `#${p.name}`;
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; const tw = ctx.measureText(name).width + 8;
+      ctx.fillRect(sx - tw / 2, sy - rr - 16, tw, 14);
+      ctx.fillStyle = '#f2c14e'; ctx.fillText(name, sx, sy - rr - 5);
+    }
+  }
+  // HUD
+  $('s-tick').textContent = f.tick.toLocaleString('vi');
+  $('s-pop').textContent = f.pop.toLocaleString('vi');
+  $('s-soil').textContent = Math.round(f.soil * 100) + '%';
+  $('s-clim').textContent = f.climate < 0.6 ? (f.season < 0.45 ? 'hạn + đông' : 'hạn hán') : f.climate > 1.2 ? 'được mùa' : f.season < 0.45 ? 'mùa đông' : 'bình thường';
+  $('s-obey').textContent = Math.round(f.obedience * 100) + '%';
+  $('s-known').textContent = f.known.toFixed(1);
+  $('s-stores').textContent = f.stores;
+  $('s-leaders').textContent = leaders.length;
+  const eraName = state.meta.eras[f.era] || f.era; $('era').textContent = eraName; $('era').style.borderColor = ERA_COLORS[f.era] || '#666';
+  renderLeaders(leaders); markEvents(f.tick);
+}
+
+// ---------- timeline
+const tl = $('tl'), tctx = tl.getContext('2d');
+function drawTimeline() {
+  if (!state.frames.length) return;
+  const r = $('timeline').getBoundingClientRect(); tl.width = r.width * devicePixelRatio; tl.height = r.height * devicePixelRatio;
+  tctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  const w = r.width, h = r.height, n = state.frames.length;
+  const maxPop = Math.max(...state.frames.map(f => f.pop), 1);
+  for (let i = 0; i < n; i++) {
+    const f = state.frames[i]; const x = i / n * w;
+    tctx.fillStyle = ERA_COLORS[f.era] || '#444'; tctx.globalAlpha = .35; tctx.fillRect(x, 0, w / n + 1, h);
+    tctx.globalAlpha = 1; tctx.fillStyle = '#e6ebf5'; const ph = f.pop / maxPop * (h - 4);
+    tctx.fillRect(x, h - ph, Math.max(1, w / n), ph);
+  }
+  for (const e of state.events) if (e.cls === 'crisis') { tctx.fillStyle = 'rgba(255,107,107,.6)'; tctx.fillRect(tickToX(e.tick, w), 0, 1, 6); }
+  tctx.fillStyle = '#f2c14e'; tctx.fillRect(state.frame / n * w - 1, 0, 2, h);
+}
+function tickToX(t, w) { const last = state.frames[state.frames.length - 1].tick || 1; return t / last * w; }
+$('timeline').addEventListener('click', e => {
+  const r = $('timeline').getBoundingClientRect();
+  state.frame = Math.max(0, Math.min(state.frames.length - 1, Math.floor((e.clientX - r.left) / r.width * state.frames.length)));
+  draw(); drawTimeline();
+});
+
+// ---------- events panel
+function renderEventList() {
+  const box = $('events'); box.innerHTML = '';
+  for (const [i, e] of state.events.entries()) {
+    const d = document.createElement('div'); d.className = 'ev ' + e.cls + (e.x != null ? ' locatable' : ''); d.dataset.i = i;
+    d.innerHTML = `<span class="t">${e.tick}</span>${e.text.replace(/</g, '&lt;')}`;
+    if (e.x != null) d.onclick = () => { flyTo(e.x, e.y); state.follow = null; syncButtons(); const fi = frameAt(e.tick); state.frame = fi; draw(); drawTimeline(); };
+    box.appendChild(d);
+  }
+}
+function markEvents(tick) {
+  const box = $('events'); let last = null;
+  for (const d of box.children) {
+    const e = state.events[+d.dataset.i]; const past = e.tick <= tick;
+    d.classList.toggle('past', past); d.classList.remove('now'); if (past) last = d;
+  }
+  if (last) { last.classList.add('now'); if (state.playing) last.scrollIntoView({ block: 'nearest' }); }
+}
+function frameAt(tick) { let i = 0; while (i + 1 < state.frames.length && state.frames[i + 1].tick <= tick) i++; return i; }
+function renderLeaders(leaders) {
+  const box = $('leaders'); box.innerHTML = '';
+  for (const p of leaders.slice(0, 8)) {
+    const d = document.createElement('div'); d.className = 'ld';
+    const name = p.name ? ((state.meta.names || {})[p.name] || `#${p.name}`) : '(chưa có tên)';
+    d.innerHTML = `<span class="sw" style="background:rgb(${p.r},${p.g},${p.b})"></span><span class="n">${name}</span><span class="f">${p.followers} người theo</span>`;
+    d.onclick = () => { flyTo(p.x, p.y); state.follow = 'leader'; syncButtons(); };
+    box.appendChild(d);
+  }
+}
+
+// ---------- camera
+function flyTo(x, y) { state.cam.x = x; state.cam.y = y; if (state.cam.zoom < 5) state.cam.zoom = 5; draw(); }
+function applyFollow() {
+  const f = state.frames[state.frame];
+  if (state.follow === 'leader') {
+    const ls = agentsOf(f).filter(p => p.flags & 2); if (!ls.length) return;
+    const top = ls.reduce((a, b) => b.followers > a.followers ? b : a);
+    state.cam.x += (top.x - state.cam.x) * 0.3; state.cam.y += (top.y - state.cam.y) * 0.3;
+  } else if (state.follow === 'event') {
+    let last = null; for (const e of state.events) { if (e.tick <= f.tick && e.x != null) last = e; if (e.tick > f.tick) break; }
+    if (last) { state.cam.x += (last.x - state.cam.x) * 0.3; state.cam.y += (last.y - state.cam.y) * 0.3; }
+  }
+}
+cv.addEventListener('mousedown', e => { state.drag = { x: e.clientX, y: e.clientY, cx: state.cam.x, cy: state.cam.y }; });
+window.addEventListener('mousemove', e => { if (!state.drag) return; state.follow = null; syncButtons();
+  state.cam.x = state.drag.cx - (e.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (e.clientY - state.drag.y) / state.cam.zoom; draw(); });
+window.addEventListener('mouseup', () => state.drag = null);
+cv.addEventListener('wheel', e => { e.preventDefault(); const k = e.deltaY < 0 ? 1.15 : 1 / 1.15; state.cam.zoom = Math.max(0.5, Math.min(40, state.cam.zoom * k)); draw(); }, { passive: false });
+cv.addEventListener('touchstart', e => { const t = e.touches[0]; state.drag = { x: t.clientX, y: t.clientY, cx: state.cam.x, cy: state.cam.y }; }, { passive: true });
+cv.addEventListener('touchmove', e => { if (!state.drag) return; const t = e.touches[0]; state.cam.x = state.drag.cx - (t.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (t.clientY - state.drag.y) / state.cam.zoom; draw(); }, { passive: true });
+
+// ---------- playback
+function syncButtons() {
+  $('play').textContent = state.playing ? '❚❚' : '▶';
+  $('followLeader').classList.toggle('on', state.follow === 'leader');
+  $('followEvent').classList.toggle('on', state.follow === 'event');
+  $('speed').textContent = state.fps + ' f/s';
+}
+$('play').onclick = () => { state.playing = !state.playing; syncButtons(); };
+$('faster').onclick = () => { state.fps = Math.min(60, state.fps * 2); syncButtons(); };
+$('slower').onclick = () => { state.fps = Math.max(0.25, state.fps / 2); syncButtons(); };
+$('followLeader').onclick = () => { state.follow = state.follow === 'leader' ? null : 'leader'; syncButtons(); };
+$('followEvent').onclick = () => { state.follow = state.follow === 'event' ? null : 'event'; syncButtons(); };
+$('reset').onclick = () => { resetCamera(); draw(); };
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
+  if (e.key === 'f' || e.key === 'F') $('followLeader').click();
+  if (e.key === 'e' || e.key === 'E') $('followEvent').click();
+  if (e.key === 'ArrowRight') { state.frame = Math.min(state.frames.length - 1, state.frame + 1); draw(); drawTimeline(); }
+  if (e.key === 'ArrowLeft') { state.frame = Math.max(0, state.frame - 1); draw(); drawTimeline(); }
+  if (e.key === '+' || e.key === '=') $('faster').click();
+  if (e.key === '-') $('slower').click();
+});
+let last = performance.now();
+function loop(now) {
+  const dt = (now - last) / 1000; last = now;
+  if (state.playing && state.frames.length) {
+    state.acc += dt * state.fps;
+    while (state.acc >= 1) { state.acc -= 1; state.frame++; if (state.frame >= state.frames.length) { state.frame = state.frames.length - 1; state.playing = false; syncButtons(); } }
+    applyFollow(); draw(); drawTimeline();
+  }
+  requestAnimationFrame(loop);
+}
+window.addEventListener('resize', resize);
+requestAnimationFrame(loop);
+loadFromServer();
+})();
+</script>
+</body>
+</html>

@@ -187,6 +187,11 @@ impl EventLog {
             self.fire(tick, "", format!("rivalry: {} lost {} followers to {}", crate::agent::name_of(*from), n, crate::agent::name_of(*to)));
         }
 
+        // Storehouses that carried people through a winter.
+        if w.winter_withdrawals as f32 > popf {
+            self.fire(tick, "", format!("granary: storehouses were drawn on {} times through the winter by a population of {}", w.winter_withdrawals, pop));
+        }
+
         // Eras, collapses and forgetting.
         if m.era != self.era {
             self.fire(tick, "", format!("era: {} -> {} (mean knowledge {:.1}, settled {:.0}%)", self.era, m.era, m.mean_known, m.settled * 100.0));

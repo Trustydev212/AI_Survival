@@ -3,3 +3,4 @@ out/
 *.ppm
 *.png
 *.csv
+viewer/out/

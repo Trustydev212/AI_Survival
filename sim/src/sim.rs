@@ -7,6 +7,7 @@ use crate::events::EventLog;
 use crate::innovation::*;
 use crate::orders::{Order, N_ORDER};
 use crate::region::RegionGrid;
+use crate::store::Stores;
 use crate::rng::Rng;
 use crate::spatial::SpatialHash;
 use crate::stats::Window;
@@ -27,6 +28,8 @@ pub struct Sim {
     pub hall: std::collections::HashMap<u32, (u16, u32, u64)>,
     /// Coarse view of the land, so brains can see beyond the cell they stand on.
     pub regions: RegionGrid,
+    /// Village storehouses.
+    pub stores: Stores,
     spatial: SpatialHash,
     followers: Vec<u16>,
     /// Followers lost this window, by (old leader name, new leader name).
@@ -53,6 +56,7 @@ impl Sim {
             rng,
             world,
             regions,
+            stores: Stores::default(),
             agents: Vec::with_capacity(cfg.agents * 4),
             tick: 0,
             window: Window::default(),
@@ -174,6 +178,7 @@ impl Sim {
         if self.tick % self.cfg.region_refresh == 0 {
             self.regions.refresh(&self.world, &self.agents, self.cfg.wrap);
         }
+        self.tend_stores();
         self.spatial.rebuild(self.agents.iter().map(|a| (a.x, a.y)));
         self.sense_and_think(season);
         self.act();
@@ -181,6 +186,20 @@ impl Sim {
         self.metabolise_and_die();
         self.immigrate();
         self.tick += 1;
+    }
+
+    /// Stores spoil a little every tick and are forgotten when long unused and empty.
+    fn tend_stores(&mut self) {
+        let cfg = &self.cfg;
+        let before = self.stores.list.len();
+        for s in self.stores.list.iter_mut() {
+            s.food *= cfg.store_decay;
+            s.idle += 1;
+        }
+        self.stores.list.retain(|s| !(s.food < 1.0 && s.idle > 2000));
+        if self.stores.list.len() != before || self.tick % cfg.region_refresh == 0 {
+            self.stores.rebuild_index(&self.regions);
+        }
     }
 
     /// Luck at world scale: once a year the dice decide drought, plenty, hard winters, plague,
@@ -289,10 +308,11 @@ impl Sim {
         let agents = &self.agents;
         let spatial = &self.spatial;
         let regions = &self.regions;
+        let stores = &self.stores;
         let threads = cfg.threads.max(1);
         if threads == 1 || n < 2 * CHUNK {
             for (i, d) in self.decisions.iter_mut().enumerate() {
-                *d = decide(i, cfg, world, agents, spatial, regions, season);
+                *d = decide(i, cfg, world, agents, spatial, regions, stores, season);
             }
             return;
         }
@@ -309,7 +329,7 @@ impl Sim {
                     }
                     let mut slot = slots[c].lock().unwrap();
                     for (k, d) in slot.iter_mut().enumerate() {
-                        *d = decide(c * CHUNK + k, cfg, world, agents, spatial, regions, season);
+                        *d = decide(c * CHUNK + k, cfg, world, agents, spatial, regions, stores, season);
                     }
                 });
             }
@@ -374,6 +394,18 @@ impl Sim {
                 let text = format!("{} of lineage {} has led {} kin for 200 ticks", name_of(a.name), a.lineage, f);
                 self.events.fire(self.tick, "first_leader", format!("first leader: {text}"));
             }
+            if a.name != 0 && f >= self.cfg.store_min_followers && a.still >= self.cfg.settle_ticks {
+                let (ax, ay) = (a.x, a.y);
+                let has = self.stores.nearest(ax, ay, a, true, self.cfg.kin_threshold, self.cfg.store_range * 2.0, &self.regions, self.cfg.wrap, self.cfg.width, self.cfg.height).is_some();
+                if !has {
+                    let (name, lineage, marker) = (a.name, a.lineage, a.genome.marker);
+                    self.stores.list.push(crate::store::Store { x: ax, y: ay, food: 0.0, owner: name, lineage, marker, idle: 0 });
+                    self.stores.rebuild_index(&self.regions);
+                    self.window.stores_raised += 1;
+                    self.events.fire(self.tick, "first_store", format!("first storehouse: raised by {} of lineage {} at ({:.0}, {:.0})", name_of(name), lineage, ax, ay));
+                }
+            }
+            let a = &mut self.agents[i];
             if a.name != 0 {
                 let entry = self.hall.entry(a.name).or_insert((0, a.lineage, self.tick));
                 if f > entry.0 {
@@ -520,7 +552,29 @@ impl Sim {
                     }
                 }
                 Action::Share => {
-                    if d.target != u32::MAX {
+                    let mut pooled = false;
+                    if obeyed && d.under == Some(Order::Pool) {
+                        let cfg = &self.cfg;
+                        let a = &self.agents[i];
+                        if let Some(nb) = self.stores.nearest(a.x, a.y, a, true, cfg.kin_threshold, cfg.store_range, &self.regions, cfg.wrap, cfg.width, cfg.height) {
+                            let give = a.inventory.min(cfg.share_amount * cfg.pool_bonus);
+                            if give > 0.0 {
+                                let st = &mut self.stores.list[nb.idx];
+                                let room = (cfg.store_cap - st.food).max(0.0);
+                                let put = give.min(room);
+                                st.food += put;
+                                st.idle = 0;
+                                let a = &mut self.agents[i];
+                                a.inventory -= put;
+                                a.feel(BOND, 0.1);
+                                a.prestige += 0.05;
+                                self.window.deposits += 1;
+                                self.window.deposited += put;
+                                pooled = true;
+                            }
+                        }
+                    }
+                    if !pooled && d.target != u32::MAX {
                         self.resolve_share(i, d.target as usize);
                     }
                 }
@@ -640,8 +694,24 @@ impl Sim {
                     self.events.fire(self.tick, "first_burn", "first fields burned by raiders".to_string());
                 }
             }
+            // A raider who wins beside a rival storehouse carries some of it off.
+            let mut looted = 0.0;
+            if raider {
+                let att = &self.agents[i];
+                if let Some(nb) = self.stores.nearest(vx, vy, att, false, cfg.kin_threshold, cfg.store_range, &self.regions, cfg.wrap, cfg.width, cfg.height) {
+                    let st = &mut self.stores.list[nb.idx];
+                    looted = st.food.min(cfg.loot);
+                    st.food -= looted;
+                    st.idle = 0;
+                    if looted > 0.0 {
+                        self.window.looted += looted;
+                        self.events.fire(self.tick, "first_loot", "first storehouse looted by raiders".to_string());
+                    }
+                }
+            }
             let a = &mut self.agents[i];
             a.energy += stolen + cfg.attack_damage * mult * 0.5;
+            a.inventory = (a.inventory + looted).min(cfg.inv_cap);
             if a.energy > cfg.max_energy {
                 a.inventory = (a.inventory + a.energy - cfg.max_energy).min(cfg.inv_cap);
                 a.energy = cfg.max_energy;
@@ -784,6 +854,8 @@ impl Sim {
         let cfg = &self.cfg;
         let n = self.decisions.len();
         let mut rng = self.rng.clone();
+        let mut hungry: Vec<u32> = Vec::new();
+        let winter = self.world.season(self.tick) < 0.5;
         for (i, a) in self.agents.iter_mut().enumerate() {
             let (moved, resting) = if i < n {
                 let d = &self.decisions[i];
@@ -816,6 +888,8 @@ impl Sim {
                 let eat = a.inventory.min(cfg.eat_amount);
                 a.inventory -= eat;
                 a.energy += eat;
+            } else if a.energy < cfg.eat_below {
+                hungry.push(i as u32);
             }
 
             // Personal luck.
@@ -848,6 +922,25 @@ impl Sim {
             }
         }
         self.rng = rng;
+        // The hungry draw on their village's store.
+        for &i in &hungry {
+            let a = &self.agents[i as usize];
+            if let Some(nb) = self.stores.nearest(a.x, a.y, a, true, cfg.kin_threshold, cfg.store_range, &self.regions, cfg.wrap, cfg.width, cfg.height) {
+                let st = &mut self.stores.list[nb.idx];
+                let take = st.food.min(cfg.eat_amount);
+                if take > 0.0 {
+                    st.food -= take;
+                    st.idle = 0;
+                    let a = &mut self.agents[i as usize];
+                    a.energy += take;
+                    a.feel(BOND, 0.02);
+                    self.window.withdrawals += 1;
+                    if winter {
+                        self.window.winter_withdrawals += 1;
+                    }
+                }
+            }
+        }
         // Emotional contagion: followers drift toward what their leader feels.
         for i in 0..n {
             let l = self.agents[i].leader;
@@ -1004,7 +1097,8 @@ impl Geo {
 
 /// One agent senses its surroundings and its brain decides. Pure: reads the world, writes nothing.
 fn decide(
-    i: usize, cfg: &Config, world: &World, agents: &[Agent], spatial: &SpatialHash, regions: &RegionGrid, season: f32,
+    i: usize, cfg: &Config, world: &World, agents: &[Agent], spatial: &SpatialHash, regions: &RegionGrid,
+    stores: &Stores, season: f32,
 ) -> Decision {
     let geo = Geo { wrap: cfg.wrap };
     let vision2 = cfg.vision * cfg.vision;
@@ -1157,6 +1251,13 @@ fn decide(
             input[64] = under_dx;
             input[65] = under_dy;
         }
+    // The village storehouse, if my kin have raised one within reach.
+    if let Some(nb) = stores.nearest(a.x, a.y, a, true, cfg.kin_threshold, cfg.store_range, regions, cfg.wrap, cfg.width, cfg.height) {
+        input[66] = 1.0;
+        input[67] = nb.dx / cfg.vision;
+        input[68] = nb.dy / cfg.vision;
+        input[69] = (stores.list[nb.idx].food / cfg.store_cap).min(2.0);
+    }
 
         let mut t = a.genome.think(&input);
         // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.

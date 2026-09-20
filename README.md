@@ -11,6 +11,24 @@ xã hội có tìm được cách giữ mọi thứ phát triển mà không t�
 Repo này hiện chứa **lõi mô phỏng headless** (`sim/`). Chưa có đồ hoạ engine,
 chỉ có xuất ảnh PPM, CSV, sử ký, và bảng kết cục khi chạy nhiều thế giới.
 
+## Xem bằng mắt
+
+```bash
+cd sim && ./target/release/sim --seed 2 --ticks 30000 --snapshot-every 100 --out ../viewer/out
+cd ../viewer && python3 -m http.server 8765
+# mở http://127.0.0.1:8765/index.html?seed=2
+```
+
+`viewer/index.html` là trình xem 2D chạy trong trình duyệt, không cần cài gì. Nó phát lại luồng ảnh chụp
+trạng thái mà sim ghi ra: đất, thức ăn, ruộng, từng agent với màu dòng họ, người ốm màu trắng, thủ lĩnh
+có vòng và tên, kho chung là ô vuông có thanh đầy. Bên phải là sử ký cuộn theo thời gian, bấm vào sự kiện
+có toạ độ để bay tới, và danh sách thủ lĩnh đang dẫn dắt. Thanh thời gian dưới cùng tô màu theo thời đại,
+vẽ dân số và đánh dấu khủng hoảng. Phím F bám thủ lĩnh lớn nhất, E bám sự kiện mới nhất, space phát,
+mũi tên đi từng khung. Không có server thì kéo thả ba file `snap`, `meta`, `events` vào trang.
+
+Ảnh chụp mỗi 100 tick cho 30.000 tick nặng khoảng 43 MB. Đây là bản mẫu cho lớp Godot sau này:
+định dạng khung được ghi ở đầu `sim/src/snapshot.rs`.
+
 ## Chạy thử
 
 ```bash
@@ -147,6 +165,15 @@ Không có trần dân số nữa nên bùng-vỡ là kết cục tự nhiên: d
 đói khi mùa đông tới. Chỉ số **breed** đo số ca sinh trên 1.000 lượt agent đủ năng lượng để sinh, và
 **swing** đo dân số cao nhất chia thấp nhất ở phần ba cuối run. Câu hỏi để thí nghiệm là xã hội có tiến hoá
 ra cách tự hãm sinh sản khi đông không, vì não nhìn thấy mật độ cả cục bộ lẫn theo vùng.
+
+## Kho chung của làng
+
+Thủ lĩnh có tên, đã định cư và có từ 10 người theo thì dựng một **kho chung** tại chỗ đứng, nếu quanh đó
+chưa có kho của họ hàng. Người theo tuân lệnh "pool" bỏ thức ăn vào kho thay vì cho một người. Bất kỳ ai
+cùng dòng họ đói mà không còn gì trong túi thì rút từ kho trong tầm 8 ô. Kẻ đột kích thắng trận cạnh kho
+của dòng họ khác thì cướp kho. Kho hư hao 0,03% mỗi tick và bị quên khi trống lâu. Não thấy kho gần nhất:
+có hay không, hướng, mức đầy. Sử ký ghi mỗi mùa đông mà số lần rút kho vượt dân số, tức là kho đã nuôi làng
+qua mùa đông. Ở seed 2, kho đầu tiên dựng ở tick 790, và mùa đông tick 10.000 dân số 882 rút kho 3.055 lần.
 
 ## Học tập, rèn luyện, lãnh đạo
 
@@ -335,5 +362,5 @@ sim/src/
 ## Bước tiếp theo
 
 1. Song song hoá nốt phần hành động và trao đổi chất, hiện mới được hai phần ba thời gian mỗi tick.
-2. Kho chung của làng: thức ăn tích trữ chung do thủ lĩnh phân phối, để mùa đông không thành nạn đói.
-3. Lớp hiển thị bằng Godot 4 đọc trạng thái từ lõi này, camera bám sử ký, thủ lĩnh và tập quán.
+2. Viewer: nén ảnh chụp để xem được run dài, vẽ hướng di chuyển và mệnh lệnh, xem trực tiếp khi sim đang chạy.
+3. Lớp Godot 4 đọc cùng định dạng khung, cho bản phát hành.
