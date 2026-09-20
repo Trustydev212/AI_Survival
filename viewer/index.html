@@ -287,6 +287,8 @@ async function boot(bytes, meta, evText) {
   const dv = new DataView(bytes.buffer, bytes.byteOffset);
   if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'AISV' || dv.getUint32(4, true) < 3) { $('loadmsg').textContent = t('badfile') + ' (v3+)'; return; }
   state.W = dv.getUint16(8, true); state.H = dv.getUint16(10, true); state.maxFood = dv.getFloat32(12, true);
+  state.version = dv.getUint32(4, true); state.water = null; state.dataStart = 16;
+  if (state.version >= 4) { const n = dv.getUint32(16, true); state.water = new Uint8Array(state.W * state.H); for (let i = 0; i < state.W * state.H; i++) state.water[i] = (bytes[20 + (i >> 3)] >> (i & 7)) & 1; state.dataStart = 20 + n; }
   state.meta = meta || { names: {}, eras: T.en.eras };
   state.frames = []; indexFrames();
   parseEvents(evText);
@@ -300,7 +302,7 @@ async function boot(bytes, meta, evText) {
 }
 function indexFrames() {
   const b = state.bytes, dv = new DataView(b.buffer, b.byteOffset);
-  let off = state.frames.length ? state.frames[state.frames.length - 1].end : 16;
+  let off = state.frames.length ? state.frames[state.frames.length - 1].end : state.dataStart;
   while (off + 4 <= b.length) {
     const len = dv.getUint32(off, true); const start = off + 4, end = start + len;
     if (end > b.length) break;
@@ -410,6 +412,16 @@ function recolor(img, maps, scale = 1, sx = 0, sy = 0, sw = 0, sh = 0) {
   const table = new Map(); for (const m of maps) for (const k in m) table.set(hexRGB(k).join(','), hexRGB(m[k]));
   const id = g.getImageData(0, 0, c.width, c.height); const d = id.data;
   for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const to = table.get(d[i] + ',' + d[i + 1] + ',' + d[i + 2]); if (to) { d[i] = to[0]; d[i + 1] = to[1]; d[i + 2] = to[2]; } }
+  g.putImageData(id, 0, 0); return c;
+}
+// repaint a layer in one colour, keeping its shading: each pixel becomes the colour scaled by its luminance (outlines stay)
+function toneLayer(img, sx, sy, sw, sh, hex) {
+  const c = document.createElement('canvas'); c.width = sw; c.height = sh; const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh); const id = g.getImageData(0, 0, sw, sh); const d = id.data; const [cr, cg, cb] = hexRGB(hex);
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3]) continue; const lum = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; if (lum < 45) continue;
+    const k = Math.max(0.45, Math.min(1.2, lum / 150)); d[i] = Math.min(255, cr * k); d[i + 1] = Math.min(255, cg * k); d[i + 2] = Math.min(255, cb * k);
+  }
   g.putImageData(id, 0, 0); return c;
 }
 function shade(hex, f) { const [r, g, b] = hexRGB(hex); const k = v => '#' + Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, '0'); return k(r) + k(g).slice(1) + k(b).slice(1); }
@@ -539,16 +551,18 @@ function getChar(lineage) {
   const col = factionColor(lineage), dark = shade(col, 0.62);
   t = { w: A.fw, h: A.fh, anims: {} };
   if (ART.kind === 'sunny') {
-    const S = ART.S, n = S.meta.frames, hair = (lineage * 11) % 7; // 0 = no hair layer
-    const maps = { '#374464': col, '#242b42': dark };
+    const S = ART.S, n = S.meta.frames, hair = 1 + (lineage * 11) % 6;
+    const light = shade(col, 1.25);
+    const maps = { '#374464': col, '#242b42': dark, '#a51f33': light, '#fa717a': light };
     t.ax = S.meta.anchor[0]; t.ay = S.meta.anchor[1];
     for (const anim of SUNNY_ANIMS) {
       const img = S.chars[anim], nf = n[anim]; const base = recolor(img, [maps], 1, 0, 0, nf * A.fw, A.fh);
+      const hairRow = toneLayer(img, 0, hair * A.fh, nf * A.fw, A.fh, col);
       const frames = [];
       for (let f = 0; f < nf; f++) {
         const r = atlasAlloc(A.fw, A.fh);
         A.g.drawImage(base, f * A.fw, 0, A.fw, A.fh, r.x, r.y, A.fw, A.fh);
-        if (hair) A.g.drawImage(img, f * A.fw, hair * A.fh, A.fw, A.fh, r.x, r.y, A.fw, A.fh);
+        A.g.drawImage(hairRow, f * A.fw, 0, A.fw, A.fh, r.x, r.y, A.fw, A.fh);
         A.g.drawImage(img, f * A.fw, 7 * A.fh, A.fw, A.fh, r.x, r.y, A.fw, A.fh);
         frames.push(new PIXI.Texture(A.base, new PIXI.Rectangle(r.x, r.y, A.fw, A.fh)));
         if (anim === 'idle' && f === 0) t.swatch = [r.x + 21, r.y + 14, 24, 24];
@@ -628,7 +642,7 @@ function initPixi() {
   propLayer = new PIXI.Container(); world.addChild(propLayer);
   storeLayer = new PIXI.Container(); world.addChild(storeLayer);
   animLayer = new PIXI.Container(); world.addChild(animLayer); animSprites = [];
-  shadows = new PIXI.ParticleContainer(30000, { position: true, uvs: false, scale: true, alpha: true }); world.addChild(shadows);
+  shadows = new PIXI.ParticleContainer(30000, { position: true, uvs: false, scale: true, alpha: true, tint: true }); world.addChild(shadows);
   deathLayer = new PIXI.Container(); world.addChild(deathLayer); deaths = [];
   bodies = new PIXI.ParticleContainer(30000, { position: true, uvs: true, scale: true, alpha: true, tint: true }); world.addChild(bodies);
   fxLayer = new PIXI.Container(); world.addChild(fxLayer);
@@ -653,7 +667,8 @@ const tileTexCache = new Map();
 function tileTex(id) { let t = tileTexCache.get(id); if (!t) { const [x, y] = tileRect(id); t = new PIXI.Texture(ART.S.tilesetBase, new PIXI.Rectangle(x, y, 16, 16)); tileTexCache.set(id, t); } return t; }
 
 // terrain classes: 0 water, 1 sand, 2 grass
-function cellClass(fert) { return fert < 8 ? 0 : fert < 20 ? 1 : 2; }
+// v4 streams carry the sea; older ones only had fertility, so barren cells stood in for water
+function cellClass(fert, i) { if (state.water) return state.water[i] ? 0 : fert < 20 ? 1 : 2; return fert < 8 ? 0 : fert < 20 ? 1 : 2; }
 // distance-to-land classes for water (0 = coast, 1, 2, 3 = open sea), recomputed only when the coastline changes
 function computeNear(kinds, W, H) {
   const near = new Uint8Array(W * H).fill(3), cur = new Uint8Array(W * H);
@@ -673,7 +688,7 @@ function drawTerrain(idx) {
   const [food, cult, fert] = layersOf(idx); const f = state.frames[idx]; const winter = f.season < 0.42;
   const W = state.W, H = state.H; const kinds = state.kinds || (state.kinds = new Uint8Array(W * H));
   let coastChanged = !state.near;
-  for (let i = 0; i < W * H; i++) { const k = cellClass(fert[i]); if ((k > 0) !== (kinds[i] > 0)) coastChanged = true; kinds[i] = k; }
+  for (let i = 0; i < W * H; i++) { const k = cellClass(fert[i], i); if ((k > 0) !== (kinds[i] > 0)) coastChanged = true; kinds[i] = k; }
   if (coastChanged) state.near = computeNear(kinds, W, H);
   const near = state.near; const cols = Math.ceil(W / CH); const look = winter ? 'snow' : null; const sunny = ART.kind === 'sunny';
   const gi = (x, y) => kinds[((y + H) % H) * W + ((x + W) % W)];
@@ -826,7 +841,7 @@ function draw(force) {
     let sp = state.sprites.get(id);
     if (!sp) {
       sp = { body: new PIXI.Sprite(C.anims.idle[0]), lin }; sp.body.anchor.set(C.ax, C.ay); bodies.addChild(sp.body); state.sprites.set(id, sp);
-      if (shadowTex) { sp.sh = new PIXI.Sprite(shadowTex); sp.sh.anchor.set(0.5, 0.5); sp.sh.alpha = 0.5; shadows.addChild(sp.sh); }
+      if (shadowTex) { sp.sh = new PIXI.Sprite(shadowTex); sp.sh.anchor.set(0.5, 0.5); sp.sh.alpha = 0.7; shadows.addChild(sp.sh); }
     }
     sp.lin = lin;
     let x = A.x[i], y = A.y[i], moving = false, dx = A.mdx[i];
@@ -846,7 +861,7 @@ function draw(force) {
     const px = x * TILE + TILE / 2, py = y * TILE + TILE + bob;
     sp.body.position.set(px, py);
     sp.body.alpha = A.energy[i] < 15 ? 0.7 : 1;
-    if (sp.sh) { sp.sh.position.set(px, py - 2); sp.sh.scale.set(detail); }
+    if (sp.sh) { sp.sh.position.set(px, py - 2); sp.sh.scale.set(detail * 1.15, detail); sp.sh.tint = hexToInt(factionColor(lin)); }
   }
   for (const [id, sp] of state.sprites) if (!alive.has(id)) {
     if (sunny && stepped && deaths.length < 300 && sp.lin !== undefined) {

@@ -97,8 +97,12 @@ impl Sim {
             let lineage = self.new_lineage();
             for _ in 0..per_tribe {
                 let (nx, ny) = (self.rng.normal(), self.rng.normal());
-                let x = self.place(hx + nx * 4.0, self.cfg.width);
-                let y = self.place(hy + ny * 4.0, self.cfg.height);
+                let mut x = self.place(hx + nx * 4.0, self.cfg.width);
+                let mut y = self.place(hy + ny * 4.0, self.cfg.height);
+                if self.world.is_water(x, y) {
+                    x = hx;
+                    y = hy;
+                }
                 let genome = ancestor.mutated(&mut self.rng, 0.5, 0.3);
                 let a = self.make_agent(x, y, genome, lineage);
                 self.agents.push(a);
@@ -556,13 +560,30 @@ impl Sim {
             // Movement (costed in metabolise). Marching together is cheaper than wandering.
             {
                 let a = &self.agents[i];
-                let nx = self.place(a.x + d.mx * self.cfg.speed, self.cfg.width);
-                let ny = self.place(a.y + d.my * self.cfg.speed, self.cfg.height);
+                let (ox, oy) = (a.x, a.y);
+                let mut nx = self.place(ox + d.mx * self.cfg.speed, self.cfg.width);
+                let mut ny = self.place(oy + d.my * self.cfg.speed, self.cfg.height);
+                let (mut mx, mut my) = (d.mx, d.my);
+                // The sea is not walkable: slide along the coast, or stop at it.
+                if self.world.is_water(nx, ny) {
+                    if !self.world.is_water(nx, oy) {
+                        ny = oy;
+                        my = 0.0;
+                    } else if !self.world.is_water(ox, ny) {
+                        nx = ox;
+                        mx = 0.0;
+                    } else {
+                        nx = ox;
+                        ny = oy;
+                        mx = 0.0;
+                        my = 0.0;
+                    }
+                }
                 let a = &mut self.agents[i];
                 a.x = nx;
                 a.y = ny;
-                a.mdx = d.mx;
-                a.mdy = d.my;
+                a.mdx = mx;
+                a.mdy = my;
             }
 
             match d.action {
@@ -622,8 +643,12 @@ impl Sim {
                         let child_genome = self.agents[i].genome.mutated(&mut self.rng, cfg.p_mut, cfg.sigma);
                         let (px, py) = (self.agents[i].x, self.agents[i].y);
                         let (nx, ny) = (self.rng.normal(), self.rng.normal());
-                        let x = self.place(px + nx * 0.8, cfg.width);
-                        let y = self.place(py + ny * 0.8, cfg.height);
+                        let mut x = self.place(px + nx * 0.8, cfg.width);
+                        let mut y = self.place(py + ny * 0.8, cfg.height);
+                        if self.world.is_water(x, y) {
+                            x = px;
+                            y = py;
+                        }
                         let a = &mut self.agents[i];
                         a.energy -= cfg.repro_cost;
                         a.children = a.children.saturating_add(1);

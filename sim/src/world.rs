@@ -8,6 +8,8 @@ pub struct World {
     pub height: usize,
     /// What the land could be: fertility recovers toward this when rested.
     pub base_fertility: Vec<f32>,
+    /// Sea: nobody can stand here. Fixed at generation, below the barren-land threshold.
+    pub water: Vec<bool>,
     /// What the land is now: harvesting wears it down.
     pub fertility: Vec<f32>,
     pub food: Vec<f32>,
@@ -51,6 +53,7 @@ impl World {
         }
         // Normalise then threshold so ~40% of land is near-barren and patches are rich.
         let total_amp: f32 = octaves.iter().map(|o| o.1).sum();
+        let water: Vec<bool> = fertility.iter().map(|f| *f / total_amp < 0.38).collect();
         for f in fertility.iter_mut() {
             let v = *f / total_amp;
             let t = ((v - 0.42) / 0.30).clamp(0.0, 1.0);
@@ -59,7 +62,12 @@ impl World {
         let food = fertility.iter().map(|f| f * max_food * 0.8).collect();
         let cultivation = vec![0.0; width * height];
         let base_fertility = fertility.clone();
-        World { width, height, base_fertility, fertility, food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
+        World { width, height, base_fertility, water, fertility, food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
+    }
+
+    #[inline]
+    pub fn is_water(&self, x: f32, y: f32) -> bool {
+        self.water[self.idx(x, y)]
     }
 
     #[inline]

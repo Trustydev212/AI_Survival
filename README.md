@@ -51,8 +51,8 @@ Với Sunnyside, cách vẽ như sau:
   bốn góc ngoài chéo), viewer suy ra tile từ mặt nạ và tự chọn tile gần nhất cho hình dạng pack không có.
 - **Nhân vật** 80x48 với hoạt ảnh thật của pack: chạy khi di chuyển, vung kiếm khi tấn công, cuốc đất khi
   thu hoạch, khuân đồ khi chia sẻ, ôm nhau khi sinh sản, ôm bụng khi đói, ngã xuống và hoá thành đầu lâu
-  khi chết (tối đa 300 hoạt ảnh chết cùng lúc). Quần yếm đổi theo màu phe, kiểu tóc đổi theo dòng họ, người
-  ốm ngả xanh, ai cũng có bóng đổ. Mọi khung của mọi dòng họ nằm trong một texture 4096x2048 nên hàng chục
+  khi chết (tối đa 300 hoạt ảnh chết cùng lúc). Tóc, áo và quần yếm cùng nhuộm màu phe (kiểu tóc theo dòng họ), dưới chân là
+  vòng bóng màu phe nên nhìn từ xa vẫn biết ai thuộc dòng họ nào; người ốm ngả xanh. Mọi khung của mọi dòng họ nằm trong một texture 4096x2048 nên hàng chục
   nghìn sprite vẫn vẽ trong một lần gọi.
 - **Làng** đông có nhà của pack (mái xanh, đỏ, cam, tím, lam theo vị trí), làng rất đông có thêm lửa trại
   cháy và gà, bò, lợn, cừu, vịt đi lại. **Kho chung** là cối xay gió quay, thùng, rương, thanh xanh mức đầy.
@@ -76,7 +76,7 @@ của pack; nhân vật là Gabe và Mani 24x24 với 7 khung chạy.
 - Thanh thời gian tô màu thời đại và vẽ dân số. Phím F bám thủ lĩnh lớn nhất, E bám sự kiện, space phát,
   mũi tên đi từng khung, kéo thả ba file để xem không cần server.
 
-Định dạng khung bản 3 ghi ở đầu `sim/src/snapshot.rs`: lớp đất lượng tử hoá, mã hoá delta và RLE với khung
+Định dạng khung bản 4 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, lớp đất lượng tử hoá, mã hoá delta và RLE với khung
 khoá mỗi 16 khung, agent 22 byte có id để nội suy. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
 trong đó đất chỉ vài KB mỗi khung. Sim flush sau mỗi khung, `serve.py` hỗ trợ Range, nên `&live=1` bám được
 run đang chạy.
@@ -112,7 +112,7 @@ trên 4 nhân. Không còn trần dân số: đất là giới hạn duy nhất 
 Kết quả ghi vào `out/`:
 
 - `stats_seed<N>.csv`: dân số, số dòng họ, Gini, số sinh, chết đói, bị giết, tấn công, chia sẻ, phân bố hành động, entropy chiến lược, theo từng cửa sổ thời gian.
-- `frame_<tick>.ppm`: bản đồ. Xanh lá là thức ăn, đỏ là ruộng đang canh tác, chấm màu là agent với màu do gen quy định, trắng là đang ốm.
+- `frame_<tick>.ppm`: bản đồ. Xanh dương là biển, xanh lá là thức ăn, đỏ là ruộng đang canh tác, chấm màu là agent với màu do gen quy định, trắng là đang ốm.
 - `events_seed<N>.txt`: sử ký. Phát minh, dòng họ thống trị hoặc tuyệt chủng, nạn đói, chiến tranh, dịch bệnh, thiên tai, tầng lớp mới, thủ lĩnh, đổi thời đại, sụp đổ, đất cạn kiệt, tuyệt chủng.
 - `experiment_A_B.csv`: bảng kết cục khi chạy `--seeds A-B`.
 
@@ -121,8 +121,11 @@ Cùng seed luôn cho cùng kết quả, nên có thể replay và so sánh thí 
 ## Cách thế giới vận hành
 
 **Thế giới** là lưới ô cuộn tròn. Mỗi ô có độ màu mỡ tiềm năng, sinh ra từ value noise
-rồi ngưỡng hoá để đất tốt tụ thành từng vùng và khoảng 40% bản đồ gần như cằn cỗi.
-Thức ăn mọc lại theo độ màu mỡ và theo mùa. Mùa đông giảm tốc độ mọc xuống 20%.
+rồi ngưỡng hoá để đất tốt tụ thành từng vùng và khoảng 40% bản đồ gần như cằn cỗi. Phần trũng nhất của
+noise là **biển**: không ai đứng, đi hay sinh ra trên đó; ai đi tới bờ thì trượt dọc bờ hoặc dừng lại, nên
+đất liền chia thành các lục địa và hồ, và du mục không thể băng thẳng qua nước. Các kết quả thí nghiệm ghi
+bên dưới được đo trước khi có biển. Thức ăn mọc lại theo độ màu mỡ và theo mùa. Mùa đông giảm tốc độ mọc
+xuống 20%.
 
 **Đất có thể chết.** Mỗi đơn vị thức ăn hái đi bào mòn độ màu mỡ một chút. Đất được nghỉ, còn nhiều
 thức ăn, thì hồi phục chậm về tiềm năng. Đất cạn hẳn hồi phục cực chậm. Phát minh làm hái nhanh hơn

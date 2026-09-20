@@ -1,8 +1,9 @@
-//! Binary snapshot stream for the browser viewer (viewer/index.html). Version 3.
+//! Binary snapshot stream for the browser viewer (viewer/index.html). Version 4.
 //! Little endian throughout. The file is flushed after every frame so a viewer can
 //! follow a run while it is still being computed.
 //!
-//! header: "AISV" u32 version(3) u16 width u16 height f32 max_food
+//! header: "AISV" u32 version(4) u16 width u16 height f32 max_food
+//!         u32 len, then the sea as a bitmask (cell y*width+x is bit x%8 of byte (y*width+x)/8)
 //! frame:  u32 frame_len (bytes that follow this field)
 //!         u32 tick u8 era u8 keyframe u32 pop u32 stores
 //!         f32 soil f32 climate f32 obedience f32 mean_known f32 season
@@ -44,11 +45,19 @@ impl Snapshot {
     pub fn create(path: &str, world: &World) -> std::io::Result<Snapshot> {
         let mut out = BufWriter::new(std::fs::File::create(path)?);
         out.write_all(b"AISV")?;
-        out.write_all(&3u32.to_le_bytes())?;
+        out.write_all(&4u32.to_le_bytes())?;
         out.write_all(&(world.width as u16).to_le_bytes())?;
         out.write_all(&(world.height as u16).to_le_bytes())?;
         out.write_all(&world.max_food.to_le_bytes())?;
         let n = world.width * world.height;
+        let mut mask = vec![0u8; n.div_ceil(8)];
+        for (i, w) in world.water.iter().enumerate() {
+            if *w {
+                mask[i / 8] |= 1 << (i % 8);
+            }
+        }
+        out.write_all(&(mask.len() as u32).to_le_bytes())?;
+        out.write_all(&mask)?;
         Ok(Snapshot { out, frames: 0, prev: [vec![0; n], vec![0; n], vec![0; n]] })
     }
 
