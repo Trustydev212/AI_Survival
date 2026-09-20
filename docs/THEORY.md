@@ -20,7 +20,8 @@ sau khi thêm biển).
 66% không lệnh; kết cục xấu 3/12 so với 5/12. Lệnh được tuân nhiều nhất là *kiềm chế* (ngừng hái) và *góp
 kho*. Xem README, mục "Đối chứng: có mệnh lệnh và không có mệnh lệnh".
 
-**Độ tin.** Có bằng chứng về đất; gợi ý về kết cục. Cần lặp lại với biển và chế tác: `tools/lab.py run orders`.
+**Độ tin.** Có bằng chứng về đất; gợi ý về kết cục. **Đã lặp lại** với biển, chế tác và não mới (mục 10): không
+mệnh lệnh thì biên độ bùng-vỡ 7,9 so với 3,9 và 6/16 thế giới tuyệt chủng so với 3/16.
 
 ### 2. Mệnh lệnh sống lâu hơn người ra lệnh
 
@@ -30,7 +31,7 @@ chết. Tập quán phổ biến nhất là *ở lại* và *kiềm chế*.
 **Bằng chứng.** Cột `custom` trong mọi bảng kết cục: 8 thế giới sau khi có biển có tập quán *ở lại* từ 0% đến
 66% dân số; các xã hội bùng-vỡ thường có tập quán yếu (1 đến 14%).
 
-**Độ tin.** Gợi ý. Chưa có đối chứng tắt tập quán riêng (chưa có cờ); là việc nên làm.
+**Độ tin.** Có bằng chứng (mục 10): cờ `--no-customs` tắt riêng tập quán, và định cư tụt từ 92% xuống 38%.
 
 ### 3. Biển chia cắt bảo vệ, thuyền mở ra
 
@@ -106,34 +107,65 @@ Học nhanh gấp ba: đồ vật mỗi đầu người 0,19, tức là không h
 một việc cụ thể trong đời (chế tác rồi dùng thứ mình làm ra), nhưng không dạy được chiến lược sống, thứ vẫn
 thuộc về tiến hoá.
 
-### 9. Nghe nhau chưa có ích, và tiếng gọi mới chỉ loé lên
+### 9. Nghe người lạ đáng giá hơn nghe họ hàng
 
-**Phát biểu.** Với não hiện tại, cho mọi người điếc (đầu vào tín hiệu bằng 0) không làm xã hội tệ đi; thế
-giới điếc còn sinh sản ít hơn và biết nhiều hơn một chút. Tín hiệu có nghĩa chỉ xuất hiện thoáng qua: một
-thế giới trong tám vượt 0,3 bit ở tick 1.500 rồi mất.
+**Phát biểu.** Tôi đã đoán ngược. Giả thuyết là: tín hiệu tốn năng lượng và chỉ họ hàng nghe rõ thì chọn lọc
+mới có lý do biến tiếng gọi thành ngôn ngữ. Thí nghiệm 16 seed cho thấy thế giới chỉ nghe họ hàng nghèo
+đi hẳn, thế giới điếc cũng vậy, còn thế giới nghe cả người lạ biết gấp ba, làm đồ vật gấp sáu và đông
+gấp hai. Tiếng gọi của người lạ là một giác quan: nó cho biết người trước mặt đang ở trạng thái gì,
+điều mà số đếm "có mấy người lạ" không nói được.
 
-**Bằng chứng.** `tools/lab.py run hearing --seeds 1-8` (docs/lab/hearing.md): kết cục 3/8 tốt ở cả hai nhánh;
-sinh sản mỗi 1000 tick 4,1 điếc so với 5,7 nghe, hiệu số −2,5 với KTC 95% [−4,6, −0,7]; kiến thức trung vị
-49,5 so với 33,6 nhưng khoảng tin cậy chứa 0. Thông tin tương hỗ tín hiệu–hành động trung vị 0,01 bit ở cả
-hai nhánh (nhánh điếc vẫn phát tín hiệu, chỉ không nghe). Sự kiện "tiếng gọi bắt đầu có nghĩa" bắn ở seed 4
-tick 1.500 (0,31 bit) và không lặp lại.
+**Bằng chứng.** `tools/lab.py run hearing --seeds 1-16` (docs/lab/hearing.md, ở đó nhánh `default` là chỉ
+nghe họ hàng): kết cục tốt 8/16 chỉ-họ-hàng, 6/16 điếc, 7/16 nghe-người-lạ, nhưng trung vị dân số đỉnh
+1.634 so với 1.720 so với 4.103; kiến thức 18,5 so với 25,9 so với 53,5; đồ vật mỗi đầu người 0,07 so với
+0,05 so với 0,43. Nghe người lạ so với chỉ họ hàng: đồ vật mỗi đầu người +0,70 với KTC 95% [+0,21, +1,23],
+tỉ lệ người có đồ +0,23 [+0,06, +0,41], thời đại cuối +1,8 [0,0, +3,6]. Thông tin tương hỗ tín hiệu và
+hành động vẫn ở 0,01 đến 0,02 bit; một thế giới (seed 10, nghe người lạ) loé 0,27 bit ở tick 5.500 rồi tắt.
+Độ ồn trung bình 1,45 đến 1,57 trên tối đa 2 dù nói tốn năng lượng: chọn lọc không tắt tiếng.
 
-**Độ tin.** Gợi ý. Cách đọc: kênh tín hiệu đang tồn tại như tiếng ồn; chọn lọc chưa tìm ra cách dùng nó,
-hoặc 20.000 tick là quá ngắn. Đây là câu hỏi mở số 1, và là chỗ đáng thử nhất: ví dụ chỉ nghe họ hàng, hay
-cho tín hiệu tốn năng lượng để nói dối có giá.
+**Độ tin.** Có bằng chứng cho đồ vật và người có đồ; gợi ý mạnh cho dân số và kiến thức. Vì kết quả này,
+mặc định của sim từ đây là nghe cả người lạ. Ngôn ngữ (tín hiệu mang nghĩa bền vững) vẫn chưa xuất hiện;
+cái đã xuất hiện là **đọc trạng thái người khác qua tiếng gọi**, một bước trước ngôn ngữ.
+
+### 10. Tập quán giữ người ở lại, và ở lại là sống
+
+**Phát biểu.** Tắt tập quán (chúng vẫn hình thành và lan nhưng không bao giờ lên tiếng) làm tỉ lệ định cư
+tụt từ 92% xuống 38%, số thế giới tuyệt chủng tăng từ 3 lên 5, kết cục tốt giảm từ 8/16 xuống 4/16. Tắt cả
+mệnh lệnh lẫn tập quán: 6 tuyệt chủng, biên độ bùng-vỡ gấp đôi (7,9 so với 3,9). Tập quán không phải phần
+phụ của thủ lĩnh: nó là cơ chế chính giữ một xã hội ở yên một chỗ khi thủ lĩnh đã chết.
+
+**Bằng chứng.** `tools/lab.py run customs --seeds 1-16` (docs/lab/customs.md). Định cư −0,25 với KTC 95%
+[−0,53, +0,04] khi tắt tập quán; tuân lệnh −0,19 [−0,39, −0,01]. Không mệnh lệnh: 5/16 tốt, biên độ 7,95.
+
+**Độ tin.** Có bằng chứng cho tuân lệnh; gợi ý mạnh cho định cư và kết cục (16 seed, khoảng tin cậy chạm 0).
+Mục 1 (thủ lĩnh là cái phanh) được **lặp lại** lần thứ hai ở đây: không mệnh lệnh thì bùng-vỡ mạnh gấp đôi.
+
+### 11. Chế tác làm thế giới biết nhiều hơn, chưa chắc sống lâu hơn
+
+**Phát biểu.** Tắt chế tác (hành động chế tác thành nghỉ) làm số phát minh giảm 37 và kiến thức mỗi đầu
+người giảm 27, đúng như phải thế; nhưng kết cục chỉ đổi từ 8/16 xuống 6/16 tốt, và dân số đỉnh trung vị
+lại cao hơn khi không chế tác (3.955 so với 1.634). Trong 20.000 tick, đồ vật là chi phí (trọng lượng, năng
+lượng thử) nhiều hơn là lợi ích cho sự sống còn; lợi ích của chúng là tri thức và mức phát triển.
+
+**Bằng chứng.** `tools/lab.py run crafting --seeds 1-16` (docs/lab/crafting.md): phát minh −36,9 với KTC 95%
+[−62,8, −12,8]; kiến thức −27,1 [−46,5, −8,8]; dân số đỉnh +1.337 [−720, +3.495]; thời đại cuối −1,4 [−3,1, +0,1].
+
+**Độ tin.** Có bằng chứng cho tri thức; gợi ý cho dân số. Câu hỏi tiếp: chạy 60.000 tick để xem chi phí
+sớm có đổi thành lợi ích muộn không.
 
 ## Những câu hỏi mở
 
-1. **Ngôn ngữ có xuất hiện không?** Tín hiệu hai chiều không có nghĩa định sẵn. Chỉ số: thông tin tương hỗ
-   giữa tín hiệu nghe được và hành động kế tiếp, đã hiệu chỉnh thiên lệch. Đã thấy nó loé lên (0,31 bit, seed 4,
-   tick 1.500) rồi tắt (mục 9). Câu hỏi: điều kiện nào giữ nó lại, và họ hàng với người lạ có nghe khác nhau
-   không (lừa dối?).
+1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
+   hai lần loé lên 0,27 đến 0,31 bit rồi tắt. Giả thuyết "chỉ họ hàng nghe thì ngôn ngữ sẽ ra" đã bị bác. Giả
+   thuyết tiếp theo đáng thử: tín hiệu chỉ có nghĩa khi có việc cần phối hợp mà một người không làm nổi (săn
+   lớn, xây lớn), tức là thế giới chưa có nhiệm vụ nào cần lời nói.
+4. **Tập quán có tự bảo vệ đất không khi tắt hẳn thủ lĩnh?** Đã trả lời một phần ở mục 10: tập quán giữ người
+   ở lại; đất thì cả hai nhánh đều 100% trong 20.000 tick, chưa phân biệt được.
 2. **Học trong đời học được gì?** Đã biết nó làm ra người dùng đồ vật (mục 8). Chưa biết tiến hoá đẩy tốc độ
    học đi đâu: `plastic` trung vị 0,01 với học mặc định, tức là đa số não học chậm. Câu hỏi: có dòng họ nào
    tiến hoá ra não mềm hẳn không, và họ sống ra sao?
 3. **Phân công lao động có nổi lên không?** Có người chỉ chế tác, người chỉ hái không? Chỉ số: entropy của
    ngăn đồ vật theo dòng họ, và số vật liệu cho nhau (`material_gifts`).
-4. **Tập quán có tự bảo vệ đất không khi tắt hẳn thủ lĩnh?** Cần cờ tắt tập quán riêng.
 5. **Có "đêm trường" không?** Sự kiện *lãng quên* ghi lúc kiến thức tụt quá nửa. Bao nhiêu thế giới quên rồi
    tìm lại được, và tìm lại bằng cùng công thức hay công thức khác?
 

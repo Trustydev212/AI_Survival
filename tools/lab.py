@@ -9,6 +9,7 @@ Nothing here needs more than the standard library.
     python3 tools/lab.py run orders --seeds 1-16   # run every arm, then report
     python3 tools/lab.py report orders             # report again from the files on disk
     python3 tools/lab.py run all --seeds 1-8 --ticks 20000
+    python3 tools/lab.py run all --seeds 1-16 --reuse   # skip arms already run on these seeds
 
 Reports land in docs/lab/<name>.md: per-arm outcome counts, medians of every metric, and
 for each treatment arm the difference of means against the control with a bootstrap 95%
@@ -26,7 +27,7 @@ SIM = os.path.join(ROOT, "sim", "target", "release", "sim")
 LAB = os.path.join(ROOT, "docs", "lab")
 DEFS = os.path.join(ROOT, "tools", "experiments.json")
 METRICS = ["peak_pop", "final_pop", "innovations", "mean_known", "soil_health", "lived_soil", "settled_share",
-           "obedience", "breed_rate", "swing", "final_level", "plastic", "signal_mi", "things_per_head", "equipped_share", "crafts"]
+           "obedience", "breed_rate", "swing", "final_level", "plastic", "signal_mi", "things_per_head", "equipped_share", "crafts", "learn_rate", "loudness"]
 GOOD = {"flourishing", "surviving"}
 
 
@@ -35,13 +36,19 @@ def load_defs():
         return json.load(f)
 
 
-def arm_dir(name, arm):
+def arm_dir(name, arm, flags=None):
+    """Arms with no flags are the same world everywhere, so they share one run directory."""
+    if flags is not None and not flags:
+        return os.path.join(LAB, "runs", "_default")
     return os.path.join(LAB, "runs", name, arm)
 
 
-def run_arm(name, arm, flags, seeds, ticks):
-    out = arm_dir(name, arm)
+def run_arm(name, arm, flags, seeds, ticks, reuse=False):
+    out = arm_dir(name, arm, flags)
     os.makedirs(out, exist_ok=True)
+    if reuse and os.path.exists(os.path.join(out, f"experiment_{seeds.replace('-', '_')}.csv")):
+        print("   (reusing", os.path.relpath(out, ROOT) + ")", flush=True)
+        return
     for f in os.listdir(out):  # a fresh run, never a mix of old and new seeds
         if f.startswith(("experiment_", "stats_seed", "events_seed", "meta_seed")):
             os.remove(os.path.join(out, f))
@@ -51,8 +58,8 @@ def run_arm(name, arm, flags, seeds, ticks):
     subprocess.run(cmd, check=True, stdout=log, stderr=subprocess.STDOUT)
 
 
-def read_arm(name, arm):
-    out = arm_dir(name, arm)
+def read_arm(name, arm, flags=None):
+    out = arm_dir(name, arm, flags)
     files = [f for f in os.listdir(out) if f.startswith("experiment_") and f.endswith(".csv")] if os.path.isdir(out) else []
     rows = []
     for f in sorted(files):
@@ -103,12 +110,12 @@ def fmt(v):
     return f"{v:.0f}" if abs(v) >= 100 else f"{v:.2f}"
 
 
-TRAJ = ["pop", "mean_known", "plastic", "signal_mi", "things_per_head", "soil_health", "settled_share"]
+TRAJ = ["pop", "mean_known", "plastic", "signal_mi", "things_per_head", "soil_health", "settled_share", "learn_rate", "loudness"]
 
 
-def read_trajectories(name, arm, ticks=(2500, 5000, 10000, 15000, 20000)):
+def read_trajectories(name, arm, flags=None, ticks=(2500, 5000, 10000, 15000, 20000)):
     """Median across seeds of a few series at fixed ticks, from stats_seed*.csv."""
-    out = arm_dir(name, arm)
+    out = arm_dir(name, arm, flags)
     if not os.path.isdir(out):
         return {}
     series = {t: {m: [] for m in TRAJ} for t in ticks}
@@ -130,7 +137,7 @@ def read_trajectories(name, arm, ticks=(2500, 5000, 10000, 15000, 20000)):
 
 def report(name, exp):
     arms = list(exp["arms"].keys())
-    data = {arm: read_arm(name, arm) for arm in arms}
+    data = {arm: read_arm(name, arm, exp["arms"][arm]) for arm in arms}
     control = exp.get("control", arms[0])
     lines = [f"# {exp['title']}", "", exp["question"], ""]
     lines.append("## Cách chạy")
@@ -175,7 +182,7 @@ def report(name, exp):
         lines.append("")
     lines.append("## Theo thời gian (trung vị các thế giới; thế giới đã chết tính dân số 0)")
     lines.append("")
-    traj = {arm: read_trajectories(name, arm) for arm in arms}
+    traj = {arm: read_trajectories(name, arm, exp["arms"][arm]) for arm in arms}
     ticks = sorted(next(iter(traj.values())).keys()) if traj else []
     for m in TRAJ:
         if not ticks:
@@ -216,6 +223,7 @@ def main():
     names = list(defs) if sys.argv[2] == "all" else [sys.argv[2]]
     seeds = "1-8"
     ticks = 20000
+    reuse = False
     args = sys.argv[3:]
     while args:
         k = args.pop(0)
@@ -223,6 +231,8 @@ def main():
             seeds = args.pop(0)
         elif k == "--ticks":
             ticks = int(args.pop(0))
+        elif k == "--reuse":
+            reuse = True
     for name in names:
         exp = defs[name]
         if cmd == "run":
@@ -230,7 +240,7 @@ def main():
                 sys.exit("build the sim first: cd sim && cargo build --release")
             print(f"== {name}: {exp['title']}")
             for arm, flags in exp["arms"].items():
-                run_arm(name, arm, flags, seeds, ticks)
+                run_arm(name, arm, flags, seeds, ticks, reuse)
         report(name, exp)
 
 

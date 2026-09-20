@@ -137,7 +137,8 @@ pub struct Config {
     pub learn_scale: f32,
     /// Multiplier on signal inputs; 0 makes everyone deaf (a control).
     pub hear_scale: f32,
-    /// How much of strangers' calls gets through (0 = only kin are heard).
+    /// How much of strangers' calls gets through (1 = as loud as kin; 0 = only kin are heard, which the
+    /// lab found to cost worlds dearly: hearing strangers triples knowledge and things per head).
     pub hear_strangers: f32,
     /// Energy per tick spent calling, per unit of signal magnitude: lying is not free.
     pub sig_cost: f32,
@@ -271,7 +272,7 @@ impl Default for Config {
             shelter_warmth: 0.35,
             learn_scale: 1.0,
             hear_scale: 1.0,
-            hear_strangers: 0.0,
+            hear_strangers: 1.0,
             sig_cost: 0.02,
             no_customs: false,
             no_crafting: false,

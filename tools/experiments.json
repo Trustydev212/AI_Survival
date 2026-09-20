@@ -72,7 +72,7 @@
   },
   "hearing": {
     "title": "Nghe nhau có ích gì?",
-    "question": "Tín hiệu tốn năng lượng và chỉ họ hàng nghe rõ (mặc định), so với mọi người điếc (đầu vào tín hiệu bằng 0), và so với nghe cả người lạ.",
+    "question": "Tín hiệu tốn năng lượng; mặc định nghe cả họ hàng lẫn người lạ, so với mọi người điếc, và so với chỉ nghe họ hàng.",
     "control": "default",
     "arms": {
       "default": [],
@@ -80,9 +80,9 @@
         "--hear-scale",
         "0"
       ],
-      "hear-strangers": [
+      "kin-only": [
         "--hear-strangers",
-        "1"
+        "0"
       ]
     }
   },

@@ -193,9 +193,10 @@ Não thay đổi theo ba cách, ở ba thang thời gian:
   phần thưởng tick trước như một đầu vào.
 
 Não còn **nói**: mỗi tick phát ra một tín hiệu hai chiều trong [-1, 1]. Nói tốn năng lượng theo độ lớn tín
-hiệu (mặc định 0,02 mỗi đơn vị, so với tiêu hao nền 0,15), nên nói dối hay nói suông đều có giá. Chỉ họ
-hàng nghe rõ: đầu vào là trung bình tín hiệu của họ hàng trong tầm nhìn và tín hiệu của người gần nhất nếu
-là họ hàng; người lạ chỉ lọt vào theo `--hear-strangers` (mặc định 0). Tín hiệu không có nghĩa định sẵn. Sim đo entropy của những gì được nói và **thông tin tương hỗ** giữa tín hiệu nghe
+hiệu (mặc định 0,02 mỗi đơn vị, so với tiêu hao nền 0,15), nên nói dối hay nói suông đều có giá. Đầu vào
+là trung bình tín hiệu của họ hàng trong tầm nhìn, của người lạ, và tín hiệu của người gần nhất; người lạ
+nghe được theo `--hear-strangers` (mặc định 1; đặt 0 là chỉ họ hàng nghe rõ, phòng thí nghiệm cho thấy
+thế giới nghèo đi hẳn). Tín hiệu không có nghĩa định sẵn. Sim đo entropy của những gì được nói và **thông tin tương hỗ** giữa tín hiệu nghe
 được từ người gần nhất và hành động ngay sau đó (đã hiệu chỉnh thiên lệch mẫu nhỏ). Khi con số này vượt
 0,2 bit ở một xã hội từ 300 người, sử ký ghi "tiếng gọi bắt đầu có nghĩa". Đó là dấu hiệu sớm nhất của
 ngôn ngữ, và là một câu hỏi nghiên cứu mở của repo này.
@@ -514,8 +515,15 @@ bằng `tools/lab.py`, mỗi cái 8 thế giới, 20.000 tick:
 | học trong đời (bật, tắt, nhanh gấp ba) | kết cục không đổi rõ; có học thì đồ vật mỗi đầu người 0,39 so với 0,21 không học, KTC 95% không chứa 0; học nhanh gấp ba không hơn | docs/lab/learning.md |
 | nghe nhau (nghe, điếc) | kết cục không đổi; thế giới điếc sinh sản ít hơn (−2,5 mỗi 1000 tick, KTC không chứa 0); tiếng gọi có nghĩa chỉ loé lên một lần (seed 4, 0,31 bit) | docs/lab/hearing.md |
 
-Nhánh mặc định của hai thí nghiệm này là trạng thái hiện tại của sim: 3 hưng thịnh, 4 bùng-vỡ, 1 sụp đổ
-trên 8 seed. Cách đọc từng kết quả và độ tin nằm trong docs/THEORY.md, mục 8 và 9.
+Sau đó ba thí nghiệm 16 seed với tín hiệu tốn năng lượng:
+
+| Thí nghiệm | Kết quả | Báo cáo |
+|---|---|---|
+| nghe nhau (chỉ họ hàng, điếc, cả người lạ) | nghe cả người lạ: kiến thức gấp ba (53,5 so với 18,5), đồ vật mỗi đầu người gấp sáu (+0,70, KTC 95% không chứa 0), dân số đỉnh gấp hai. Giả thuyết "chỉ họ hàng nghe thì ngôn ngữ sẽ ra" bị bác; mặc định của sim đổi thành nghe cả người lạ | docs/lab/hearing.md |
+| tập quán (mặc định, tắt tập quán, tắt cả mệnh lệnh) | tắt tập quán: định cư tụt từ 92% xuống 38%, tuyệt chủng 5/16 so với 3/16, kết cục tốt 4/16 so với 8/16; tắt cả mệnh lệnh: biên độ bùng-vỡ gấp đôi | docs/lab/customs.md |
+| chế tác (mặc định, tắt chế tác) | tắt chế tác: phát minh −37, kiến thức −27 (KTC không chứa 0), nhưng kết cục gần như không đổi và dân số đỉnh còn cao hơn; đồ vật trong 20.000 tick là tri thức nhiều hơn là sống còn | docs/lab/crafting.md |
+
+Cách đọc từng kết quả và độ tin nằm trong docs/THEORY.md, mục 8 đến 11.
 
 ### Đối chứng: có mệnh lệnh và không có mệnh lệnh
 

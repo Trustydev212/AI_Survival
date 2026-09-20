@@ -46,6 +46,8 @@ struct Outcome {
     things: f32,
     equipped: f32,
     crafts: usize,
+    learn_rate: f32,
+    loudness: f32,
 }
 
 fn main() {
@@ -223,6 +225,8 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         things: m.things,
         equipped: m.equipped,
         crafts: sim.innovations.iter().filter(|i| i.craft.is_some() && !i.name.is_empty()).count(),
+        learn_rate: m.learn_rate,
+        loudness: m.loudness,
     };
     (o, sim)
 }
@@ -273,9 +277,9 @@ fn experiment(cfg: &Config, a: u64, b: u64) {
 
     let path = format!("{}/experiment_{}_{}.csv", cfg.out_dir, a, b);
     let mut f = BufWriter::new(std::fs::File::create(&path).expect("create experiment csv"));
-    writeln!(f, "seed,outcome,ticks,peak_pop,final_pop,innovations,mean_known,soil_health,lived_soil,settled_share,obedience,dominant_order,dominant_custom,breed_rate,swing,final_level,peak_level,greatest_leader,events,plastic,signal_mi,things_per_head,equipped_share,crafts").unwrap();
+    writeln!(f, "seed,outcome,ticks,peak_pop,final_pop,innovations,mean_known,soil_health,lived_soil,settled_share,obedience,dominant_order,dominant_custom,breed_rate,swing,final_level,peak_level,greatest_leader,events,plastic,signal_mi,things_per_head,equipped_share,crafts,learn_rate,loudness").unwrap();
     for o in &outcomes {
-        writeln!(f, "{},{},{},{},{},{},{:.3},{:.4},{:.4},{:.4},{:.4},{},{},{:.4},{:.3},{},{},{},{},{:.4},{:.4},{:.3},{:.3},{}", o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil, o.lived_soil, o.settled, o.obedience, o.order, o.custom, o.breed_rate, o.swing, o.final_level, o.peak_level, o.top_leader, o.events, o.plastic, o.sig_mi, o.things, o.equipped, o.crafts).unwrap();
+        writeln!(f, "{},{},{},{},{},{},{:.3},{:.4},{:.4},{:.4},{:.4},{},{},{:.4},{:.3},{},{},{},{},{:.4},{:.4},{:.3},{:.3},{},{:.3},{:.3}", o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil, o.lived_soil, o.settled, o.obedience, o.order, o.custom, o.breed_rate, o.swing, o.final_level, o.peak_level, o.top_leader, o.events, o.plastic, o.sig_mi, o.things, o.equipped, o.crafts, o.learn_rate, o.loudness).unwrap();
     }
     println!("written to {path}");
 }

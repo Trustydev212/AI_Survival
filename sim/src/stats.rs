@@ -105,6 +105,9 @@ pub struct Metrics {
     /// Things per head, and the share of people holding at least one made thing.
     pub things: f32,
     pub equipped: f32,
+    /// Mean heritable learning rate (x1000) and mean loudness of calls: where evolution pushes minds and mouths.
+    pub learn_rate: f32,
+    pub loudness: f32,
     pub w: Window,
 }
 
@@ -134,6 +137,8 @@ pub fn compute(
     let (sig_ent, sig_mi) = signal_stats(agents);
     let things = agents.iter().map(|a| a.gear.iter().filter(|g| g.is_some()).count() as f32).sum::<f32>() / n;
     let equipped = agents.iter().filter(|a| a.gear.iter().any(|g| g.is_some())).count() as f32 / n;
+    let learn_rate = agents.iter().map(|a| a.genome.learn_rate() * 1000.0).sum::<f32>() / n;
+    let loudness = agents.iter().map(|a| a.signal[0].abs() + a.signal[1].abs()).sum::<f32>() / n;
     let mean_energy = agents.iter().map(|a| a.energy).sum::<f32>() / n;
     let mean_inv = agents.iter().map(|a| a.inventory).sum::<f32>() / n;
     let sick = agents.iter().filter(|a| a.sick > 0).count() as f32 / n;
@@ -248,6 +253,8 @@ pub fn compute(
         sig_mi,
         things,
         equipped,
+        learn_rate,
+        loudness,
         w,
     }
 }
@@ -305,7 +312,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
         "breed_rate", "stores", "stored", "deposits", "withdrawals", "winter_withdrawals", "looted",
         "plastic", "signal_entropy", "signal_mi", "things_per_head", "equipped_share", "craft_tries", "crafts", "made", "built",
-        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages",
+        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -381,6 +388,8 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     for v in [w.craft_tries, w.crafts, w.made, w.built, w.rediscoveries, w.forgotten_recipes, w.mat_gifts, w.voyages] {
         n(v as f32);
     }
+    n(m.learn_rate);
+    n(m.loudness);
     for v in m.emotion {
         n(v);
     }

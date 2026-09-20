@@ -188,11 +188,17 @@ impl Genome {
         Thought { mx, my, action: Action::ALL[best], memory: mem, order, odx, ody, sig, hidden, out }
     }
 
+    /// The heritable learning rate this genome encodes (before the config scale).
+    #[inline]
+    pub fn learn_rate(&self) -> f32 {
+        0.01 * sigmoid(self.learn[0] - 1.0)
+    }
+
     /// Learning within a life: neuromodulated Hebbian plasticity on the output layer.
     /// `reward` is the tick's change in fortune, in [-1, 1]. The genes set how fast and
     /// in what shape synapses move; a brain can also inherit a rate near zero and not learn.
     pub fn learn(&self, plastic: &mut [f32], hidden: &[f32; N_HID], out: &[f32; N_OUT], reward: f32, scale: f32) {
-        let eta = 0.01 * scale * sigmoid(self.learn[0] - 1.0);
+        let eta = scale * self.learn_rate();
         if eta < 1e-4 || reward == 0.0 {
             return;
         }
