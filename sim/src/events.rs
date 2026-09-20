@@ -173,6 +173,13 @@ impl EventLog {
         if m.obedience >= 0.5 {
             self.fire(tick, "obedience", format!("the word of leaders now carries: {:.0}% of orders are obeyed", m.obedience * 100.0));
         }
+        // Calls that carry meaning: when what one hears from a neighbour predicts what one does next.
+        if pop >= 300 && m.sig_mi >= 0.2 {
+            self.fire(tick, "language", format!("calls begin to mean something: hearing a neighbour predicts what one does next ({:.2} bits)", m.sig_mi));
+        }
+        if pop >= 200 && m.plastic >= 0.05 {
+            self.fire(tick, "learners", format!("minds that change within a life: synapses have drifted {:.3} on average since birth", m.plastic));
+        }
         if m.obedience > self.obey_peak {
             self.obey_peak = m.obedience;
         }
@@ -241,13 +248,13 @@ impl EventLog {
 /// A short machine-readable kind for each event, derived from how its text begins.
 /// Viewers translate by kind and pull numbers and names out of the text.
 pub fn kind_of(text: &str) -> &'static str {
-    const KINDS: [(&str, &str); 34] = [
+    const KINDS: [(&str, &str); 36] = [
         ("famine:", "famine"), ("war:", "war"), ("plague toll:", "plague_toll"), ("plague:", "plague"),
         ("raids:", "raids"), ("drought:", "drought"), ("a year of plenty", "plenty"), ("harsh year", "harsh_year"),
         ("flood:", "flood"), ("wildfire:", "wildfire"), ("bounty:", "bounty"), ("exhausted land", "soil_half"),
         ("dust:", "soil_quarter"), ("lineage ", "lineage"), ("only one lineage", "monoculture"),
         ("innovation:", "innovation"), (" is now known by half", "adopted"), ("a warrior class", "warriors"),
-        ("first settled", "settlement"), ("a sharing culture", "sharers"), ("the word of leaders", "obedience"),
+        ("first settled", "settlement"), ("a sharing culture", "sharers"), ("the word of leaders", "obedience"), ("calls begin to mean", "language"), ("minds that change", "learners"),
         ("a custom of", "custom_order"), ("era:", "era"), ("collapse:", "collapse"), ("forgetting:", "forgetting"),
         ("first leader:", "first_leader"), ("great leader:", "great_leader"), ("leader ", "leader_died"),
         ("rivalry:", "rivalry"), ("first storehouse", "first_store"), ("first storehouse looted", "first_loot"),

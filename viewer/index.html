@@ -143,6 +143,7 @@ const PALETTE = ['#e04b4b','#4b8fe0','#4bd07a','#f2c14e','#c65cd6','#4bd6d0','#f
                  '#e04b9c','#8fa3ff','#d6b04b','#5ce0b8','#ff7a7a','#8f6bff','#b8e04b','#ff5cc8',
                  '#4bb3e0','#e0a04b','#9c4bd6','#4be0a0','#e06b4b','#6bb3ff','#c8e04b','#ff9cd6'];
 const ORDER_NAMES = ['hold','move','raid','conserve','pool'];
+const SIG_COLORS = [0x1a1a1a, 0x4b3ca8, 0x2f6fd6, 0x39c6e0, 0x7a2a8f, 0x9b59b6, 0x2eb872, 0x9be564, 0xc0392b, 0xe67e22, 0xf1c40f, 0xf7f19a, 0xffffff, 0xf59ac9, 0x8b5a2b, 0xbdc3c7];
 
 // ---------- i18n
 const T = {
@@ -300,7 +301,7 @@ async function boot(bytes, meta, evText) {
   if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'AISV' || dv.getUint32(4, true) < 3) { $('loadmsg').textContent = t('badfile') + ' (v3+)'; return; }
   state.W = dv.getUint16(8, true); state.H = dv.getUint16(10, true); state.maxFood = dv.getFloat32(12, true);
   state.version = dv.getUint32(4, true); state.water = null; state.dataStart = 16;
-  state.nLayers = state.version >= 5 ? 4 : 3; state.agentBytes = state.version >= 5 ? 23 : 22;
+  state.nLayers = state.version >= 5 ? 4 : 3; state.agentBytes = state.version >= 6 ? 24 : state.version >= 5 ? 23 : 22;
   if (state.version >= 4) { const n = dv.getUint32(16, true); state.water = new Uint8Array(state.W * state.H); for (let i = 0; i < state.W * state.H; i++) state.water[i] = (bytes[20 + (i >> 3)] >> (i & 7)) & 1; state.dataStart = 20 + n; }
   state.meta = meta || { names: {}, eras: T.en.eras };
   state.frames = []; indexFrames();
@@ -350,12 +351,12 @@ function agentsOf(idx) {
   const f = state.frames[idx], b = state.bytes, dv = new DataView(b.buffer, b.byteOffset); const n = f.pop;
   const a = { n, id: new Uint32Array(n), x: new Float32Array(n), y: new Float32Array(n), lineage: new Uint16Array(n), name: new Uint32Array(n),
     followers: new Uint16Array(n), flags: new Uint8Array(n), energy: new Uint8Array(n), mdx: new Int8Array(n), mdy: new Int8Array(n),
-    under: new Uint8Array(n), action: new Uint8Array(n), gear: new Uint8Array(n), index: new Map(), stores: [] };
+    under: new Uint8Array(n), action: new Uint8Array(n), gear: new Uint8Array(n), sig: new Uint8Array(n), index: new Map(), stores: [] };
   let o = f.agents; const AB = state.agentBytes;
   for (let i = 0; i < n; i++, o += AB) {
     a.id[i] = dv.getUint32(o, true); a.x[i] = dv.getUint16(o + 4, true) / 64; a.y[i] = dv.getUint16(o + 6, true) / 64;
     a.lineage[i] = dv.getUint16(o + 8, true); a.name[i] = dv.getUint32(o + 10, true); a.followers[i] = dv.getUint16(o + 14, true);
-    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21]; a.gear[i] = AB >= 23 ? b[o + 22] : 0;
+    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21]; a.gear[i] = AB >= 23 ? b[o + 22] : 0; a.sig[i] = AB >= 24 ? b[o + 23] : 255;
     a.index.set(a.id[i], i);
   }
   o = f.storesOff;
@@ -941,6 +942,12 @@ function draw(force) {
     }
     // attack swings and love bubbles (the pack's characters swing their own sword, so only the fallback needs a slash)
     if (!sunny) for (let i = 0; i < A.n; i++) if (A.action[i] === 1) { const sl = new PIXI.Sprite(slashTex); sl.anchor.set(0.5, 0.5); sl.position.set(A.x[i] * TILE + TILE / 2 + (A.mdx[i] < 0 ? -10 : 10), A.y[i] * TILE + 4); sl.scale.set(A.mdx[i] < 0 ? -1 : 1, 1); sl.alpha = 0.9; fxLayer.addChild(sl); }
+    if (state.cam.zoom >= 6 && state.agentBytes >= 24) {
+      // What people are saying: one of sixteen colours per signal symbol. Same colour, same call.
+      let n = 0; const g = new PIXI.Graphics();
+      for (let i = 0; i < A.n && n < 1500; i++) { const sg = A.sig[i]; if (sg === 255) continue; const sym = sg & 15; g.beginFill(SIG_COLORS[sym]).drawRect(A.x[i] * TILE + TILE / 2 - 2, A.y[i] * TILE - 12, 4, 4).endFill(); if (sg & 16) { g.beginFill(0xffffff).drawRect(A.x[i] * TILE + TILE / 2 + 3, A.y[i] * TILE - 11, 2, 2).endFill(); } n++; }
+      fxLayer.addChild(g);
+    }
     if (sunny && state.cam.zoom >= 5 && uiTex.axe) {
       // What people carry: a tool, a weapon, a vessel, a fire.
       let n = 0; const icons = [uiTex.axe, uiTex.sword, null, null, uiTex.basket, null];

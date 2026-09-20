@@ -1,4 +1,4 @@
-use crate::brain::{Action, Genome, N_ACT, N_MEM};
+use crate::brain::{Action, Genome, N_ACT, N_HID, N_MEM, N_OUT, N_SIG};
 use crate::craft::{N_MAT, N_SLOT, NO_ITEM};
 use crate::innovation::N_EFFECT;
 use crate::orders::Order;
@@ -98,6 +98,18 @@ pub struct Agent {
     pub emotion: [f32; N_EMO],
     /// Recurrent memory: written by the brain, read back next tick. Its "thoughts".
     pub memory: [f32; N_MEM],
+    /// Within-life changes to the output layer (see Genome::learn). Born blank, never inherited.
+    pub plastic: Vec<f32>,
+    pub last_hidden: [f32; N_HID],
+    pub last_out: [f32; N_OUT],
+    /// What this agent is broadcasting, and what it last heard from its nearest neighbour.
+    pub signal: [f32; N_SIG],
+    pub heard: [f32; N_SIG],
+    /// Last tick's change in fortune, and the fortune at the start of this tick.
+    pub reward: f32,
+    pub prev_wealth: f32,
+    /// Mood (joy minus fear) at the start of the tick: feeling better is rewarding too.
+    pub prev_mood: f32,
     pub has_home: bool,
     pub home_x: f32,
     pub home_y: f32,
@@ -199,6 +211,10 @@ pub struct Decision {
     pub under_dy: f32,
     /// Whether that order came from a living leader (true) or from custom (false).
     pub from_leader: bool,
+    pub sig: [f32; N_SIG],
+    pub heard: [f32; N_SIG],
+    pub hidden: [f32; N_HID],
+    pub out: [f32; N_OUT],
 }
 
 impl Default for Decision {
@@ -217,6 +233,10 @@ impl Default for Decision {
             under_dx: 0.0,
             under_dy: 0.0,
             from_leader: false,
+            sig: [0.0; N_SIG],
+            heard: [0.0; N_SIG],
+            hidden: [0.0; N_HID],
+            out: [0.0; N_OUT],
         }
     }
 }

@@ -51,6 +51,9 @@ Với Sunnyside, cách vẽ như sau:
   hoang. Mỗi bộ autotile 15 tile của pack trả lời cùng một bảng mặt nạ 8 hướng (đủ, bốn cạnh, bốn góc trong,
   bốn góc ngoài chéo), viewer suy ra tile từ mặt nạ và tự chọn tile gần nhất cho hình dạng pack không có.
 - **Thuyền**: ai đang trên biển ngồi trong thuyền thúng của pack (4 khung nhấp nhô), bóng dưới chân tắt đi.
+- **Tiếng gọi**: phóng đủ gần, trên đầu mỗi người có một ô màu là tín hiệu đang phát (16 màu cho 16 ký hiệu;
+  cùng màu là cùng tiếng gọi) và một chấm trắng nếu tick vừa rồi có lời. Nhìn một làng cùng màu là nhìn
+  một quy ước đang hình thành.
 - **Nơi trú** vẽ từ lớp nhà cửa của snapshot, đúng ô người ta dựng: nhà mái xanh cho khung gỗ, mái đỏ và cam
   cho đá, đất sét, xương, mái tím và lam cho thứ đã nung; nhà chắc (sức trú từ 0,7) vẽ to hơn, nhà nung chắc
   có lửa trại bên cạnh. **Đồ vật** hiện khi phóng đủ gần: rìu cho công cụ, kiếm cho vũ khí, giỏ cho bình
@@ -83,9 +86,9 @@ của pack; nhân vật là Gabe và Mani 24x24 với 7 khung chạy.
 - Thanh thời gian tô màu thời đại và vẽ dân số. Phím F bám thủ lĩnh lớn nhất, E bám sự kiện, space phát,
   mũi tên đi từng khung, kéo thả ba file để xem không cần server.
 
-Định dạng khung bản 5 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, bốn lớp lượng tử hoá (thức ăn,
+Định dạng khung bản 6 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, bốn lớp lượng tử hoá (thức ăn,
 canh tác, độ màu mỡ, nhà cửa), mã hoá delta và RLE với khung
-khoá mỗi 16 khung, agent 23 byte có id để nội suy và một byte đồ vật đang cầm. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
+khoá mỗi 16 khung, agent 24 byte có id để nội suy, một byte đồ vật đang cầm, một byte tín hiệu và phần thưởng. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
 trong đó đất chỉ vài KB mỗi khung. Sim flush sau mỗi khung, `serve.py` hỗ trợ Range, nên `&live=1` bám được
 run đang chạy.
 
@@ -144,8 +147,8 @@ thức ăn, thì hồi phục chậm về tiềm năng. Đất cạn hẳn hồi
 thường cũng làm đất mòn nhanh hơn. Đây là thứ để mất: xã hội thành công quá nhanh có thể tự huỷ diệt.
 
 **Agent** có năng lượng, kho dự trữ, tuổi, dòng họ, kiến thức, và một bộ gen. Gen gồm trọng số
-của một mạng thần kinh hồi quy 90 input, 16 ẩn, 20 output (1.796 tham số), 9 gen tính khí, cộng một
-"màu" ba chiều.
+của một mạng thần kinh hồi quy 97 input, 20 ẩn, 24 output (2.464 tham số), 9 gen tính khí, 4 gen học, cộng một
+"màu" ba chiều; thêm 480 synapse dẻo học trong đời, không di truyền.
 Nhận diện họ hàng dựa trên khoảng cách màu.
 
 **Mỗi tick**, agent nhìn thấy: năng lượng, tuổi, kho, thức ăn tại chỗ và gradient thức ăn,
@@ -160,7 +163,7 @@ Não trả về hướng di chuyển, một cổng đi hay ở, và một trong 
 |---|---|
 | gather | Lấy thức ăn từ ô đang đứng, dư thì cất vào kho |
 | attack | Đánh agent gần nhất trong tầm. Ai khoẻ hơn dễ thắng. Thắng thì cướp kho và gây sát thương |
-| share | Cho họ hàng gần nhất một phần kho |
+| share | Cho họ hàng gần nhất một phần kho, và một đơn vị vật liệu mình dư mà họ thiếu |
 | repro | Nếu đủ năng lượng, sinh con. Con thừa hưởng gen có đột biến |
 | rest | Giảm tiêu hao năng lượng |
 | craft | Làm một thứ đã biết từ vật liệu trong tay, hoặc thử ghép, mài, khoét, đập, nung xem ra gì |
@@ -170,10 +173,26 @@ Diệt vong là thật: khi agent cuối cùng chết, run kết thúc. Cờ `--
 
 ## Cái gì có não, cái gì là luật
 
-Mỗi agent có một bộ não riêng: mạng thần kinh hồi quy 90 input, 16 ẩn, 20 output, 1.796 trọng số,
-kèm 9 gen tính khí. Mọi quyết định mỗi tick (đi đâu, ở hay đi, hái, đánh, chia sẻ, sinh, nghỉ, chế tác,
-ghi gì vào bộ nhớ, ra lệnh gì) đều do não này đưa ra. Não được sinh ra từ não bố mẹ có đột biến, và trong đời
-có thể tự thay đổi bằng cách bắt chước họ hàng thành công hơn. Không có kịch bản hành vi nào.
+Mỗi agent có một bộ não riêng: mạng thần kinh hồi quy 97 input, 20 ẩn, 24 output, 2.464 trọng số,
+kèm 9 gen tính khí và 4 gen học. Mọi quyết định mỗi tick (đi đâu, ở hay đi, hái, đánh, chia sẻ, sinh, nghỉ,
+chế tác, ghi gì vào bộ nhớ, ra lệnh gì, nói gì) đều do não này đưa ra. Không có kịch bản hành vi nào.
+
+Não thay đổi theo ba cách, ở ba thang thời gian:
+
+- **Tiến hoá** giữa các đời: con thừa hưởng trọng số bố mẹ có đột biến; chọn lọc tự nhiên giữ lại não sống được.
+- **Bắt chước** trong đời: kéo trọng số của mình về phía một họ hàng giàu hơn hẳn.
+- **Học trong đời** (mới): lớp ẩn→ra có phần dẻo, thay đổi mỗi tick theo luật Hebb có điều biến: thay đổi
+  synapse = tốc độ × phần thưởng × (a·trước·sau + b·trước + c·sau), trong đó phần thưởng là thay đổi tài sản
+  (năng lượng cộng kho) của tick vừa rồi, còn tốc độ và a, b, c là **gen**. Một dòng họ có thể tiến hoá ra
+  tốc độ học gần 0 (não cứng) hoặc cao (não mềm). Phần dẻo sinh ra trắng, không di truyền. Não cũng thấy
+  phần thưởng tick trước như một đầu vào.
+
+Não còn **nói**: mỗi tick phát ra một tín hiệu hai chiều trong [-1, 1] mà hàng xóm nghe được, dưới dạng
+trung bình tín hiệu của họ hàng trong tầm nhìn, của người lạ, và tín hiệu của người gần nhất. Tín hiệu
+không có nghĩa định sẵn. Sim đo entropy của những gì được nói và **thông tin tương hỗ** giữa tín hiệu nghe
+được từ người gần nhất và hành động ngay sau đó (đã hiệu chỉnh thiên lệch mẫu nhỏ). Khi con số này vượt
+0,2 bit ở một xã hội từ 300 người, sử ký ghi "tiếng gọi bắt đầu có nghĩa". Đó là dấu hiệu sớm nhất của
+ngôn ngữ, và là một câu hỏi nghiên cứu mở của repo này.
 
 Phần viết tay là **luật thế giới**: thức ăn mọc thế nào, đánh nhau tính thắng thua ra sao, công nghệ
 có tác dụng gì, thiên tai xảy ra thế nào, cảm xúc tăng giảm theo sự kiện nào. Đó là "harness". Não phải
@@ -479,6 +498,19 @@ Giá phải trả: vật nặng làm tiêu hao tăng 15 đến 27% cho ai mang, 
 cụ đào bào mòn đất; nhà gỗ cháy trong đột kích. Nhìn bằng mắt: ở seed 2 sau tick 10.000, hai phần ba dân số
 cầm vũ khí, một phần ba có thuyền, làng đầy nhà đá nhỏ.
 
+### Sau khi não biết học và biết nói
+
+Não thêm phần dẻo học theo phần thưởng, tín hiệu hai chiều, và 20 nơ-ron ẩn. Hai thí nghiệm đối chứng
+bằng `tools/lab.py`, mỗi cái 8 thế giới, 20.000 tick:
+
+| Thí nghiệm | Kết quả | Báo cáo |
+|---|---|---|
+| học trong đời (bật, tắt, nhanh gấp ba) | kết cục không đổi rõ; có học thì đồ vật mỗi đầu người 0,39 so với 0,21 không học, KTC 95% không chứa 0; học nhanh gấp ba không hơn | docs/lab/learning.md |
+| nghe nhau (nghe, điếc) | kết cục không đổi; thế giới điếc sinh sản ít hơn (−2,5 mỗi 1000 tick, KTC không chứa 0); tiếng gọi có nghĩa chỉ loé lên một lần (seed 4, 0,31 bit) | docs/lab/hearing.md |
+
+Nhánh mặc định của hai thí nghiệm này là trạng thái hiện tại của sim: 3 hưng thịnh, 4 bùng-vỡ, 1 sụp đổ
+trên 8 seed. Cách đọc từng kết quả và độ tin nằm trong docs/THEORY.md, mục 8 và 9.
+
 ### Đối chứng: có mệnh lệnh và không có mệnh lệnh
 
 Cùng 12 seed, 30.000 tick, một nhánh mặc định, một nhánh `--no-orders` (thủ lĩnh vẫn hình thành
@@ -508,6 +540,24 @@ nghe lời đã đủ tạo khác biệt. Mẫu 12 còn nhỏ, chưa phải kế
 3. "Đứng yên" phải là một quyết định dễ đột biến. Với hai output tanh bão hoà, đứng yên là điểm có xác suất
    gần bằng không và tiến hoá không bao giờ tới. Tách thành một output đi hay ở theo dấu là đủ.
 
+## Phòng thí nghiệm
+
+Repo này là nơi quan sát một xã hội thu nhỏ, nên có sẵn cách đặt câu hỏi và trả lời bằng đối chứng:
+
+```bash
+python3 tools/lab.py list                     # các câu hỏi có sẵn
+python3 tools/lab.py run orders --seeds 1-16  # chạy mọi nhánh trên cùng seed, viết docs/lab/orders.md
+```
+
+`tools/experiments.json` định nghĩa mỗi câu hỏi là vài nhánh chỉ khác nhau đúng một cờ (mệnh lệnh, độ
+khó phát minh, giá của biển, độ mòn đất, số người xuất phát). Báo cáo có kết cục từng nhánh, trung vị mọi
+chỉ số, và hiệu số so với đối chứng kèm khoảng tin cậy 95% bootstrap. CSV thống kê của mỗi run có thêm các
+chỉ số nghiên cứu: độ dẻo não trong đời, entropy tín hiệu, thông tin tương hỗ tín hiệu và hành động, đồ vật
+mỗi đầu người, số lần thử chế tác, công thức bị quên, vật liệu cho nhau, chuyến ra khơi.
+
+Những quy luật đã quan sát được, bằng chứng và độ tin của từng cái, cùng các câu hỏi còn mở, nằm trong
+[docs/THEORY.md](docs/THEORY.md).
+
 ## Cấu trúc mã
 
 ```
@@ -527,6 +577,9 @@ sim/src/
   rng.rs      xorshift64* có seed
 tools/
   import_sunnyside.py  nhập pack Sunnyside World (mua riêng) vào viewer/assets/sunnyside
+  lab.py, experiments.json  phòng thí nghiệm: chạy đối chứng, viết báo cáo vào docs/lab
+docs/
+  THEORY.md   sổ quan sát: quy luật, bằng chứng, câu hỏi mở
 viewer/
   index.html  viewer PixiJS, hai bộ hình, sử ký song ngữ
   serve.py    server tĩnh có Range để xem trực tiếp
@@ -534,6 +587,8 @@ viewer/
 
 ## Bước tiếp theo
 
-1. Tốc độ sim: cấu trúc agent quá lớn gây trượt cache khi quét hàng xóm; chuyển sang mảng gọn theo cột.
-2. Viewer: hiệu ứng cho trận đánh, dịch, thiên tai; âm thanh; chọn một agent để theo dõi cả đời.
-3. Đóng gói thành ứng dụng chạy một cú bấm (Tauri hoặc Electron) gồm sim và viewer.
+1. Trả lời các câu hỏi mở trong docs/THEORY.md bằng `tools/lab.py`, với 16 seed trở lên.
+2. Cờ tắt tập quán riêng, để tách tác dụng của tập quán khỏi thủ lĩnh.
+3. Tốc độ sim: cấu trúc agent quá lớn gây trượt cache khi quét hàng xóm; chuyển sang mảng gọn theo cột.
+4. Viewer: nghe tín hiệu (màu theo tín hiệu), theo dõi một agent cả đời, hiệu ứng trận đánh và thiên tai.
+5. Đóng gói thành ứng dụng chạy một cú bấm (Tauri hoặc Electron) gồm sim và viewer.

@@ -5,16 +5,24 @@ use crate::orders::{Order, N_ORDER};
 use crate::rng::Rng;
 
 pub const N_MEM: usize = 4;
-pub const N_IN: usize = 90;
-pub const N_HID: usize = 16;
+/// Signals: a small vector every agent broadcasts each tick and neighbours can hear.
+/// What it means, if anything, is up to evolution.
+pub const N_SIG: usize = 2;
+pub const N_IN: usize = 97;
+pub const N_HID: usize = 20;
 pub const N_ACT: usize = 6;
-// move_x, move_y, go/stay, action scores, memory, order scores, order direction
-pub const N_OUT: usize = 3 + N_ACT + N_MEM + N_ORDER + 2;
+// move_x, move_y, go/stay, action scores, memory, order scores, order direction, signal
+pub const N_OUT: usize = 3 + N_ACT + N_MEM + N_ORDER + 2 + N_SIG;
 const O_MEM: usize = 3 + N_ACT;
 const O_ORDER: usize = O_MEM + N_MEM;
 const O_ORDER_DIR: usize = O_ORDER + N_ORDER;
+const O_SIG: usize = O_ORDER_DIR + 2;
 pub const N_WEIGHTS: usize = N_IN * N_HID + N_HID + N_HID * N_OUT + N_OUT;
+/// The plastic part: the hidden-to-output layer, which changes within one life.
+pub const N_PLASTIC: usize = N_HID * N_OUT;
 pub const N_TEMPER: usize = 9; // 4 emotion decay genes, 4 emotion sensitivity genes, 1 charisma gene
+/// Learning genes: rate, and the three Hebbian coefficients (pre*post, pre, post).
+pub const N_LEARN: usize = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -49,6 +57,8 @@ pub struct Genome {
     pub marker: [f32; 3],
     /// Temperament: how fast each emotion fades and how strongly it is felt.
     pub temper: [f32; N_TEMPER],
+    /// How this brain learns within its life: heritable rate and Hebbian shape.
+    pub learn: [f32; N_LEARN],
 }
 
 impl Genome {
@@ -58,7 +68,11 @@ impl Genome {
         for t in temper.iter_mut() {
             *t = rng.normal();
         }
-        Genome { weights, marker, temper }
+        let mut learn = [0.0; N_LEARN];
+        for l in learn.iter_mut() {
+            *l = rng.normal();
+        }
+        Genome { weights, marker, temper, learn }
     }
 
     pub fn mutated(&self, rng: &mut Rng, p_mut: f32, sigma: f32) -> Genome {
@@ -71,6 +85,11 @@ impl Genome {
         for t in g.temper.iter_mut() {
             if rng.f32() < p_mut {
                 *t += rng.normal() * sigma;
+            }
+        }
+        for l in g.learn.iter_mut() {
+            if rng.f32() < p_mut {
+                *l += rng.normal() * sigma;
             }
         }
         for m in g.marker.iter_mut() {
@@ -114,7 +133,7 @@ impl Genome {
     /// Forward pass. Movement is zero when the go/stay output is negative, so staying
     /// put is one sign flip away from roaming. Every brain also forms an order; it only
     /// reaches anyone if this agent happens to be a leader.
-    pub fn think(&self, input: &[f32; N_IN]) -> Thought {
+    pub fn think(&self, input: &[f32; N_IN], plastic: &[f32]) -> Thought {
         let w = &self.weights;
         let mut hidden = [0.0f32; N_HID];
         let mut off = 0;
@@ -134,7 +153,7 @@ impl Genome {
         for o in 0..N_OUT {
             let mut acc = 0.0;
             for h in 0..N_HID {
-                acc += w[off + o * N_HID + h] * hidden[h];
+                acc += (w[off + o * N_HID + h] + plastic[o * N_HID + h]) * hidden[h];
             }
             out[o] = acc;
         }
@@ -164,10 +183,29 @@ impl Genome {
             if len < 0.01 { (0.0, 0.0) } else { (x / len, y / len) }
         };
         let order = Order::ALL[best_order];
-        if out[2] <= 0.0 {
-            return Thought { mx: 0.0, my: 0.0, action: Action::ALL[best], memory: mem, order, odx, ody };
+        let sig = [fast_tanh(out[O_SIG]), fast_tanh(out[O_SIG + 1])];
+        let (mx, my) = if out[2] <= 0.0 { (0.0, 0.0) } else { (fast_tanh(out[0]), fast_tanh(out[1])) };
+        Thought { mx, my, action: Action::ALL[best], memory: mem, order, odx, ody, sig, hidden, out }
+    }
+
+    /// Learning within a life: neuromodulated Hebbian plasticity on the output layer.
+    /// `reward` is the tick's change in fortune, in [-1, 1]. The genes set how fast and
+    /// in what shape synapses move; a brain can also inherit a rate near zero and not learn.
+    pub fn learn(&self, plastic: &mut [f32], hidden: &[f32; N_HID], out: &[f32; N_OUT], reward: f32, scale: f32) {
+        let eta = 0.01 * scale * sigmoid(self.learn[0] - 1.0);
+        if eta < 1e-4 || reward == 0.0 {
+            return;
         }
-        Thought { mx: fast_tanh(out[0]), my: fast_tanh(out[1]), action: Action::ALL[best], memory: mem, order, odx, ody }
+        let (a, b, c) = (fast_tanh(self.learn[1]), fast_tanh(self.learn[2]) * 0.5, fast_tanh(self.learn[3]) * 0.5);
+        let m = eta * reward;
+        for o in 0..N_OUT {
+            let post = fast_tanh(out[o]);
+            for h in 0..N_HID {
+                let pre = hidden[h];
+                let p = &mut plastic[o * N_HID + h];
+                *p = (*p + m * (a * pre * post + b * pre + c * post) - 0.001 * *p).clamp(-0.6, 0.6);
+            }
+        }
     }
 }
 
@@ -183,7 +221,7 @@ fn fast_tanh(x: f32) -> f32 {
     x * (27.0 + x2) / (27.0 + 9.0 * x2)
 }
 
-/// One tick of a brain's output.
+/// One tick of a brain's output, with the activations kept for learning.
 pub struct Thought {
     pub mx: f32,
     pub my: f32,
@@ -192,4 +230,7 @@ pub struct Thought {
     pub order: Order,
     pub odx: f32,
     pub ody: f32,
+    pub sig: [f32; N_SIG],
+    pub hidden: [f32; N_HID],
+    pub out: [f32; N_OUT],
 }

@@ -132,6 +132,12 @@ pub struct Config {
     /// Share of a shelter's strength that shields the people at home in winter (energy) and in fights.
     pub shelter_warmth: f32,
 
+    // minds
+    /// Multiplier on within-life learning rates; 0 turns learning off (a control).
+    pub learn_scale: f32,
+    /// Multiplier on signal inputs; 0 makes everyone deaf (a control).
+    pub hear_scale: f32,
+
     // customs
     pub custom_gain: f32,
     pub custom_decay: f32,
@@ -256,6 +262,8 @@ impl Default for Config {
             p_insight: 0.02,
             wear: 1.0,
             shelter_warmth: 0.35,
+            learn_scale: 1.0,
+            hear_scale: 1.0,
 
             custom_gain: 0.01,
             custom_decay: 0.9995,
@@ -328,6 +336,8 @@ impl Config {
                 "--p-insight" => set!(p_insight),
                 "--wear" => set!(wear),
                 "--shelter-warmth" => set!(shelter_warmth),
+                "--learn-scale" => set!(learn_scale),
+                "--hear-scale" => set!(hear_scale),
                 "--width" => set!(width),
                 "--height" => set!(height),
                 "--agents" => set!(agents),

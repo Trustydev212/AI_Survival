@@ -1,17 +1,18 @@
-//! Binary snapshot stream for the browser viewer (viewer/index.html). Version 5.
+//! Binary snapshot stream for the browser viewer (viewer/index.html). Version 6.
 //! Little endian throughout. The file is flushed after every frame so a viewer can
 //! follow a run while it is still being computed.
 //!
-//! header: "AISV" u32 version(5) u16 width u16 height f32 max_food
+//! header: "AISV" u32 version(6) u16 width u16 height f32 max_food
 //!         u32 len, then the sea as a bitmask (cell y*width+x is bit x%8 of byte (y*width+x)/8)
 //! frame:  u32 frame_len (bytes that follow this field)
 //!         u32 tick u8 era u8 keyframe u32 pop u32 stores
 //!         f32 soil f32 climate f32 obedience f32 mean_known f32 season
 //!         4 layers (food q0..31, cultivation q0..31, fertility q0..63, buildings: 0 none, else look 1..3 + 3 if strong), each: u32 len, then RLE pairs
 //!           (value u8, run u8). A keyframe holds the layer itself; other frames hold layer XOR previous.
-//!         pop agents of 23 bytes: u32 id u16 x*64 u16 y*64 u16 lineage u32 name u16 followers
+//!         pop agents of 24 bytes: u32 id u16 x*64 u16 y*64 u16 lineage u32 name u16 followers
 //!           u8 flags u8 energy i8 mdx*100 i8 mdy*100 u8 under(0 none, 1..5 order) u8 action
 //!           u8 gear (bit per slot held: tool, weapon, armour, boat, vessel, fire)
+//!           u8 signal symbol (0..15: two dimensions in four bins each) | 16 if last reward was positive
 //!         stores of 14 bytes: u16 x*64 u16 y*64 f32 food u16 lineage u32 owner name id
 //! flags: 1 sick, 2 leader, 4 settled, 8 obeyed, 16 has custom, 32 afloat (in a boat)
 
@@ -48,7 +49,7 @@ impl Snapshot {
     pub fn create(path: &str, world: &World) -> std::io::Result<Snapshot> {
         let mut out = BufWriter::new(std::fs::File::create(path)?);
         out.write_all(b"AISV")?;
-        out.write_all(&5u32.to_le_bytes())?;
+        out.write_all(&6u32.to_le_bytes())?;
         out.write_all(&(world.width as u16).to_le_bytes())?;
         out.write_all(&(world.height as u16).to_le_bytes())?;
         out.write_all(&world.max_food.to_le_bytes())?;
@@ -71,7 +72,7 @@ impl Snapshot {
     ) -> std::io::Result<()> {
         let n = world.width * world.height;
         let key = self.frames % KEYFRAME_EVERY == 0;
-        let mut body: Vec<u8> = Vec::with_capacity(n + agents.len() * 23 + 64);
+        let mut body: Vec<u8> = Vec::with_capacity(n + agents.len() * 24 + 64);
         body.extend_from_slice(&(tick as u32).to_le_bytes());
         body.push(era);
         body.push(key as u8);
@@ -149,6 +150,8 @@ impl Snapshot {
                 }
             }
             body.push(gear);
+            let bin = |v: f32| (((v + 1.0) * 2.0).floor() as u8).min(3);
+            body.push(bin(a.signal[0]) * 4 + bin(a.signal[1]) + if a.reward > 0.05 { 16 } else { 0 });
         }
         for s in stores {
             body.extend_from_slice(&((s.x * 64.0) as u16).to_le_bytes());

@@ -1,7 +1,7 @@
 //! One tick of the world: weather, regrow, sense, think, act, contact, metabolise, luck, die.
 
 use crate::agent::*;
-use crate::brain::{Action, Genome, N_IN, N_MEM};
+use crate::brain::{Action, Genome, N_HID, N_IN, N_MEM, N_OUT, N_PLASTIC, N_SIG};
 use crate::config::Config;
 use crate::craft::{self, Ing, Process, Slot, M_BONE, NO_ING, N_MAT, N_PROP, N_SLOT};
 use crate::world::Building;
@@ -181,6 +181,14 @@ impl Sim {
             still: 0,
             emotion: [0.0; N_EMO],
             memory: [0.0; N_MEM],
+            plastic: vec![0.0; N_PLASTIC],
+            last_hidden: [0.0; N_HID],
+            last_out: [0.0; N_OUT],
+            signal: [0.0; N_SIG],
+            heard: [0.0; N_SIG],
+            reward: 0.0,
+            prev_wealth: 0.0,
+            prev_mood: 0.0,
             has_home: false,
             home_x: 0.0,
             home_y: 0.0,
@@ -525,6 +533,12 @@ impl Sim {
                 let a = &mut self.agents[i];
                 a.last_action = d.action;
                 a.memory = d.memory;
+                a.signal = d.sig;
+                a.heard = d.heard;
+                a.last_hidden = d.hidden;
+                a.last_out = d.out;
+                a.prev_wealth = a.energy + a.inventory;
+                a.prev_mood = a.emotion[JOY] - a.emotion[FEAR];
                 a.order = d.order;
                 a.order_dx = d.odx;
                 a.order_dy = d.ody;
@@ -706,6 +720,7 @@ impl Sim {
                         a.energy -= cfg.repro_cost;
                         a.children = a.children.saturating_add(1);
                         a.prestige += 0.5;
+                        a.feel(JOY, 0.15);
                         let lineage = a.lineage;
                         let child_energy = cfg.child_energy;
                         let mut child = self.make_agent(x, y, child_genome, lineage);
@@ -916,6 +931,16 @@ impl Sim {
             g.inventory -= give;
             g.feel(BOND, 0.1);
             g.prestige += 0.05;
+        }
+        // A gift of matter too: one unit of what the giver has plenty of and the other has none.
+        let gift = {
+            let (g, t) = (&self.agents[i], &self.agents[j]);
+            (0..N_MAT).filter(|&m| g.mats[m] >= 2 && t.mats[m] == 0).max_by_key(|&m| g.mats[m])
+        };
+        if let Some(m) = gift {
+            self.agents[i].mats[m] -= 1;
+            self.agents[j].mats[m] += 1;
+            self.window.mat_gifts += 1;
         }
         let t = &mut self.agents[j];
         t.inventory = (t.inventory + give).min(inv_cap(cfg, t));
@@ -1580,6 +1605,8 @@ fn decide(
         let mut kin = 0.0f32;
         let mut foe = 0.0f32;
         let mut sick_near = 0.0f32;
+        let mut kin_sig = [0.0f32; N_SIG];
+        let mut foe_sig = [0.0f32; N_SIG];
         let own_score = a.prestige * (0.5 + a.charisma);
         let mut leader = NO_LEADER;
         let mut leader_score = own_score.max(cfg.leader_min_prestige);
@@ -1601,6 +1628,8 @@ fn decide(
             crowd += 1.0;
             if a.is_kin(o, cfg.kin_threshold) {
                 kin += 1.0;
+                kin_sig[0] += o.signal[0];
+                kin_sig[1] += o.signal[1];
                 let score = o.prestige * (0.5 + o.charisma);
                 if j as u32 == prev_leader {
                     prev_score = score;
@@ -1611,6 +1640,8 @@ fn decide(
                 }
             } else {
                 foe += 1.0;
+                foe_sig[0] += o.signal[0];
+                foe_sig[1] += o.signal[1];
             }
             if o.sick > 0 {
                 sick_near = 1.0;
@@ -1765,8 +1796,22 @@ fn decide(
         input[88] = a.sheltered.min(1.5);
         input[89] = a.can_make as u8 as f32;
     }
+    // How the last tick went, and what others are saying: the average call of kin and of
+    // strangers in sight, and the call of the nearest one.
+    let heard = if nearest != u32::MAX { agents[nearest as usize].signal } else { [0.0; N_SIG] };
+    {
+        input[90] = a.reward;
+        let (nk, nf) = (kin.max(1.0), foe.max(1.0));
+        let hs = cfg.hear_scale;
+        input[91] = hs * kin_sig[0] / nk;
+        input[92] = hs * kin_sig[1] / nk;
+        input[93] = hs * foe_sig[0] / nf;
+        input[94] = hs * foe_sig[1] / nf;
+        input[95] = hs * heard[0];
+        input[96] = hs * heard[1];
+    }
 
-        let mut t = a.genome.think(&input);
+        let mut t = a.genome.think(&input, &a.plastic);
         // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
         if t.mx * t.mx + t.my * t.my < 0.09 {
             t.mx = 0.0;
@@ -1786,6 +1831,10 @@ fn decide(
         under_dx,
         under_dy,
         from_leader,
+        sig: t.sig,
+        heard,
+        hidden: t.hidden,
+        out: t.out,
     }
 }
 
@@ -1966,6 +2015,16 @@ for (k, a) in slice.iter_mut().enumerate() {
         a.age += 1;
         if a.attacked_timer > 0 {
             a.attacked_timer -= 1;
+        }
+        // How the tick went, and what the brain makes of it.
+        if i < n {
+            // Reward: fortune gained, and feeling better. What feels good is itself heritable
+            // (emotion genes), so evolution shapes what a mind learns from.
+            let mood = a.emotion[JOY] - a.emotion[FEAR];
+            let r = ((a.energy + a.inventory - a.prev_wealth) / 8.0 + (mood - a.prev_mood) * 2.0).clamp(-1.0, 1.0);
+            a.reward = r;
+            let Agent { genome, plastic, last_hidden, last_out, .. } = a;
+            genome.learn(plastic, last_hidden, last_out, r, cfg.learn_scale);
         }
     }
     (hungry, (windfalls, accidents))

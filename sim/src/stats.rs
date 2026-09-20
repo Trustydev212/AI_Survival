@@ -27,6 +27,8 @@ pub struct Window {
     pub built: u32,
     pub rediscoveries: u32,
     pub forgotten_recipes: u32,
+    /// Units of material given between kin.
+    pub mat_gifts: u32,
     pub actions: [u32; N_ACT],
     pub discoveries: u32,
     pub learned: u32,
@@ -95,6 +97,14 @@ pub struct Metrics {
     pub lived_soil: f32,
     pub level: usize,
     pub era: &'static str,
+    /// Mean size of within-life synaptic change: how much brains learn rather than inherit.
+    pub plastic: f32,
+    /// Signals: entropy of what is said (bits), and how much what one hears predicts what one does (bits).
+    pub sig_ent: f32,
+    pub sig_mi: f32,
+    /// Things per head, and the share of people holding at least one made thing.
+    pub things: f32,
+    pub equipped: f32,
     pub w: Window,
 }
 
@@ -120,6 +130,10 @@ pub fn compute(
     let pop = agents.len();
     let n = pop.max(1) as f32;
     let mean_known = agents.iter().map(|a| a.known_count() as f32).sum::<f32>() / n;
+    let plastic = agents.iter().map(|a| a.plastic.iter().map(|p| p.abs()).sum::<f32>() / a.plastic.len().max(1) as f32).sum::<f32>() / n;
+    let (sig_ent, sig_mi) = signal_stats(agents);
+    let things = agents.iter().map(|a| a.gear.iter().filter(|g| g.is_some()).count() as f32).sum::<f32>() / n;
+    let equipped = agents.iter().filter(|a| a.gear.iter().any(|g| g.is_some())).count() as f32 / n;
     let mean_energy = agents.iter().map(|a| a.energy).sum::<f32>() / n;
     let mean_inv = agents.iter().map(|a| a.inventory).sum::<f32>() / n;
     let sick = agents.iter().filter(|a| a.sick > 0).count() as f32 / n;
@@ -229,6 +243,11 @@ pub fn compute(
         lived_soil,
         level,
         era: ERA_NAMES[level],
+        plastic,
+        sig_ent,
+        sig_mi,
+        things,
+        equipped,
         w,
     }
 }
@@ -285,6 +304,8 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "fields_burned", "floods", "wildfires", "harsh_winters", "bounties", "imitations", "leaders",
         "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
         "breed_rate", "stores", "stored", "deposits", "withdrawals", "winter_withdrawals", "looted",
+        "plastic", "signal_entropy", "signal_mi", "things_per_head", "equipped_share", "craft_tries", "crafts", "made", "built",
+        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -352,6 +373,14 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     n(w.withdrawals as f32);
     n(w.winter_withdrawals as f32);
     n(w.looted);
+    n(m.plastic);
+    n(m.sig_ent);
+    n(m.sig_mi);
+    n(m.things);
+    n(m.equipped);
+    for v in [w.craft_tries, w.crafts, w.made, w.built, w.rediscoveries, w.forgotten_recipes, w.mat_gifts, w.voyages] {
+        n(v as f32);
+    }
     for v in m.emotion {
         n(v);
     }
@@ -368,4 +397,48 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
         n(v as f32);
     }
     writeln!(out, "{},{}", f.join(","), m.era)
+}
+
+/// Quantise a signal into one of 16 symbols (4 bins per dimension).
+fn symbol(sig: &[f32; crate::brain::N_SIG]) -> usize {
+    let b = |v: f32| (((v + 1.0) * 2.0).floor() as usize).min(3);
+    b(sig[0]) * 4 + b(sig[1])
+}
+
+/// Entropy of the population's signals, and the mutual information between the signal an
+/// agent last heard from its nearest neighbour and the action it then took. Both in bits.
+/// The second is the closest cheap thing to "do calls mean anything": if it rises above
+/// zero, hearing a neighbour changes what one does.
+pub fn signal_stats(agents: &[Agent]) -> (f32, f32) {
+    if agents.len() < 20 {
+        return (0.0, 0.0);
+    }
+    let mut said = [0f32; 16];
+    let mut joint = [[0f32; N_ACT]; 16];
+    let mut heard = [0f32; 16];
+    let mut acts = [0f32; N_ACT];
+    for a in agents {
+        said[symbol(&a.signal)] += 1.0;
+        let h = symbol(&a.heard);
+        let k = a.last_action as usize;
+        joint[h][k] += 1.0;
+        heard[h] += 1.0;
+        acts[k] += 1.0;
+    }
+    let n = agents.len() as f32;
+    let ent = -said.iter().filter(|c| **c > 0.0).map(|c| (c / n) * (c / n).log2()).sum::<f32>();
+    let mut mi = 0.0;
+    for h in 0..16 {
+        for k in 0..N_ACT {
+            let pxy = joint[h][k] / n;
+            if pxy > 0.0 {
+                mi += pxy * (pxy / ((heard[h] / n) * (acts[k] / n))).log2();
+            }
+        }
+    }
+    // Small samples inflate mutual information; the Miller-Madow correction takes most of that back.
+    let kx = heard.iter().filter(|c| **c > 0.0).count() as f32;
+    let ky = acts.iter().filter(|c| **c > 0.0).count() as f32;
+    let bias = (kx * ky - kx - ky + 1.0).max(0.0) / (2.0 * n * std::f32::consts::LN_2);
+    (ent, (mi - bias).max(0.0))
 }
