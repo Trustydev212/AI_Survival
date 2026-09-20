@@ -23,15 +23,18 @@ python3 ../viewer/serve.py            # rồi mở http://127.0.0.1:8765/index.h
 ```
 
 `viewer/index.html` là game viewer 2D pixel art chạy trong trình duyệt bằng **PixiJS** (WebGL, đã kèm sẵn
-trong `viewer/lib`, không cần mạng). Toàn bộ hình ảnh sinh bằng code lúc mở trang nên không vướng bản quyền:
+trong `viewer/lib`, không cần mạng). Hình ảnh dùng **Generic RPG Pack** của Bakudas và Gabe Fern, giấy phép
+CC0, nằm trong `viewer/assets/rpg` kèm `CREDITS.md`. Viewer đổi màu lúc mở trang: đất hồng cam của pack thành
+cát, áo nhân vật thành màu phe, tán cây thành xanh và vàng thu, phủ trắng mùa đông. Những gì pack không có
+(nước, bờ cát, cây trồng, cờ hiệu, vương miện, nhát chém) được vẽ bằng code theo đúng bảng màu của pack.
 
-- **Bản đồ** là tile 16x16 nhiều tông có viền: đất cằn nhất thành biển có sóng động, đất nghèo thành bờ cát,
-  ba mức cỏ theo thức ăn có bụi cỏ và hoa, ruộng có luống và cây trồng lớn dần theo mức canh tác, mùa đông
-  phủ tuyết và biển đóng băng. Bờ biển và mép cỏ được autotile theo bốn hướng nên đường bờ uốn lượn tự nhiên.
-  Cây, thông, bụi, đá rải theo độ màu mỡ trên đất hoang. Làng có nhà tranh mái rơm, kho là nhà kho lớn mái đỏ.
-- **Nhân vật** 16x24 có viền và bóng, bốn màu tóc, đai lưng, ủng; đi bộ bốn khung với tay vung, thở khi đứng,
-  tư thế vung gậy khi đánh, mang giỏ khi hái, quay mặt theo hướng đi. Vị trí nội suy giữa hai khung chụp nên
-  đi lại mượt dù chỉ chụp mỗi 25 tick. Người ốm da xanh có giọt mồ hôi, người đói mờ đi.
+- **Bản đồ**: đất cằn nhất thành biển có sóng, đất nghèo thành bờ cát, đất tốt thành cỏ với ba sắc theo
+  thức ăn. Mép cỏ và cát dùng bộ autotile 8 hướng của pack, viewer tự đọc mặt nạ từng tile lúc nạp nên
+  đường bờ uốn tự nhiên. Ruộng có cây trồng ba giai đoạn theo mức canh tác. Cây xanh, cây thu, đá, hoa,
+  bụi cỏ rải theo độ màu mỡ. Làng đông có nhà gỗ, kho là nhà lớn kèm thùng và rương. Mùa đông cỏ phủ tuyết.
+- **Nhân vật** là Gabe và Mani 24x24 của pack, 7 khung chạy, thân hình đổi theo dòng họ, áo đổi theo màu phe.
+  Vị trí nội suy giữa hai khung chụp nên chạy mượt dù chỉ chụp mỗi 25 tick. Người ốm da xanh, người đói mờ đi,
+  người đang đánh có nhát chém, thủ lĩnh đội vương miện và cắm cờ hiệu.
 - **Minimap** góc trái với địa hình và chấm phe, bấm để bay tới. Tông màu đổi theo mùa và hạn hán, tuyết rơi
   mùa đông. Bản đồ chia 16 mảnh, chỉ mảnh có ô đổi mới được vẽ lại.
 - **Phe phái** là dòng họ. Mỗi dòng họ có màu áo riêng từ bảng 24 màu và một hoạ tiết trên áo trong sáu mẫu,
