@@ -23,7 +23,11 @@ pub fn write_ppm(path: &str, world: &World, agents: &[Agent], scale: usize) -> s
     }
     for a in agents {
         let m = a.genome.marker;
-        let c = [(70.0 + 185.0 * m[0]) as u8, (70.0 + 185.0 * m[1]) as u8, (70.0 + 185.0 * m[2]) as u8];
+        let c = if a.sick > 0 {
+            [255, 255, 255] // the sick glow white
+        } else {
+            [(70.0 + 185.0 * m[0]) as u8, (70.0 + 185.0 * m[1]) as u8, (70.0 + 185.0 * m[2]) as u8]
+        };
         let x = (a.x as usize).min(world.width - 1) * scale;
         let y = (a.y as usize).min(world.height - 1) * scale;
         fill(&mut px, w, x, y, scale, c);

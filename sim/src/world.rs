@@ -10,6 +10,10 @@ pub struct World {
     pub food: Vec<f32>,
     /// How tended a cell is, 0..1. Raised by farmers standing on it, decays otherwise.
     pub cultivation: Vec<f32>,
+    /// Irrigated cells keep growing through droughts.
+    pub irrigated: Vec<bool>,
+    /// Weather multiplier on regrowth: 1 normal, below 1 drought, above 1 a good year.
+    pub climate: f32,
     pub farm_boost: f32,
     pub cult_decay: f32,
     pub max_food: f32,
@@ -50,7 +54,8 @@ impl World {
         }
         let food = fertility.iter().map(|f| f * max_food * 0.8).collect();
         let cultivation = vec![0.0; width * height];
-        World { width, height, fertility, food, cultivation, farm_boost, cult_decay, max_food, regrow, season_len }
+        let irrigated = vec![false; width * height];
+        World { width, height, fertility, food, cultivation, irrigated, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len }
     }
 
     #[inline]
@@ -68,23 +73,59 @@ impl World {
 
     pub fn regrow(&mut self, season: f32) {
         let r = self.regrow * season;
+        let climate = self.climate;
+        let irrigated_climate = climate.max(0.8);
         let max_food = self.max_food;
         let boost = self.farm_boost;
         let decay = self.cult_decay;
-        for ((food, fert), cult) in self.food.iter_mut().zip(self.fertility.iter()).zip(self.cultivation.iter_mut()) {
+        for i in 0..self.food.len() {
+            let fert = self.fertility[i];
+            let cult = &mut self.cultivation[i];
             if *cult > 0.0 {
                 *cult *= decay;
                 if *cult < 0.001 {
                     *cult = 0.0;
+                    self.irrigated[i] = false;
                 }
             }
             let cap = max_food * fert * (1.0 + 2.0 * *cult);
             if cap <= 0.0 {
                 continue;
             }
-            *food += r * fert * (1.0 + boost * *cult) * (1.0 - *food / cap);
+            let c = if self.irrigated[i] { irrigated_climate } else { climate };
+            let food = &mut self.food[i];
+            *food += r * c * fert * (1.0 + boost * *cult) * (1.0 - *food / cap);
             if *food > cap {
                 *food = cap;
+            }
+        }
+    }
+
+    /// Raiders torch the 3x3 field around a spot. Returns cultivation destroyed.
+    pub fn burn(&mut self, x: f32, y: f32, wrap: bool) -> f32 {
+        let mut lost = 0.0;
+        self.for_block(x, y, wrap, |w, i| {
+            let before = w.cultivation[i];
+            w.cultivation[i] *= 0.2;
+            lost += before - w.cultivation[i];
+        });
+        lost
+    }
+
+    fn for_block(&mut self, x: f32, y: f32, wrap: bool, mut f: impl FnMut(&mut World, usize)) {
+        let cx = (x as isize).min(self.width as isize - 1);
+        let cy = (y as isize).min(self.height as isize - 1);
+        for dy in -1..=1isize {
+            for dx in -1..=1isize {
+                let (mut nx, mut ny) = (cx + dx, cy + dy);
+                if wrap {
+                    nx = nx.rem_euclid(self.width as isize);
+                    ny = ny.rem_euclid(self.height as isize);
+                } else if nx < 0 || ny < 0 || nx >= self.width as isize || ny >= self.height as isize {
+                    continue;
+                }
+                let i = ny as usize * self.width + nx as usize;
+                f(self, i);
             }
         }
     }
@@ -121,7 +162,8 @@ impl World {
     }
 
     /// A farmer tends the 3x3 block around them: full gain on their cell, half on the ring.
-    pub fn tend(&mut self, x: f32, y: f32, gain: f32, wrap: bool) {
+    /// An irrigating farmer also marks the cells as irrigated.
+    pub fn tend(&mut self, x: f32, y: f32, gain: f32, irrigate: bool, wrap: bool) {
         let cx = (x as isize).min(self.width as isize - 1);
         let cy = (y as isize).min(self.height as isize - 1);
         for dy in -1..=1isize {
@@ -140,6 +182,9 @@ impl World {
                 let g = if dx == 0 && dy == 0 { gain } else { gain * 0.5 };
                 let c = &mut self.cultivation[i];
                 *c = (*c + g).min(1.0);
+                if irrigate {
+                    self.irrigated[i] = true;
+                }
             }
         }
     }

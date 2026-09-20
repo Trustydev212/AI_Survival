@@ -1,17 +1,32 @@
-use crate::brain::{Action, Genome, N_ACT};
+use crate::brain::{Action, Genome, N_ACT, N_MEM};
 
 /// Behaviour profile dimensions: the five action frequencies plus mobility.
 pub const N_PROFILE: usize = N_ACT + 1;
 
 /// Culture: knowledge held by an agent, learned by discovery or from neighbours.
-/// Never inherited through genes.
-pub const TOOLS: u8 = 1;
-pub const FARMING: u8 = 2;
-pub const WEAPONS: u8 = 4;
-pub const COOKING: u8 = 8;
-pub const N_TECH: usize = 4;
-pub const TECH_NAMES: [&str; N_TECH] = ["tools", "farming", "weapons", "cooking"];
-pub const TECH_BITS: [u8; N_TECH] = [TOOLS, FARMING, WEAPONS, COOKING];
+/// Never inherited through genes. Higher techs need lower ones plus social conditions.
+pub const TOOLS: u16 = 1;
+pub const FARMING: u16 = 2;
+pub const WEAPONS: u16 = 4;
+pub const COOKING: u16 = 8;
+pub const METAL: u16 = 16;
+pub const IRRIGATION: u16 = 32;
+pub const WALLS: u16 = 64;
+pub const MEDICINE: u16 = 128;
+pub const WRITING: u16 = 256;
+pub const N_TECH: usize = 9;
+pub const ALL_TECH: u16 = 0x1FF;
+pub const TECH_NAMES: [&str; N_TECH] =
+    ["tools", "farming", "weapons", "cooking", "metal", "irrigation", "walls", "medicine", "writing"];
+pub const TECH_BITS: [u16; N_TECH] = [TOOLS, FARMING, WEAPONS, COOKING, METAL, IRRIGATION, WALLS, MEDICINE, WRITING];
+
+/// Emotions: fast internal state in [0, 1], driven by events, decaying at a heritable rate.
+pub const FEAR: usize = 0;
+pub const ANGER: usize = 1;
+pub const JOY: usize = 2;
+pub const BOND: usize = 3;
+pub const N_EMO: usize = 4;
+pub const EMO_NAMES: [&str; N_EMO] = ["fear", "anger", "joy", "bond"];
 
 #[derive(Clone)]
 pub struct Agent {
@@ -26,17 +41,32 @@ pub struct Agent {
     pub last_action: Action,
     pub children: u16,
     /// Exponentially decayed history of what this agent actually does.
-    /// This is its observed strategy, whatever its genes say.
     pub profile: [f32; N_PROFILE],
-    pub tech: u8,
-    /// Consecutive ticks spent (nearly) still. Farming only works when settled.
+    pub tech: u16,
+    /// Consecutive ticks spent still. Farming only works when settled.
     pub still: u16,
+    pub emotion: [f32; N_EMO],
+    /// Recurrent memory: written by the brain, read back next tick. Its "thoughts".
+    pub memory: [f32; N_MEM],
+    pub has_home: bool,
+    pub home_x: f32,
+    pub home_y: f32,
+    /// Ticks of illness left; 0 = healthy.
+    pub sick: u16,
+    /// Ticks of immunity left after recovering.
+    pub immune: u16,
 }
 
 impl Agent {
     #[inline]
-    pub fn knows(&self, bit: u8) -> bool {
+    pub fn knows(&self, bit: u16) -> bool {
         self.tech & bit != 0
+    }
+
+    #[inline]
+    pub fn feel(&mut self, e: usize, amount: f32) {
+        let s = self.genome.emo_sensitivity(e);
+        self.emotion[e] = (self.emotion[e] + amount * s).clamp(0.0, 1.0);
     }
 
     #[inline]
@@ -64,4 +94,5 @@ pub struct Decision {
     pub my: f32,
     pub action: Action,
     pub target: u32, // nearest agent index at decision time, u32::MAX if none
+    pub memory: [f32; N_MEM],
 }

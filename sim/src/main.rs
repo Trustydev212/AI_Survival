@@ -49,10 +49,13 @@ fn main() {
         }
         if t % cfg.log_every == 0 {
             let window = sim.take_window();
-            let m = stats::compute(t, sim.world.season(t), &sim.agents, sim.world.total_food(), sim.world.cultivated_cells(), sim.settled_share(), window);
+            let m = stats::compute(
+                t, sim.world.season(t), sim.world.climate, &sim.agents, sim.world.total_food(),
+                sim.world.cultivated_cells(), sim.settled_share(), window,
+            );
             stats::print_row(&m);
             stats::csv_row(&mut csv, &m).unwrap();
-            sim.events.check_window(t, &sim.agents, &m.w, &m.strat, cfg.log_every);
+            sim.events.check_window(&m, &sim.agents, cfg.log_every);
         }
     }
     csv.flush().unwrap();
@@ -71,7 +74,8 @@ fn main() {
         agent::TECH_NAMES.iter().zip(share.iter()).map(|(n, s)| format!("{n} {:.0}%", s * 100.0)).collect::<Vec<_>>().join("  ")
     );
     println!("\nHistory ({} events, written to {}):", sim.events.events.len(), events_path);
-    for e in sim.events.events.iter().filter(|e| !e.text.starts_with("famine") && !e.text.starts_with("war")) {
+    let noisy = ["famine", "war", "plague toll", "raids", "drought", "a year of plenty", "plague:"];
+    for e in sim.events.events.iter().filter(|e| !noisy.iter().any(|p| e.text.starts_with(p))) {
         println!("  tick {:>6}: {}", e.tick, e.text);
     }
 }

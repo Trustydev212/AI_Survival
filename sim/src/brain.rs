@@ -1,13 +1,15 @@
-//! A tiny MLP brain plus the genome that encodes it.
+//! A tiny recurrent MLP brain plus the genome that encodes it and the agent's temperament.
 //! Learning happens only through inheritance and mutation (neuroevolution).
 
 use crate::rng::Rng;
 
-pub const N_IN: usize = 24;
+pub const N_MEM: usize = 4;
+pub const N_IN: usize = 41;
 pub const N_HID: usize = 16;
 pub const N_ACT: usize = 5;
-pub const N_OUT: usize = 3 + N_ACT; // move_x, move_y, go/stay, then action scores
+pub const N_OUT: usize = 3 + N_ACT + N_MEM; // move_x, move_y, go/stay, action scores, memory
 pub const N_WEIGHTS: usize = N_IN * N_HID + N_HID + N_HID * N_OUT + N_OUT;
+pub const N_TEMPER: usize = 8; // 4 emotion decay genes, 4 emotion sensitivity genes
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -37,12 +39,18 @@ pub struct Genome {
     pub weights: Vec<f32>,
     /// Heritable "phenotype colour"; kin recognition is based on marker distance.
     pub marker: [f32; 3],
+    /// Temperament: how fast each emotion fades and how strongly it is felt.
+    pub temper: [f32; N_TEMPER],
 }
 
 impl Genome {
     pub fn random(rng: &mut Rng, marker: [f32; 3]) -> Genome {
         let weights = (0..N_WEIGHTS).map(|_| rng.normal() * 0.5).collect();
-        Genome { weights, marker }
+        let mut temper = [0.0; N_TEMPER];
+        for t in temper.iter_mut() {
+            *t = rng.normal();
+        }
+        Genome { weights, marker, temper }
     }
 
     pub fn mutated(&self, rng: &mut Rng, p_mut: f32, sigma: f32) -> Genome {
@@ -52,10 +60,27 @@ impl Genome {
                 *w += rng.normal() * sigma;
             }
         }
+        for t in g.temper.iter_mut() {
+            if rng.f32() < p_mut {
+                *t += rng.normal() * sigma;
+            }
+        }
         for m in g.marker.iter_mut() {
             *m = (*m + rng.normal() * 0.02).clamp(0.0, 1.0);
         }
         g
+    }
+
+    /// Per-tick retention of emotion e, in [0.90, 0.999]: from hot-headed to brooding.
+    #[inline]
+    pub fn emo_decay(&self, e: usize) -> f32 {
+        0.90 + 0.099 * sigmoid(self.temper[e])
+    }
+
+    /// How strongly emotion e responds to events, in [0.25, 4].
+    #[inline]
+    pub fn emo_sensitivity(&self, e: usize) -> f32 {
+        self.temper[4 + e].exp().clamp(0.25, 4.0)
     }
 
     /// 1.0 = identical markers, 0.0 = maximally different.
@@ -65,9 +90,9 @@ impl Genome {
         1.0 - d / 1.732
     }
 
-    /// Forward pass. Returns (move_x, move_y, action). Movement is zero when the
+    /// Forward pass. Returns (move_x, move_y, action, memory). Movement is zero when the
     /// go/stay output is negative, so staying put is one sign flip away from roaming.
-    pub fn think(&self, input: &[f32; N_IN]) -> (f32, f32, Action) {
+    pub fn think(&self, input: &[f32; N_IN]) -> (f32, f32, Action, [f32; N_MEM]) {
         let w = &self.weights;
         let mut hidden = [0.0f32; N_HID];
         let mut off = 0;
@@ -101,11 +126,20 @@ impl Genome {
                 best = a;
             }
         }
-        if out[2] <= 0.0 {
-            return (0.0, 0.0, Action::ALL[best]);
+        let mut mem = [0.0f32; N_MEM];
+        for m in 0..N_MEM {
+            mem[m] = fast_tanh(out[3 + N_ACT + m]);
         }
-        (fast_tanh(out[0]), fast_tanh(out[1]), Action::ALL[best])
+        if out[2] <= 0.0 {
+            return (0.0, 0.0, Action::ALL[best], mem);
+        }
+        (fast_tanh(out[0]), fast_tanh(out[1]), Action::ALL[best], mem)
     }
+}
+
+#[inline]
+fn sigmoid(x: f32) -> f32 {
+    1.0 / (1.0 + (-x).exp())
 }
 
 #[inline]

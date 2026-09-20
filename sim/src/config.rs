@@ -62,9 +62,24 @@ pub struct Config {
     pub settle_ticks: u16,
     pub cult_decay: f32,
     pub weapon_mult: f32,
+    pub metal_mult: f32,
     pub cooking_saving: f32,
-    /// Tech bitmask founders start with (1 tools, 2 farming, 4 weapons, 8 cooking).
-    pub start_tech: u8,
+    /// Tech bitmask founders start with (1 tools, 2 farming, 4 weapons, 8 cooking, 16 metal,
+    /// 32 irrigation, 64 walls, 128 medicine, 256 writing).
+    pub start_tech: u16,
+
+    // luck and disasters
+    pub p_windfall: f32,
+    pub p_accident: f32,
+    pub p_drought: f32,
+    pub p_golden: f32,
+    pub p_plague: f32,
+    pub drought_climate: f32,
+    pub golden_climate: f32,
+    pub plague_len: u16,
+    pub p_infect: f32,
+    pub sick_drain: f32,
+    pub immune_len: u16,
 }
 
 impl Default for Config {
@@ -123,8 +138,21 @@ impl Default for Config {
             settle_ticks: 5,
             cult_decay: 0.99,
             weapon_mult: 1.5,
+            metal_mult: 1.3,
             cooking_saving: 0.25,
             start_tech: 0,
+
+            p_windfall: 0.0001,
+            p_accident: 0.00005,
+            p_drought: 0.15,
+            p_golden: 0.15,
+            p_plague: 0.12,
+            drought_climate: 0.35,
+            golden_climate: 1.5,
+            plague_len: 300,
+            p_infect: 0.02,
+            sick_drain: 0.25,
+            immune_len: 4000,
         }
     }
 }
@@ -171,6 +199,12 @@ impl Config {
                 "--farm-boost" => set!(farm_boost),
                 "--settle-ticks" => set!(settle_ticks),
                 "--start-tech" => set!(start_tech),
+                "--p-drought" => set!(p_drought),
+                "--p-golden" => set!(p_golden),
+                "--p-plague" => set!(p_plague),
+                "--p-infect" => set!(p_infect),
+                "--p-windfall" => set!(p_windfall),
+                "--p-accident" => set!(p_accident),
                 "--cult-decay" => set!(cult_decay),
                 _ => return Err(format!("unknown flag {key}\n{HELP}")),
             }
@@ -207,5 +241,9 @@ USAGE: sim [--flag value ...]
   --farm-boost F    regrowth multiplier of a fully cultivated cell (12)
   --cult-decay F    cultivation kept per tick when untended (0.99)
   --settle-ticks N  ticks an agent must stay still before its farming takes effect (5)
-  --start-tech N    tech bitmask founders begin with: 1 tools, 2 farming, 4 weapons, 8 cooking (0)
+  --start-tech N    tech bitmask founders begin with: 1 tools, 2 farming, 4 weapons, 8 cooking,
+                    16 metal, 32 irrigation, 64 walls, 128 medicine, 256 writing (0)
+  --p-drought F     chance each year of a drought (0.15); --p-golden F good year (0.15)
+  --p-plague F      chance each year of a plague outbreak (0.12); --p-infect F per contact-tick (0.02)
+  --p-windfall F    per agent-tick chance of a lucky find (0.0001); --p-accident F of an injury (0.00005)
 ";

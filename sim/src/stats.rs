@@ -1,6 +1,6 @@
 //! Windowed counters and population-level metrics, printed as a table and CSV.
 
-use crate::agent::{Agent, N_TECH, TECH_BITS, TECH_NAMES};
+use crate::agent::{Agent, EMO_NAMES, N_EMO, N_TECH, TECH_BITS, TECH_NAMES};
 use crate::brain::{Action, N_ACT};
 use crate::strategy::{self, StrategyReport};
 use std::collections::HashMap;
@@ -12,6 +12,7 @@ pub struct Window {
     pub starved: u32,
     pub aged: u32,
     pub killed: u32,
+    pub plague_deaths: u32,
     pub attacks: u32,
     pub attack_wins: u32,
     pub shares: u32,
@@ -19,11 +20,18 @@ pub struct Window {
     pub actions: [u32; N_ACT],
     pub discoveries: [u32; N_TECH],
     pub learned: [u32; N_TECH],
+    pub droughts: u32,
+    pub outbreaks: u32,
+    pub infections: u32,
+    pub windfalls: u32,
+    pub accidents: u32,
+    pub burned: u32,
 }
 
 pub struct Metrics {
     pub tick: u64,
     pub season: f32,
+    pub climate: f32,
     pub pop: usize,
     pub mean_energy: f32,
     pub mean_inv: f32,
@@ -37,10 +45,30 @@ pub struct Metrics {
     pub tech: [f32; N_TECH],
     pub cultivated: usize,
     pub settled: f32,
+    pub sick: f32,
+    pub emotion: [f32; N_EMO],
+    pub era: &'static str,
     pub w: Window,
 }
 
-pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, cultivated: usize, settled: f32, w: Window) -> Metrics {
+/// Eras are read off the state of society, never scripted.
+pub fn era_name(tech: &[f32; N_TECH], settled: f32) -> &'static str {
+    if tech[8] >= 0.5 {
+        "Age of Writing"
+    } else if tech[4] >= 0.5 {
+        "Metal Age"
+    } else if tech[1] >= 0.5 && settled >= 0.3 {
+        "Village Age"
+    } else if tech[1] >= 0.5 {
+        "Dawn of Farming"
+    } else if tech[0] >= 0.5 {
+        "Tool Age"
+    } else {
+        "Stone Age"
+    }
+}
+
+pub fn compute(tick: u64, season: f32, climate: f32, agents: &[Agent], food: f32, cultivated: usize, settled: f32, w: Window) -> Metrics {
     let pop = agents.len();
     let n = pop.max(1) as f32;
     let mut tech = [0.0f32; N_TECH];
@@ -49,6 +77,16 @@ pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, cultivated: 
     }
     let mean_energy = agents.iter().map(|a| a.energy).sum::<f32>() / n;
     let mean_inv = agents.iter().map(|a| a.inventory).sum::<f32>() / n;
+    let sick = agents.iter().filter(|a| a.sick > 0).count() as f32 / n;
+    let mut emotion = [0.0f32; N_EMO];
+    for a in agents {
+        for e in 0..N_EMO {
+            emotion[e] += a.emotion[e];
+        }
+    }
+    for e in emotion.iter_mut() {
+        *e /= n;
+    }
 
     let mut by_lineage: HashMap<u32, u32> = HashMap::new();
     for a in agents {
@@ -100,14 +138,12 @@ pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, cultivated: 
     }
 
     let strat = strategy::analyse(agents);
+    let era = era_name(&tech, settled);
 
     Metrics {
         tick,
-        strat,
-        tech,
-        cultivated,
-        settled,
         season,
+        climate,
         pop,
         mean_energy,
         mean_inv,
@@ -117,14 +153,21 @@ pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, cultivated: 
         action_entropy: entropy,
         marker_spread: spread,
         gini,
+        strat,
+        tech,
+        cultivated,
+        settled,
+        sick,
+        emotion,
+        era,
         w,
     }
 }
 
 pub fn print_header() {
     println!(
-        "{:>7} {:>5} {:>5} {:>6} {:>6} {:>8} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5}  {}",
-        "tick", "seas", "pop", "energy", "inv", "food", "lin", "top%", "gini", "born", "starv", "aged", "kill", "attk", "share", "strat", "tool%", "farm%", "weap%", "cook%", "field", "stay%", "dominant strategies (share% label)"
+        "{:>7} {:>4} {:>5} {:>6} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>4} {:>4} {:>4} {:>4} {:<16} {}",
+        "tick", "clim", "pop", "energy", "lin", "gini", "born", "starv", "kill", "plag", "attk", "share", "strat", "tool%", "farm%", "metl%", "writ%", "field", "stay%", "fear", "angr", "joy", "bond", "era", "dominant strategies"
     );
 }
 
@@ -138,29 +181,31 @@ pub fn print_row(m: &Metrics) {
         .map(|s| format!("[{:.0}% {}]", 100.0 * s.count as f32 / counted as f32, strategy::describe(&s.centroid)))
         .collect();
     println!(
-        "{:>7} {:>5.2} {:>5} {:>6.1} {:>6.1} {:>8.0} {:>5} {:>5.0} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5.0} {:>5.0} {:>5.0} {:>5.0} {:>5} {:>5.0}  {}",
+        "{:>7} {:>4.2} {:>5} {:>6.1} {:>5} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5.0} {:>5.0} {:>5.0} {:>5.0} {:>5} {:>5.0} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:<16} {}",
         m.tick,
-        m.season,
+        m.climate,
         m.pop,
         m.mean_energy,
-        m.mean_inv,
-        m.food,
         m.lineages,
-        m.top_share * 100.0,
         m.gini,
         m.w.births,
         m.w.starved,
-        m.w.aged,
         m.w.killed,
+        m.w.plague_deaths,
         m.w.attacks,
         m.w.shares,
         m.strat.effective,
         m.tech[0] * 100.0,
         m.tech[1] * 100.0,
-        m.tech[2] * 100.0,
-        m.tech[3] * 100.0,
+        m.tech[4] * 100.0,
+        m.tech[8] * 100.0,
         m.cultivated,
         m.settled * 100.0,
+        m.emotion[0],
+        m.emotion[1],
+        m.emotion[2],
+        m.emotion[3],
+        m.era,
         strats.join(" ")
     );
 }
@@ -168,9 +213,11 @@ pub fn print_row(m: &Metrics) {
 pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
     let acts: Vec<&str> = Action::ALL.iter().map(|a| a.name()).collect();
     let techs: Vec<String> = TECH_NAMES.iter().map(|t| format!("{t}_share")).collect();
+    let emos: Vec<String> = EMO_NAMES.iter().map(|e| format!("mean_{e}")).collect();
     writeln!(
         out,
-        "tick,season,pop,mean_energy,mean_inventory,food,lineages,top_lineage_share,gini,action_entropy,marker_spread,strategy_entropy,effective_strategies,births,starved,aged,killed,attacks,attack_wins,shares,immigrants,cultivated_cells,settled_share,{},{}",
+        "tick,season,climate,pop,mean_energy,mean_inventory,food,lineages,top_lineage_share,gini,action_entropy,marker_spread,strategy_entropy,effective_strategies,births,starved,aged,killed,plague_deaths,attacks,attack_wins,shares,immigrants,cultivated_cells,settled_share,sick_share,droughts,outbreaks,infections,windfalls,accidents,fields_burned,era,{},{},{}",
+        emos.join(","),
         techs.join(","),
         acts.join(",")
     )
@@ -179,11 +226,13 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
 pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     let acts: Vec<String> = m.w.actions.iter().map(|c| c.to_string()).collect();
     let techs: Vec<String> = m.tech.iter().map(|t| format!("{t:.4}")).collect();
+    let emos: Vec<String> = m.emotion.iter().map(|e| format!("{e:.4}")).collect();
     writeln!(
         out,
-        "{},{:.3},{},{:.2},{:.2},{:.1},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{},{},{},{},{},{},{},{},{},{:.4},{},{}",
+        "{},{:.3},{:.2},{},{:.2},{:.2},{:.1},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{},{},{},{},{},{},{},{},{},{},{:.4},{:.4},{},{},{},{},{},{},{},{},{},{}",
         m.tick,
         m.season,
+        m.climate,
         m.pop,
         m.mean_energy,
         m.mean_inv,
@@ -199,12 +248,22 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
         m.w.starved,
         m.w.aged,
         m.w.killed,
+        m.w.plague_deaths,
         m.w.attacks,
         m.w.attack_wins,
         m.w.shares,
         m.w.immigrants,
         m.cultivated,
         m.settled,
+        m.sick,
+        m.w.droughts,
+        m.w.outbreaks,
+        m.w.infections,
+        m.w.windfalls,
+        m.w.accidents,
+        m.w.burned,
+        m.era,
+        emos.join(","),
         techs.join(","),
         acts.join(",")
     )

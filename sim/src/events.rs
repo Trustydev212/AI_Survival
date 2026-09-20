@@ -1,9 +1,8 @@
-//! A history book: notable firsts and crises, detected as they happen.
+//! A history book: notable firsts, crises and era changes, detected as they happen.
 //! Written to stdout as they occur and to out/events_seed<N>.txt.
 
-use crate::agent::{Agent, N_TECH, TECH_NAMES};
-use crate::stats::Window;
-use crate::strategy::StrategyReport;
+use crate::agent::{Agent, N_TECH, TECH_BITS, TECH_NAMES};
+use crate::stats::{Metrics, Window};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
@@ -16,8 +15,10 @@ pub struct EventLog {
     pub events: Vec<Event>,
     fired: HashSet<String>,
     lineage_peak: HashMap<u32, f32>,
-    lineage_seen: HashSet<u32>,
     tech_reached: [bool; N_TECH],
+    era: &'static str,
+    settled_peak: f32,
+    writing_peak: f32,
     writer: Option<std::io::BufWriter<std::fs::File>>,
 }
 
@@ -28,8 +29,10 @@ impl EventLog {
             events: Vec::new(),
             fired: HashSet::new(),
             lineage_peak: HashMap::new(),
-            lineage_seen: HashSet::new(),
             tech_reached: [false; N_TECH],
+            era: "Stone Age",
+            settled_peak: 0.0,
+            writing_peak: 0.0,
             writer,
         }
     }
@@ -52,21 +55,29 @@ impl EventLog {
         self.fire(tick, &key, text);
     }
 
-    /// Called once per stats window with the population, the window counters
-    /// and the strategy report; derives crises and social firsts.
-    pub fn check_window(&mut self, tick: u64, agents: &[Agent], w: &Window, strat: &StrategyReport, window_len: u64) {
+    /// Called once per stats window; derives crises, social firsts and era changes.
+    pub fn check_window(&mut self, m: &Metrics, agents: &[Agent], window_len: u64) {
+        let tick = m.tick;
+        let w: &Window = &m.w;
         let pop = agents.len();
         let popf = pop.max(1) as f32;
 
-        // Famine and war are judged relative to population and window length.
+        // Crises are judged relative to population and window length.
         let per_1000 = 1000.0 / window_len as f32;
         let starve_rate = w.starved as f32 / popf * per_1000;
         let kill_rate = w.killed as f32 / popf * per_1000;
+        let plague_rate = w.plague_deaths as f32 / popf * per_1000;
         if starve_rate > 1.0 {
             self.fire(tick, "", format!("famine: {} starved ({:.0}% of population per 1000 ticks)", w.starved, starve_rate * 100.0));
         }
         if kill_rate > 0.5 {
             self.fire(tick, "", format!("war: {} killed in {} attacks ({:.0}% of population per 1000 ticks)", w.killed, w.attacks, kill_rate * 100.0));
+        }
+        if plague_rate > 0.2 {
+            self.fire(tick, "", format!("plague toll: {} dead of sickness, {} infected this window", w.plague_deaths, w.infections));
+        }
+        if w.burned > 0 {
+            self.fire(tick, "", format!("raids: {} fields burned this window", w.burned));
         }
 
         // Lineages: dominance and extinction.
@@ -80,7 +91,6 @@ impl EventLog {
             if share > *peak {
                 *peak = share;
             }
-            self.lineage_seen.insert(lin);
             if share >= 0.5 {
                 self.fire(tick, &format!("dominant:{lin}"), format!("lineage {} now holds {:.0}% of the population", lin, share * 100.0));
             }
@@ -103,7 +113,7 @@ impl EventLog {
             if self.tech_reached[t] {
                 continue;
             }
-            let bit = crate::agent::TECH_BITS[t];
+            let bit = TECH_BITS[t];
             let n = agents.iter().filter(|a| a.knows(bit)).count();
             if pop > 0 && n as f32 / popf >= 0.5 {
                 self.tech_reached[t] = true;
@@ -112,8 +122,8 @@ impl EventLog {
         }
 
         // Social firsts from the strategy clusters.
-        let counted: usize = strat.strategies.iter().map(|s| s.count).sum::<usize>().max(1);
-        for s in &strat.strategies {
+        let counted: usize = m.strat.strategies.iter().map(|s| s.count).sum::<usize>().max(1);
+        for s in &m.strat.strategies {
             let share = s.count as f32 / counted as f32;
             if share < 0.03 {
                 continue;
@@ -128,6 +138,27 @@ impl EventLog {
             if c[crate::brain::Action::Share as usize] >= 0.2 {
                 self.fire(tick, "sharers", format!("a sharing culture emerged: {:.0}% of agents give food to kin over 20% of the time", share * 100.0));
             }
+        }
+
+        // Eras, collapses and dark ages.
+        if m.era != self.era {
+            self.fire(tick, "", format!("era: {} -> {}", self.era, m.era));
+            self.era = m.era;
+        }
+        if m.settled > self.settled_peak {
+            self.settled_peak = m.settled;
+        }
+        if self.settled_peak >= 0.5 && m.settled < 0.15 {
+            self.fire(tick, "collapse", format!("collapse: villages abandoned, settled share fell from {:.0}% to {:.0}%", self.settled_peak * 100.0, m.settled * 100.0));
+            self.settled_peak = m.settled;
+            self.fired.remove("collapse");
+        }
+        if m.tech[8] > self.writing_peak {
+            self.writing_peak = m.tech[8];
+        }
+        if self.writing_peak >= 0.5 && m.tech[8] < 0.2 {
+            self.fire(tick, "", format!("dark age: writing fell from {:.0}% to {:.0}% of the population", self.writing_peak * 100.0, m.tech[8] * 100.0));
+            self.writing_peak = m.tech[8];
         }
     }
 
