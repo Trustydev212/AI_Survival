@@ -730,8 +730,12 @@ impl Sim {
                     }
                 }
                 Action::Craft => {
-                    self.agents[i].energy -= self.cfg.craft_cost;
-                    self.craft(i);
+                    if self.cfg.no_crafting {
+                        self.tend_if_settled(i); // a control: the urge is there, the hands are not
+                    } else {
+                        self.agents[i].energy -= self.cfg.craft_cost;
+                        self.craft(i);
+                    }
                 }
                 Action::Rest => {
                     self.tend_if_settled(i);
@@ -1745,7 +1749,7 @@ fn decide(
             (Some(l.order), l.order_dx, l.order_dy, true)
         } else if a.is_leader {
             (Some(a.order), a.order_dx, a.order_dy, true)
-        } else if let (Some(c), true) = (a.custom, a.custom_strength >= cfg.custom_min) {
+        } else if let (Some(c), true, false) = (a.custom, a.custom_strength >= cfg.custom_min, cfg.no_customs) {
             (Some(c), a.custom_dx, a.custom_dy, false)
         } else {
             (None, 0.0, 0.0, false)
@@ -1798,15 +1802,22 @@ fn decide(
     }
     // How the last tick went, and what others are saying: the average call of kin and of
     // strangers in sight, and the call of the nearest one.
-    let heard = if nearest != u32::MAX { agents[nearest as usize].signal } else { [0.0; N_SIG] };
+    // Only kin are heard clearly; strangers' calls get through by `hear_strangers` (0 by default).
+    let heard = if nearest != u32::MAX {
+        let o = &agents[nearest as usize];
+        let gain = if a.is_kin(o, cfg.kin_threshold) { 1.0 } else { cfg.hear_strangers };
+        [o.signal[0] * gain, o.signal[1] * gain]
+    } else {
+        [0.0; N_SIG]
+    };
     {
         input[90] = a.reward;
         let (nk, nf) = (kin.max(1.0), foe.max(1.0));
         let hs = cfg.hear_scale;
         input[91] = hs * kin_sig[0] / nk;
         input[92] = hs * kin_sig[1] / nk;
-        input[93] = hs * foe_sig[0] / nf;
-        input[94] = hs * foe_sig[1] / nf;
+        input[93] = hs * cfg.hear_strangers * foe_sig[0] / nf;
+        input[94] = hs * cfg.hear_strangers * foe_sig[1] / nf;
         input[95] = hs * heard[0];
         input[96] = hs * heard[1];
     }
@@ -1962,6 +1973,8 @@ for (k, a) in slice.iter_mut().enumerate() {
         if winter && a.sheltered > 0.0 {
             cost *= 1.0 - cfg.shelter_warmth * a.sheltered.min(1.0);
         }
+        // Calling costs: a loud signal is a real expense, so meaning has to earn its keep.
+        cost += cfg.sig_cost * (a.signal[0].abs() + a.signal[1].abs());
         if a.afloat {
             cost *= cfg.sea_cost;
             if a.caps[E_SEA] < cfg.sea_threshold {

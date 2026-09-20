@@ -137,6 +137,13 @@ pub struct Config {
     pub learn_scale: f32,
     /// Multiplier on signal inputs; 0 makes everyone deaf (a control).
     pub hear_scale: f32,
+    /// How much of strangers' calls gets through (0 = only kin are heard).
+    pub hear_strangers: f32,
+    /// Energy per tick spent calling, per unit of signal magnitude: lying is not free.
+    pub sig_cost: f32,
+    /// Controls: customs never speak; nobody can craft.
+    pub no_customs: bool,
+    pub no_crafting: bool,
 
     // customs
     pub custom_gain: f32,
@@ -264,6 +271,10 @@ impl Default for Config {
             shelter_warmth: 0.35,
             learn_scale: 1.0,
             hear_scale: 1.0,
+            hear_strangers: 0.0,
+            sig_cost: 0.02,
+            no_customs: false,
+            no_crafting: false,
 
             custom_gain: 0.01,
             custom_decay: 0.9995,
@@ -307,6 +318,16 @@ impl Config {
                 i += 1;
                 continue;
             }
+            if key == "--no-customs" {
+                c.no_customs = true;
+                i += 1;
+                continue;
+            }
+            if key == "--no-crafting" {
+                c.no_crafting = true;
+                i += 1;
+                continue;
+            }
             let val = args.get(i + 1).ok_or_else(|| format!("missing value for {key}"))?;
             macro_rules! set {
                 ($field:ident) => {
@@ -338,6 +359,8 @@ impl Config {
                 "--shelter-warmth" => set!(shelter_warmth),
                 "--learn-scale" => set!(learn_scale),
                 "--hear-scale" => set!(hear_scale),
+                "--hear-strangers" => set!(hear_strangers),
+                "--sig-cost" => set!(sig_cost),
                 "--width" => set!(width),
                 "--height" => set!(height),
                 "--agents" => set!(agents),

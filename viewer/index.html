@@ -62,6 +62,14 @@
   .ev.good .t { color: var(--ok); }
   .ev.major { font-weight: 600; }
   #leaders { border-top: 1px solid var(--line); padding: 8px 14px; max-height: 180px; overflow-y: auto; }
+  #life { border-top: 1px solid var(--line); padding: 8px 14px; display: none; font-size: 12px; }
+  #life.on { display: block; }
+  #life .row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  #life .row span:last-child { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
+  #life .row span:first-child { color: var(--muted); }
+  #life canvas { width: 100%; height: 34px; display: block; margin: 4px 0 2px; background: var(--panel2); border-radius: 4px; }
+  #life .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; border: 1px solid #000; }
+  #life .hint { color: var(--muted); font-size: 11px; }
   .ld { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
   .ld canvas { image-rendering: pixelated; }
   .ld .n { flex: 1; }
@@ -120,6 +128,8 @@
   <aside>
     <h3><span data-t="history">Sử ký</span><label><input type="checkbox" id="pauseMajor"> <span data-t="pauseMajor">dừng ở sự kiện lớn</span></label></h3>
     <div id="events"></div>
+    <h3 id="lifeHead" style="display:none"><span data-t="life">Một cuộc đời</span><label><button id="unfollow" style="padding:1px 8px">×</button></label></h3>
+    <div id="life"></div>
     <h3><span data-t="leading">Thủ lĩnh đang dẫn dắt</span></h3>
     <div id="leaders"></div>
   </aside>
@@ -149,22 +159,26 @@ const SIG_COLORS = [0x1a1a1a, 0x4b3ca8, 0x2f6fd6, 0x39c6e0, 0x7a2a8f, 0x9b59b6, 
 const T = {
   vi: { tick: 'tick', pop: 'dân', soil: 'đất', weather: 'thời tiết', obey: 'tuân lệnh', known: 'kiến thức', stores: 'kho', leaders: 'thủ lĩnh',
     factions: 'Phe phái', history: 'Sử ký', pauseMajor: 'dừng ở sự kiện lớn', leading: 'Thủ lĩnh đang dẫn dắt',
-    hint: 'kéo để di chuyển · lăn chuột để phóng · space phát/dừng · F bám thủ lĩnh · E bám sự kiện · L đổi ngôn ngữ · ← → từng khung',
+    hint: 'kéo để di chuyển · lăn chuột để phóng · bấm vào người để theo cả đời · space phát/dừng · F bám thủ lĩnh · E bám sự kiện · L đổi ngôn ngữ · ← → từng khung',
     drop: 'Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.',
     loading: 'Đang tải', notfound: 'Không tìm thấy dữ liệu trên server. Kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
     followers: 'người theo', unnamed: '(chưa có tên)', fps: 'khung/giây', order: 'lệnh', custom: 'tập quán', none: 'không',
     normal: 'bình thường', winter: 'mùa đông', drought: 'hạn hán', droughtWinter: 'hạn + đông', plenty: 'được mùa', harsh: 'năm khắc nghiệt',
     lineage: 'dòng họ', eras: ['hoang dã','nhóm lửa','bén rễ','đan kết','nhiều tầng','vút cao','rực rỡ','vượt xa'],
-    orders: ['ở lại','di cư','đột kích','kiềm chế','góp kho'] },
+    orders: ['ở lại','di cư','đột kích','kiềm chế','góp kho'],
+    life: 'Một cuộc đời', born: 'sinh ở tick', age: 'tuổi', energy: 'năng lượng', reward: 'phần thưởng', plastic: 'não đã đổi', carrying: 'đang cầm', says: 'đang nói', hears: 'đang nghe', doing: 'đang', nothing: 'không gì',
+    acts: ['hái','đánh','chia sẻ','sinh','nghỉ','chế tác'], slots: ['công cụ','vũ khí','tấm chắn','thuyền','bình','lửa'], lifeHint: 'bấm vào một người trên bản đồ để theo cả đời; Esc để thôi', dead: 'đã chết ở tick' },
   en: { tick: 'tick', pop: 'pop', soil: 'soil', weather: 'weather', obey: 'obedience', known: 'knowledge', stores: 'stores', leaders: 'leaders',
     factions: 'Factions', history: 'Chronicle', pauseMajor: 'pause on major events', leading: 'Leaders now',
-    hint: 'drag to pan · wheel to zoom · space play/pause · F follow leader · E follow events · L language · ← → step',
+    hint: 'drag to pan · wheel to zoom · click a person to follow a life · space play/pause · F follow leader · E follow events · L language · ← → step',
     drop: 'Or drop the three files snap_seedN.bin, meta_seedN.json, events_seedN.txt here.',
     loading: 'Loading', notfound: 'No data on the server. Drop the files here.', badfile: 'Not a snapshot file.',
     followers: 'followers', unnamed: '(unnamed)', fps: 'frames/s', order: 'order', custom: 'custom', none: 'none',
     normal: 'normal', winter: 'winter', drought: 'drought', droughtWinter: 'drought + winter', plenty: 'year of plenty', harsh: 'harsh year',
     lineage: 'lineage', eras: ['wild','kindled','rooted','woven','layered','soaring','radiant','beyond'],
-    orders: ['hold','move','raid','conserve','pool'] },
+    orders: ['hold','move','raid','conserve','pool'],
+    life: 'One life', born: 'born at tick', age: 'age', energy: 'energy', reward: 'reward', plastic: 'mind drift', carrying: 'carrying', says: 'saying', hears: 'hearing', doing: 'doing', nothing: 'nothing',
+    acts: ['gather','attack','share','breed','rest','craft'], slots: ['tool','weapon','shield','boat','vessel','fire'], lifeHint: 'click a person on the map to follow a whole life; Esc to stop', dead: 'died at tick' },
 };
 let lang = localStorage.getItem('aisv.lang') || 'vi';
 const t = k => T[lang][k];
@@ -241,7 +255,7 @@ const state = {
   bytes: null, W: 0, H: 0, maxFood: 10, frames: [], meta: null, events: [], live: false, liveOffset: 0,
   frame: 0, sub: 0, playing: false, fps: 4, follow: null, drag: null, pauseMajor: false, shownBanner: -1,
   layerCache: { idx: -1, layers: null }, agentCache: new Map(), lastType: null,
-  tileTypes: null, pixi: null, sprites: new Map(), lastFrameDrawn: -1, seenMajor: new Set(),
+  tileTypes: null, pixi: null, sprites: new Map(), lastFrameDrawn: -1, seenMajor: new Set(), selected: null, life: null, dragMoved: false,
 };
 
 // ---------- loading
@@ -301,7 +315,7 @@ async function boot(bytes, meta, evText) {
   if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'AISV' || dv.getUint32(4, true) < 3) { $('loadmsg').textContent = t('badfile') + ' (v3+)'; return; }
   state.W = dv.getUint16(8, true); state.H = dv.getUint16(10, true); state.maxFood = dv.getFloat32(12, true);
   state.version = dv.getUint32(4, true); state.water = null; state.dataStart = 16;
-  state.nLayers = state.version >= 5 ? 4 : 3; state.agentBytes = state.version >= 6 ? 24 : state.version >= 5 ? 23 : 22;
+  state.nLayers = state.version >= 5 ? 4 : 3; state.agentBytes = state.version >= 7 ? 27 : state.version >= 6 ? 24 : state.version >= 5 ? 23 : 22;
   if (state.version >= 4) { const n = dv.getUint32(16, true); state.water = new Uint8Array(state.W * state.H); for (let i = 0; i < state.W * state.H; i++) state.water[i] = (bytes[20 + (i >> 3)] >> (i & 7)) & 1; state.dataStart = 20 + n; }
   state.meta = meta || { names: {}, eras: T.en.eras };
   state.frames = []; indexFrames();
@@ -351,12 +365,12 @@ function agentsOf(idx) {
   const f = state.frames[idx], b = state.bytes, dv = new DataView(b.buffer, b.byteOffset); const n = f.pop;
   const a = { n, id: new Uint32Array(n), x: new Float32Array(n), y: new Float32Array(n), lineage: new Uint16Array(n), name: new Uint32Array(n),
     followers: new Uint16Array(n), flags: new Uint8Array(n), energy: new Uint8Array(n), mdx: new Int8Array(n), mdy: new Int8Array(n),
-    under: new Uint8Array(n), action: new Uint8Array(n), gear: new Uint8Array(n), sig: new Uint8Array(n), index: new Map(), stores: [] };
+    under: new Uint8Array(n), action: new Uint8Array(n), gear: new Uint8Array(n), sig: new Uint8Array(n), plastic: new Uint8Array(n), reward: new Int8Array(n), heard: new Uint8Array(n), index: new Map(), stores: [] };
   let o = f.agents; const AB = state.agentBytes;
   for (let i = 0; i < n; i++, o += AB) {
     a.id[i] = dv.getUint32(o, true); a.x[i] = dv.getUint16(o + 4, true) / 64; a.y[i] = dv.getUint16(o + 6, true) / 64;
     a.lineage[i] = dv.getUint16(o + 8, true); a.name[i] = dv.getUint32(o + 10, true); a.followers[i] = dv.getUint16(o + 14, true);
-    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21]; a.gear[i] = AB >= 23 ? b[o + 22] : 0; a.sig[i] = AB >= 24 ? b[o + 23] : 255;
+    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21]; a.gear[i] = AB >= 23 ? b[o + 22] : 0; a.sig[i] = AB >= 24 ? b[o + 23] : 255; if (AB >= 27) { a.plastic[i] = b[o + 24]; a.reward[i] = dv.getInt8(o + 25); a.heard[i] = b[o + 26]; }
     a.index.set(a.id[i], i);
   }
   o = f.storesOff;
@@ -598,6 +612,7 @@ function charAnim(c, name) { return c.anims[name] || c.anims.idle; }
 // ---------- pixi scene
 const CH = 48;
 let app, world, waterTex = [], waterSprite, chunks = [], propLayer, bodies, shadows, fxLayer, labelLayer, storeLayer, tintOverlay, snowLayer, snowDots = [], cloudLayer, cloudShadowLayer, clouds = [], deathLayer, deaths = [], animLayer, animSprites = [];
+let selRing;
 let atlas = {}, edges, crops, banners, crownTex, slashTex, bannerTex = [], propTex = {}, tileInfo, flowerTex = [], auto = {}, shadowTex, uiTex = {}, cropTex = {}, houseTex = [], cloudTex = [], animalTex = {}, windmillTex = [], fireTex = [], treeTex = {}, boatTex = [], boats;
 function propTexture(name) { const S = ART.S, r = S.pm[name]; if (!r) return null; const fw = r.w / r.frames; return Array.from({ length: r.frames }, (_, f) => new PIXI.Texture(S.propsBase, new PIXI.Rectangle(r.x + f * fw, r.y, fw, r.h))); }
 function initPixi() {
@@ -662,6 +677,7 @@ function initPixi() {
   bodies = new PIXI.ParticleContainer(30000, { position: true, uvs: true, scale: true, alpha: true, tint: true }); world.addChild(bodies);
   fxLayer = new PIXI.Container(); world.addChild(fxLayer);
   labelLayer = new PIXI.Container(); world.addChild(labelLayer);
+  selRing = new PIXI.Graphics(); selRing.lineStyle(1.5, 0xfff3c4, 1).drawCircle(0, 0, 9); selRing.lineStyle(1, 0x000000, 0.6).drawCircle(0, 0, 10.5); selRing.visible = false; world.addChild(selRing);
   cloudLayer = new PIXI.Container(); world.addChild(cloudLayer); clouds = [];
   if (cloudTex.length && ART.kind === 'sunny') {
     const n = Math.max(4, Math.round(state.W * state.H / 9000));
@@ -806,8 +822,8 @@ function tick() {
       state.frame = nf;
       if (checkMajor()) break;
     }
-    applyFollow();
   }
+  applyFollow();
   if (ART.kind === 'sunny') { waterSprite.tilePosition.x = (animClock * 3) % 64; waterSprite.tilePosition.y = (animClock * 1.5) % 64; }
   else waterSprite.texture = waterTex[Math.floor(animClock * 2) % 2];
   const sw = app.screen.width, sh = app.screen.height;
@@ -842,6 +858,7 @@ function draw(force) {
   const idx = state.frame; const f = state.frames[idx]; const A = agentsOf(idx); const B = idx + 1 < state.frames.length ? agentsOf(idx + 1) : null;
   const s = state.sub; const sunny = ART.kind === 'sunny';
   if (force || state.lastFrameDrawn !== idx) { drawTerrain(idx); updateHud(f, A); renderLeaders(A); renderFactions(A); markEvents(f.tick); drawTimeline(); drawMinimap(idx, A); }
+  if (force || state.lastFrameDrawn !== idx) renderLife(idx, A);
   const stepped = state.lastFrameDrawn === idx - 1 && !force;
   state.lastFrameDrawn = idx;
   const z = state.cam.zoom / TILE; world.scale.set(z);
@@ -849,6 +866,7 @@ function draw(force) {
   const alive = new Set(); const W = state.W, H = state.H;
   const detail = state.cam.zoom >= 2.5 ? 1 : 0.7;
   const fr10 = animClock * 10;
+  selRing.visible = false;
   for (let i = 0; i < A.n; i++) {
     const id = A.id[i]; alive.add(id);
     const lin = A.lineage[i], sick = (A.flags[i] & 1) ? 1 : 0;
@@ -877,6 +895,7 @@ function draw(force) {
     sp.body.position.set(px, py);
     sp.body.alpha = A.energy[i] < 15 ? 0.7 : 1;
     const afloat = (A.flags[i] & 32) !== 0;
+    if (id === state.selected) { selRing.visible = true; selRing.position.set(px, py - 6); }
     if (sp.sh) { sp.sh.position.set(px, py - 2); sp.sh.scale.set(detail * 1.15, detail); sp.sh.tint = hexToInt(factionColor(lin)); sp.sh.alpha = afloat ? 0 : 0.7; }
     if (afloat && boatTex.length) {
       if (!sp.boat) { sp.boat = new PIXI.Sprite(boatTex[0]); sp.boat.anchor.set(0.5, 0.55); boats.addChild(sp.boat); }
@@ -1059,32 +1078,104 @@ function drawTimeline() {
 }
 $('timeline').addEventListener('click', e => { const r = $('timeline').getBoundingClientRect(); state.frame = Math.max(0, Math.min(state.frames.length - 1, Math.floor((e.clientX - r.left) / r.width * state.frames.length))); state.sub = 0; draw(true); });
 
+// ---------- one life: pick an agent, scan its whole history, show it
+function pickAgent(cx, cy) {
+  if (!state.frames.length || !app) return;
+  const r = gl.getBoundingClientRect(); const z = state.cam.zoom;
+  const wx = state.cam.x + (cx - r.left - app.screen.width / 2) / z, wy = state.cam.y + (cy - r.top - app.screen.height / 2) / z;
+  const A = agentsOf(state.frame); let best = -1, bd = 2.25;
+  for (let i = 0; i < A.n; i++) { const dx = A.x[i] + 0.5 - wx, dy = A.y[i] + 0.5 - wy; const d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }
+  selectAgent(best >= 0 ? A.id[best] : null);
+}
+function selectAgent(id) {
+  state.selected = id; state.life = null;
+  if (id == null) { if (state.follow === 'agent') state.follow = null; $('life').classList.remove('on'); $('lifeHead').style.display = 'none'; syncButtons(); return; }
+  state.follow = 'agent'; $('lifeHead').style.display = ''; $('life').classList.add('on');
+  state.life = lifeOf(id); syncButtons(); renderLife(state.frame, agentsOf(state.frame));
+}
+// Every frame this id appears in: one pass over the raw bytes, no full decode.
+function lifeOf(id) {
+  const b = state.bytes, dv = new DataView(b.buffer, b.byteOffset), AB = state.agentBytes; const out = [];
+  for (let fi = 0; fi < state.frames.length; fi++) {
+    const f = state.frames[fi]; let o = f.agents;
+    for (let i = 0; i < f.pop; i++, o += AB) {
+      if (dv.getUint32(o, true) !== id) continue;
+      out.push({ fi, tick: f.tick, x: dv.getUint16(o + 4, true) / 64, y: dv.getUint16(o + 6, true) / 64, lineage: dv.getUint16(o + 8, true), name: dv.getUint32(o + 10, true), followers: dv.getUint16(o + 14, true),
+        flags: b[o + 16], energy: b[o + 17], under: b[o + 20], action: b[o + 21], gear: AB >= 23 ? b[o + 22] : 0, sig: AB >= 24 ? b[o + 23] : 255, plastic: AB >= 27 ? b[o + 24] : 0, reward: AB >= 27 ? dv.getInt8(o + 25) : 0, heard: AB >= 27 ? b[o + 26] : 255 });
+      break;
+    }
+  }
+  return out;
+}
+function spark(canvas, values, lo, hi, color, zero) {
+  const w = canvas.width = canvas.clientWidth * devicePixelRatio || 300, h = canvas.height = 34 * devicePixelRatio; const g = canvas.getContext('2d');
+  g.clearRect(0, 0, w, h); if (!values.length) return;
+  const n = values.length; const y = v => h - 2 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (h - 4);
+  if (zero != null) { g.strokeStyle = '#3a4460'; g.beginPath(); g.moveTo(0, y(zero)); g.lineTo(w, y(zero)); g.stroke(); }
+  g.strokeStyle = color; g.lineWidth = 1.5 * devicePixelRatio; g.beginPath();
+  for (let i = 0; i < n; i++) { const x = n > 1 ? i / (n - 1) * w : 0; if (i) g.lineTo(x, y(values[i])); else g.moveTo(x, y(values[i])); }
+  g.stroke();
+  const cur = state.lifeCursor; if (cur != null && n > 1) { g.fillStyle = '#ffffff'; g.fillRect(cur / (n - 1) * w - 1, 0, 2, h); }
+}
+function renderLife(idx, A) {
+  if (state.selected == null || !state.life) return;
+  const L = state.life, j = A.index.get(state.selected); const box = $('life'); const tk = state.frames[idx].tick;
+  let k = L.findIndex(e => e.fi >= idx); if (k < 0) k = L.length - 1; state.lifeCursor = k;
+  const cur = j !== undefined ? L.find(e => e.fi === idx) || L[k] : L[k];
+  const first = L[0], last = L[L.length - 1]; const alive = j !== undefined;
+  const nm = cur.name ? ((state.meta.names || {})[cur.name] || `#${cur.name}`) : `#${state.selected}`;
+  const sw = sym => sym === 255 ? '' : `<span class="sw" style="background:#${SIG_COLORS[sym & 15].toString(16).padStart(6, '0')}"></span>`;
+  const gear = []; for (let s = 0; s < 6; s++) if (cur.gear & (1 << s)) gear.push(T[lang].slots[s]);
+  const rows = [
+    [`${t('lineage')} ${cur.lineage}`, nm],
+    [t('born'), `${first.tick.toLocaleString()}${alive ? '' : ' · ' + t('dead') + ' ' + last.tick.toLocaleString()}`],
+    [t('age'), `${(Math.min(tk, last.tick) - first.tick).toLocaleString()} tick`],
+    [t('doing'), `${T[lang].acts[cur.action] || '?'}${cur.under ? ' · ' + t('order') + ': ' + T[lang].orders[cur.under - 1] : ''}${(cur.flags & 2) ? ' · ' + cur.followers + ' ' + t('followers') : ''}`],
+    [t('energy'), `${cur.energy}${(cur.flags & 1) ? ' · ☣' : ''}${(cur.flags & 32) ? ' · ⛵' : ''}`],
+    [t('carrying'), gear.length ? gear.join(', ') : t('nothing')],
+    [t('says'), `${sw(cur.sig)}${cur.sig === 255 ? '–' : (cur.sig & 15)}`],
+    [t('hears'), `${sw(cur.heard)}${cur.heard === 255 ? '–' : (cur.heard & 15)}`],
+    [t('reward'), (cur.reward / 100).toFixed(2)],
+    [t('plastic'), (cur.plastic / 850).toFixed(3)],
+  ];
+  box.innerHTML = rows.map(([a, b]) => `<div class="row"><span>${a}</span><span>${b}</span></div>`).join('') +
+    `<canvas id="lf-energy"></canvas><canvas id="lf-reward"></canvas><canvas id="lf-plastic"></canvas><div class="hint">${t('energy')} · ${t('reward')} · ${t('plastic')}</div>`;
+  spark($('lf-energy'), L.map(e => e.energy), 0, 120, '#6be3a1');
+  spark($('lf-reward'), L.map(e => e.reward / 100), -1, 1, '#f2c14e', 0);
+  spark($('lf-plastic'), L.map(e => e.plastic / 850), 0, 0.3, '#8fa3ff');
+}
+$('life').innerHTML = '';
+window.__dbg = () => ({ selected: state.selected, life: state.life && state.life.length, cam: [state.cam.x, state.cam.y, state.cam.zoom], follow: state.follow, dragMoved: state.dragMoved });
+
 // ---------- camera
 state.cam = { x: 0, y: 0, zoom: 4, tx: null, ty: null };
 function resetCamera() { const r = $('stage').getBoundingClientRect(); state.cam.zoom = Math.max(1, Math.min(r.width / state.W, r.height / state.H)); state.cam.x = state.W / 2; state.cam.y = state.H / 2; state.cam.tx = null; state.follow = null; syncButtons(); }
 function flyTo(x, y) { state.cam.tx = x; state.cam.ty = y; if (state.cam.zoom < 6) state.cam.zoom = 6; }
 function applyFollow() {
-  if (state.follow === 'leader') { const A = agentsOf(state.frame); let best = -1, bf = -1; for (let i = 0; i < A.n; i++) if ((A.flags[i] & 2) && A.followers[i] > bf) { bf = A.followers[i]; best = i; } if (best >= 0) { state.cam.tx = A.x[best]; state.cam.ty = A.y[best]; } }
+  if (state.follow === 'agent' && state.selected != null) { const A = agentsOf(state.frame); const j = A.index.get(state.selected); if (j !== undefined) { state.cam.tx = A.x[j]; state.cam.ty = A.y[j]; } }
+  else if (state.follow === 'leader') { const A = agentsOf(state.frame); let best = -1, bf = -1; for (let i = 0; i < A.n; i++) if ((A.flags[i] & 2) && A.followers[i] > bf) { bf = A.followers[i]; best = i; } if (best >= 0) { state.cam.tx = A.x[best]; state.cam.ty = A.y[best]; } }
   else if (state.follow === 'event') { const tk = state.frames[state.frame].tick; let last = null; for (const e of state.events) { if (e.tick <= tk && e.x != null) last = e; if (e.tick > tk) break; } if (last) { state.cam.tx = last.x; state.cam.ty = last.y; } }
 }
 app = null;
 setInterval(() => { if (state.mmView) drawMinimapView(); if (state.cam.tx != null) { state.cam.x += (state.cam.tx - state.cam.x) * 0.15; state.cam.y += (state.cam.ty - state.cam.y) * 0.15; if (Math.abs(state.cam.tx - state.cam.x) < 0.05 && !state.follow) state.cam.tx = null; } }, 33);
 const gl = $('gl');
-gl.addEventListener('mousedown', e => { state.drag = { x: e.clientX, y: e.clientY, cx: state.cam.x, cy: state.cam.y }; });
-window.addEventListener('mousemove', e => { if (!state.drag) return; state.follow = null; state.cam.tx = null; syncButtons(); state.cam.x = state.drag.cx - (e.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (e.clientY - state.drag.y) / state.cam.zoom; });
+gl.addEventListener('mousedown', e => { state.drag = { x: e.clientX, y: e.clientY, cx: state.cam.x, cy: state.cam.y, moved: false }; });
+gl.addEventListener('click', e => { if (state.dragMoved) { state.dragMoved = false; return; } pickAgent(e.clientX, e.clientY); });
+window.addEventListener('mousemove', e => { if (!state.drag) return; if (Math.abs(e.clientX - state.drag.x) + Math.abs(e.clientY - state.drag.y) > 4) state.dragMoved = true; state.follow = null; state.cam.tx = null; syncButtons(); state.cam.x = state.drag.cx - (e.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (e.clientY - state.drag.y) / state.cam.zoom; });
 window.addEventListener('mouseup', () => state.drag = null);
 gl.addEventListener('wheel', e => { e.preventDefault(); const k = e.deltaY < 0 ? 1.15 : 1 / 1.15; state.cam.zoom = Math.max(1, Math.min(48, state.cam.zoom * k)); }, { passive: false });
 gl.addEventListener('touchstart', e => { const p = e.touches[0]; state.drag = { x: p.clientX, y: p.clientY, cx: state.cam.x, cy: state.cam.y }; }, { passive: true });
 gl.addEventListener('touchmove', e => { if (!state.drag) return; const p = e.touches[0]; state.cam.x = state.drag.cx - (p.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (p.clientY - state.drag.y) / state.cam.zoom; }, { passive: true });
 
 // ---------- controls
-function syncButtons() { $('play').textContent = state.playing ? '❚❚' : '▶'; $('followLeader').classList.toggle('on', state.follow === 'leader'); $('followEvent').classList.toggle('on', state.follow === 'event'); $('speed').textContent = `${state.fps} ${t('fps')}`; }
+function syncButtons() { $('play').textContent = state.playing ? '❚❚' : '▶'; $('lifeHead').style.display = state.selected != null ? '' : 'none'; $('followLeader').classList.toggle('on', state.follow === 'leader'); $('followEvent').classList.toggle('on', state.follow === 'event'); $('speed').textContent = `${state.fps} ${t('fps')}`; }
 $('play').onclick = () => { state.playing = !state.playing; syncButtons(); };
 $('faster').onclick = () => { state.fps = Math.min(60, state.fps * 2); syncButtons(); };
 $('slower').onclick = () => { state.fps = Math.max(0.5, state.fps / 2); syncButtons(); };
 $('followLeader').onclick = () => { state.follow = state.follow === 'leader' ? null : 'leader'; syncButtons(); };
 $('followEvent').onclick = () => { state.follow = state.follow === 'event' ? null : 'event'; syncButtons(); };
 $('reset').onclick = () => { resetCamera(); };
+$('unfollow').onclick = () => selectAgent(null);
 $('lang').onclick = () => { lang = lang === 'vi' ? 'en' : 'vi'; applyLang(); syncButtons(); };
 $('pauseMajor').onchange = e => state.pauseMajor = e.target.checked;
 window.addEventListener('keydown', e => {
@@ -1095,6 +1186,7 @@ window.addEventListener('keydown', e => {
   if (e.key === 'l' || e.key === 'L') $('lang').click();
   if (e.key === 'ArrowRight') { state.frame = Math.min(state.frames.length - 1, state.frame + 1); state.sub = 0; draw(true); }
   if (e.key === 'ArrowLeft') { state.frame = Math.max(0, state.frame - 1); state.sub = 0; draw(true); }
+  if (e.key === 'Escape') selectAgent(null);
   if (e.key === '+' || e.key === '=') $('faster').click();
   if (e.key === '-') $('slower').click();
 });

@@ -16,6 +16,7 @@ chỉ có xuất ảnh PPM, CSV, sử ký, và bảng kết cục khi chạy nhi
 ![viewer](docs/viewer.png)
 ![map](docs/viewer-map.png)
 ![boats](docs/viewer-boats.png)
+![one life](docs/viewer-life.png)
 
 ```bash
 cd sim && ./target/release/sim --seed 2 --ticks 20000 --snapshot-every 25 --out ../viewer/out
@@ -51,6 +52,10 @@ Với Sunnyside, cách vẽ như sau:
   hoang. Mỗi bộ autotile 15 tile của pack trả lời cùng một bảng mặt nạ 8 hướng (đủ, bốn cạnh, bốn góc trong,
   bốn góc ngoài chéo), viewer suy ra tile từ mặt nạ và tự chọn tile gần nhất cho hình dạng pack không có.
 - **Thuyền**: ai đang trên biển ngồi trong thuyền thúng của pack (4 khung nhấp nhô), bóng dưới chân tắt đi.
+- **Một cuộc đời**: bấm vào một người trên bản đồ để theo cả đời. Bảng bên phải hiện dòng họ, tên, tick sinh
+  và chết, tuổi, việc đang làm và lệnh đang chịu, năng lượng, đồ đang cầm, ký hiệu đang nói và đang nghe,
+  phần thưởng tick vừa rồi, và độ trôi của não so với lúc sinh; ba đường nhỏ vẽ năng lượng, phần thưởng và
+  độ trôi não suốt đời, vạch trắng là thời điểm đang xem. Camera bám theo người đó; Esc để thôi.
 - **Tiếng gọi**: phóng đủ gần, trên đầu mỗi người có một ô màu là tín hiệu đang phát (16 màu cho 16 ký hiệu;
   cùng màu là cùng tiếng gọi) và một chấm trắng nếu tick vừa rồi có lời. Nhìn một làng cùng màu là nhìn
   một quy ước đang hình thành.
@@ -86,9 +91,9 @@ của pack; nhân vật là Gabe và Mani 24x24 với 7 khung chạy.
 - Thanh thời gian tô màu thời đại và vẽ dân số. Phím F bám thủ lĩnh lớn nhất, E bám sự kiện, space phát,
   mũi tên đi từng khung, kéo thả ba file để xem không cần server.
 
-Định dạng khung bản 6 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, bốn lớp lượng tử hoá (thức ăn,
+Định dạng khung bản 7 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, bốn lớp lượng tử hoá (thức ăn,
 canh tác, độ màu mỡ, nhà cửa), mã hoá delta và RLE với khung
-khoá mỗi 16 khung, agent 24 byte có id để nội suy, một byte đồ vật đang cầm, một byte tín hiệu và phần thưởng. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
+khoá mỗi 16 khung, agent 27 byte có id để nội suy, đồ vật đang cầm, tín hiệu nói và nghe, phần thưởng, độ trôi não. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
 trong đó đất chỉ vài KB mỗi khung. Sim flush sau mỗi khung, `serve.py` hỗ trợ Range, nên `&live=1` bám được
 run đang chạy.
 
@@ -187,9 +192,10 @@ Não thay đổi theo ba cách, ở ba thang thời gian:
   tốc độ học gần 0 (não cứng) hoặc cao (não mềm). Phần dẻo sinh ra trắng, không di truyền. Não cũng thấy
   phần thưởng tick trước như một đầu vào.
 
-Não còn **nói**: mỗi tick phát ra một tín hiệu hai chiều trong [-1, 1] mà hàng xóm nghe được, dưới dạng
-trung bình tín hiệu của họ hàng trong tầm nhìn, của người lạ, và tín hiệu của người gần nhất. Tín hiệu
-không có nghĩa định sẵn. Sim đo entropy của những gì được nói và **thông tin tương hỗ** giữa tín hiệu nghe
+Não còn **nói**: mỗi tick phát ra một tín hiệu hai chiều trong [-1, 1]. Nói tốn năng lượng theo độ lớn tín
+hiệu (mặc định 0,02 mỗi đơn vị, so với tiêu hao nền 0,15), nên nói dối hay nói suông đều có giá. Chỉ họ
+hàng nghe rõ: đầu vào là trung bình tín hiệu của họ hàng trong tầm nhìn và tín hiệu của người gần nhất nếu
+là họ hàng; người lạ chỉ lọt vào theo `--hear-strangers` (mặc định 0). Tín hiệu không có nghĩa định sẵn. Sim đo entropy của những gì được nói và **thông tin tương hỗ** giữa tín hiệu nghe
 được từ người gần nhất và hành động ngay sau đó (đã hiệu chỉnh thiên lệch mẫu nhỏ). Khi con số này vượt
 0,2 bit ở một xã hội từ 300 người, sử ký ghi "tiếng gọi bắt đầu có nghĩa". Đó là dấu hiệu sớm nhất của
 ngôn ngữ, và là một câu hỏi nghiên cứu mở của repo này.

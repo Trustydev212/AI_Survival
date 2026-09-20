@@ -42,6 +42,9 @@ def arm_dir(name, arm):
 def run_arm(name, arm, flags, seeds, ticks):
     out = arm_dir(name, arm)
     os.makedirs(out, exist_ok=True)
+    for f in os.listdir(out):  # a fresh run, never a mix of old and new seeds
+        if f.startswith(("experiment_", "stats_seed", "events_seed", "meta_seed")):
+            os.remove(os.path.join(out, f))
     cmd = [SIM, "--seeds", seeds, "--ticks", str(ticks), "--quiet", "--out", out] + flags
     print("  ", " ".join(os.path.relpath(c, ROOT) if c.startswith(ROOT) else c for c in cmd), flush=True)
     log = open(os.path.join(out, "log.txt"), "w")

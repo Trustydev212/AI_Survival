@@ -3,42 +3,128 @@
     "title": "Mệnh lệnh của thủ lĩnh có làm xã hội bền hơn không?",
     "question": "Cùng luật, cùng seed. Nhánh đối chứng tắt mọi mệnh lệnh (thủ lĩnh vẫn hình thành nhưng không lệnh nào tới được ai).",
     "control": "orders",
-    "arms": { "orders": [], "no-orders": ["--no-orders"] }
+    "arms": {
+      "orders": [],
+      "no-orders": [
+        "--no-orders"
+      ]
+    }
   },
   "insight": {
     "title": "Phát minh dễ hay khó thì xã hội đi xa hơn?",
     "question": "Xác suất một lần thử thành công được hiểu thành công thức: 0,02 mặc định, so với hiếm hơn 5 lần và dễ hơn 5 lần.",
     "control": "default",
-    "arms": { "default": [], "rare": ["--p-insight", "0.004"], "easy": ["--p-insight", "0.1"] }
+    "arms": {
+      "default": [],
+      "rare": [
+        "--p-insight",
+        "0.004"
+      ],
+      "easy": [
+        "--p-insight",
+        "0.1"
+      ]
+    }
   },
   "sea": {
     "title": "Biển đắt hay rẻ thì thuyền có đáng không?",
     "question": "Chi phí năng lượng khi ở trên nước: 1,6 lần mặc định, so với 1,0 và 3,0.",
     "control": "default",
-    "arms": { "default": [], "cheap-sea": ["--sea-cost", "1.0"], "dear-sea": ["--sea-cost", "3.0"] }
+    "arms": {
+      "default": [],
+      "cheap-sea": [
+        "--sea-cost",
+        "1.0"
+      ],
+      "dear-sea": [
+        "--sea-cost",
+        "3.0"
+      ]
+    }
   },
   "soil": {
     "title": "Đất mòn nhanh hơn thì xã hội học được kiềm chế không?",
     "question": "Bào mòn đất mỗi đơn vị hái: 0,001 mặc định, so với gấp ba.",
     "control": "default",
-    "arms": { "default": [], "fragile-soil": ["--soil-drain", "0.003"] }
+    "arms": {
+      "default": [],
+      "fragile-soil": [
+        "--soil-drain",
+        "0.003"
+      ]
+    }
   },
   "learning": {
     "title": "Học trong đời có đáng không?",
     "question": "Não có phần dẻo học theo phần thưởng (mặc định), so với tắt hẳn học trong đời và với học nhanh gấp ba.",
     "control": "default",
-    "arms": { "default": [], "no-learning": ["--learn-scale", "0"], "fast-learning": ["--learn-scale", "3"] }
+    "arms": {
+      "default": [],
+      "no-learning": [
+        "--learn-scale",
+        "0"
+      ],
+      "fast-learning": [
+        "--learn-scale",
+        "3"
+      ]
+    }
   },
   "hearing": {
     "title": "Nghe nhau có ích gì?",
-    "question": "Tín hiệu giữa các agent được nghe (mặc định) so với mọi người điếc (đầu vào tín hiệu bằng 0).",
+    "question": "Tín hiệu tốn năng lượng và chỉ họ hàng nghe rõ (mặc định), so với mọi người điếc (đầu vào tín hiệu bằng 0), và so với nghe cả người lạ.",
     "control": "default",
-    "arms": { "default": [], "deaf": ["--hear-scale", "0"] }
+    "arms": {
+      "default": [],
+      "deaf": [
+        "--hear-scale",
+        "0"
+      ],
+      "hear-strangers": [
+        "--hear-strangers",
+        "1"
+      ]
+    }
   },
   "population": {
     "title": "Đông người thì phát minh nhiều hơn không?",
     "question": "Cùng bản đồ, xuất phát 1.000 người mặc định, so với 300 và 3.000.",
     "control": "default",
-    "arms": { "default": [], "few": ["--agents", "300"], "many": ["--agents", "3000"] }
+    "arms": {
+      "default": [],
+      "few": [
+        "--agents",
+        "300"
+      ],
+      "many": [
+        "--agents",
+        "3000"
+      ]
+    }
+  },
+  "customs": {
+    "title": "Tập quán có tự giữ đất khi không cần thủ lĩnh không?",
+    "question": "Tập quán hình thành và lan như thường (mặc định), so với tập quán không bao giờ lên tiếng (--no-customs), và so với tắt cả mệnh lệnh lẫn tập quán.",
+    "control": "default",
+    "arms": {
+      "default": [],
+      "no-customs": [
+        "--no-customs"
+      ],
+      "no-orders": [
+        "--no-orders"
+      ]
+    }
+  },
+  "crafting": {
+    "title": "Chế tác có đáng cái giá của nó không?",
+    "question": "Não có hành động chế tác và vật lý vật liệu (mặc định), so với không ai làm được gì (--no-crafting: hành động chế tác thành nghỉ).",
+    "control": "default",
+    "arms": {
+      "default": [],
+      "no-crafting": [
+        "--no-crafting"
+      ]
+    }
   }
 }
