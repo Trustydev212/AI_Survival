@@ -257,6 +257,35 @@ Cùng luật, 40.000 tick, không nhập cư, đất có thể chết:
 Bài học: chỉ khi có cả hai con đường, khai thác và bảo tồn, mà không con đường nào rẻ hơn hẳn,
 thì các thế giới mới rẽ nhánh. Đó là điều kiện để thí nghiệm có nghĩa.
 
+### Không trần dân số, có thủ lĩnh, tập quán và bản đồ vùng
+
+8 thế giới, 30.000 tick, tham số mặc định:
+
+| Seed | Kết cục | Đỉnh dân | Đất | Tuân lệnh | Lệnh chính | Tập quán | Sinh/1000 | Dao động |
+|---|---|---|---|---|---|---|---|---|
+| 1 | thịnh vượng | 2.583 | 88% | 7% | move | | 4,7 | 1,2 |
+| 2 | thịnh vượng | 3.246 | 87% | 76% | hold | hold 20% | 9,1 | 2,1 |
+| 3 | thịnh vượng trên đất chết | 4.495 | 45% | 1% | không có thủ lĩnh | | 5,2 | 3,9 |
+| 4 | thịnh vượng | 4.786 | 97% | 8% | move | | 5,9 | 3,9 |
+| 5 | thịnh vượng trên đất chết | 5.815 | 44% | 48% | hold 100% | hold 9% | 7,8 | 1,8 |
+| 6 | thịnh vượng | 5.833 | 90% | 4% | move | | 6,0 | 2,3 |
+| 7 | bùng-vỡ | 5.602 | 100% | 47% | | | 13,6 | 9,2 |
+| 8 | thịnh vượng | 10.015 | 96% | 21% | raid | | 10,7 | 3,2 |
+
+Đọc được gì:
+
+- **Đất giới hạn được dân số** mà không cần trần: đỉnh chênh nhau bốn lần giữa các thế giới.
+- **Thế giới sinh nhiều nhất là thế giới bùng-vỡ** (13,6 ca trên 1.000 lượt, dao động 9 lần) và thế giới sinh ít nhất
+  là thế giới ổn định nhất (4,7 và dao động 1,2). Ở giữa thì nhiễu. Chưa đủ để kết luận có kiềm chế tiến hoá,
+  nhưng đúng hướng để đo tiếp với nhiều seed hơn.
+- **Hai thế giới làm chết đất theo hai cách ngược nhau**: seed 3 không có thủ lĩnh, ai cũng lang thang và vét;
+  seed 5 tuân lệnh "ở lại" tuyệt đối và cày chết chính mảnh đất mình đứng. Vâng lời không phải là cứu cánh,
+  vâng lời đúng lệnh mới là.
+- **Tập quán hình thành** ở seed 2 và 5 (20% và 9% giữ thói quen ở lại không cần thủ lĩnh) nhưng chưa vượt
+  30% dân số trong 30.000 tick.
+- Seed 7 giữ đất 100% mà vẫn bùng-vỡ: sụp không phải vì đất mà vì mùa đông và dịch đúng lúc dân đông.
+  Kho chung là bước tiếp theo hợp lý.
+
 ### Ba bài học khi cân bằng
 
 1. Xác suất khám phá phải tính theo agent-tick. 1000 agent với xác suất 0,0002 mỗi tick tìm ra công cụ ngay tick 1.
