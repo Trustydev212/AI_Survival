@@ -117,6 +117,7 @@ impl Sim {
             attacked_timer: 0,
             last_action: Action::Rest,
             children: 0,
+            profile: [0.0; crate::agent::N_PROFILE],
         }
     }
 
@@ -212,6 +213,7 @@ impl Sim {
             let d = self.decisions[i];
             self.window.actions[d.action as usize] += 1;
             self.agents[i].last_action = d.action;
+            self.agents[i].record(d.action, (d.mx * d.mx + d.my * d.my).sqrt());
 
             // Movement (costed in metabolise).
             {

@@ -6,6 +6,7 @@ mod rng;
 mod sim;
 mod spatial;
 mod stats;
+mod strategy;
 mod world;
 
 use config::Config;
@@ -59,6 +60,30 @@ fn main() {
         cfg.ticks, secs, cfg.ticks as f64 / secs, sim.agents.len(), csv_path
     );
     summarize(&sim);
+    summarize_strategies(&sim);
+}
+
+fn summarize_strategies(sim: &sim::Sim) {
+    let r = strategy::analyse(&sim.agents);
+    let total: usize = r.strategies.iter().map(|s| s.count).sum::<usize>().max(1);
+    println!(
+        "\nStrategies at end: {} clusters, entropy {:.2} bits, {:.1} effective ways of living",
+        r.strategies.len(),
+        r.entropy,
+        r.effective
+    );
+    println!("  {:>6} {:>6} {:>7} {:>6} {:>4}  {}", "share", "count", "wealth", "age", "lin", "profile");
+    for s in &r.strategies {
+        println!(
+            "  {:>5.1}% {:>6} {:>7.1} {:>6.0} {:>4}  {}",
+            100.0 * s.count as f32 / total as f32,
+            s.count,
+            s.mean_wealth,
+            s.mean_age,
+            s.lineages,
+            strategy::describe(&s.centroid)
+        );
+    }
 }
 
 /// Print the dominant lineages and what their members tend to do.

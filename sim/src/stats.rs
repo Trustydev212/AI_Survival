@@ -2,6 +2,7 @@
 
 use crate::agent::Agent;
 use crate::brain::{Action, N_ACT};
+use crate::strategy::{self, StrategyReport};
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -30,6 +31,7 @@ pub struct Metrics {
     pub action_entropy: f32,
     pub marker_spread: f32,
     pub gini: f32,
+    pub strat: StrategyReport,
     pub w: Window,
 }
 
@@ -88,8 +90,11 @@ pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, w: Window) -
         gini = acc / (n * sum);
     }
 
+    let strat = strategy::analyse(agents);
+
     Metrics {
         tick,
+        strat,
         season,
         pop,
         mean_energy,
@@ -106,19 +111,22 @@ pub fn compute(tick: u64, season: f32, agents: &[Agent], food: f32, w: Window) -
 
 pub fn print_header() {
     println!(
-        "{:>7} {:>5} {:>5} {:>6} {:>6} {:>8} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5}  {:<40}",
-        "tick", "seas", "pop", "energy", "inv", "food", "lin", "top%", "gini", "born", "starv", "aged", "kill", "attk", "share", "actions%"
+        "{:>7} {:>5} {:>5} {:>6} {:>6} {:>8} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5}  {}",
+        "tick", "seas", "pop", "energy", "inv", "food", "lin", "top%", "gini", "born", "starv", "aged", "kill", "attk", "share", "strat", "dominant strategies (share% label)"
     );
 }
 
 pub fn print_row(m: &Metrics) {
-    let total: u32 = m.w.actions.iter().sum::<u32>().max(1);
-    let acts: Vec<String> = Action::ALL
+    let counted: usize = m.strat.strategies.iter().map(|s| s.count).sum::<usize>().max(1);
+    let strats: Vec<String> = m
+        .strat
+        .strategies
         .iter()
-        .map(|a| format!("{}:{:.0}", a.name(), 100.0 * m.w.actions[*a as usize] as f32 / total as f32))
+        .take(3)
+        .map(|s| format!("[{:.0}% {}]", 100.0 * s.count as f32 / counted as f32, strategy::describe(&s.centroid)))
         .collect();
     println!(
-        "{:>7} {:>5.2} {:>5} {:>6.1} {:>6.1} {:>8.0} {:>5} {:>5.0} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5}  {}",
+        "{:>7} {:>5.2} {:>5} {:>6.1} {:>6.1} {:>8.0} {:>5} {:>5.0} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1}  {}",
         m.tick,
         m.season,
         m.pop,
@@ -134,7 +142,8 @@ pub fn print_row(m: &Metrics) {
         m.w.killed,
         m.w.attacks,
         m.w.shares,
-        acts.join(" ")
+        m.strat.effective,
+        strats.join(" ")
     );
 }
 
@@ -142,7 +151,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
     let acts: Vec<&str> = Action::ALL.iter().map(|a| a.name()).collect();
     writeln!(
         out,
-        "tick,season,pop,mean_energy,mean_inventory,food,lineages,top_lineage_share,gini,action_entropy,marker_spread,births,starved,aged,killed,attacks,attack_wins,shares,immigrants,{}",
+        "tick,season,pop,mean_energy,mean_inventory,food,lineages,top_lineage_share,gini,action_entropy,marker_spread,strategy_entropy,effective_strategies,births,starved,aged,killed,attacks,attack_wins,shares,immigrants,{}",
         acts.join(",")
     )
 }
@@ -151,7 +160,7 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     let acts: Vec<String> = m.w.actions.iter().map(|c| c.to_string()).collect();
     writeln!(
         out,
-        "{},{:.3},{},{:.2},{:.2},{:.1},{},{:.4},{:.4},{:.4},{:.4},{},{},{},{},{},{},{},{},{}",
+        "{},{:.3},{},{:.2},{:.2},{:.1},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{},{},{},{},{},{},{},{},{}",
         m.tick,
         m.season,
         m.pop,
@@ -163,6 +172,8 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
         m.gini,
         m.action_entropy,
         m.marker_spread,
+        m.strat.entropy,
+        m.strat.effective,
         m.w.births,
         m.w.starved,
         m.w.aged,
