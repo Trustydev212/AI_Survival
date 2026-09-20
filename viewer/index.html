@@ -292,7 +292,7 @@ async function boot(bytes, meta, evText) {
   parseEvents(evText);
   state.frame = 0; state.sub = 0; state.layerCache.idx = -1; state.agentCache.clear(); state.lastType = null; state.seenMajor.clear(); state.propsBuilt = false;
   $('loadmsg').textContent = t('loading') + ' art …';
-  try { await loadArt(); } catch (e) { $('loadmsg').textContent = 'assets/rpg missing: ' + e.message; return; }
+  try { await loadArt(); } catch (e) { $('loadmsg').textContent = 'assets missing: ' + e.message; return; }
   initPixi();
   renderEventList();
   $('loader').classList.add('hidden');
@@ -349,23 +349,46 @@ function agentsOf(idx) {
   state.agentCache.set(idx, a); return a;
 }
 
-// ---------- art: the Generic RPG Pack (CC0, Bakudas and Gabe Fern), recoloured at load time
-const ART_DIR = 'assets/rpg/';
+// ---------- art providers
+// Two art sets: the Sunnyside World pack (paid, imported by tools/import_sunnyside.py into assets/sunnyside/,
+// never committed) and the CC0 Generic RPG Pack in assets/rpg/ as the fallback. `?rpg=1` forces the fallback.
+const RPG_DIR = 'assets/rpg/', SUNNY_DIR = 'assets/sunnyside/';
 const TILE_IDS = Array.from({ length: 71 }, (_, i) => i + 1).filter(i => i !== 36);
 const PROP_FILES = { tree0: 'generic-rpg-tree01.png', tree1: 'generic-rpg-tree02.png', rock0: 'generic-rpg-rock01.png', rock1: 'generic-rpg-rock02.png', rock2: 'generic-rpg-rock03.png', rock3: 'generic-rpg-rock04.png', rock4: 'generic-rpg-rock05.png', rock5: 'generic-rpg-rock06.png', flowers: 'generic-rpg-flowers.png', grass0: 'generic-rpg-grass01.png', grass1: 'generic-rpg-grass02.png', house: 'generic-rpg-house-inn.png', crate: 'generic-rpg-crate01.png', barrel: 'generic-rpg-barrel01.png', gabe: 'gabe-idle-run.png', mani: 'mani-idle-run.png', textbox: 'generic-rpg-ui-text-box.png', inv: 'generic-rpg-ui-inventario.png' };
-const ART = { img: {}, tiles: [], ready: false };
+const ART = { kind: null, img: {}, tiles: [], ready: false, S: null };
 const SPRW = 24, SPRH = 24, NF = 7, NPAT = 6, CHARS = 2;
 
 function loadImage(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('missing ' + src)); im.src = src; }); }
 async function loadArt() {
   if (ART.ready) return;
-  const tiles = await Promise.all(TILE_IDS.map(i => loadImage(`${ART_DIR}generic-rpg-tile${String(i).padStart(2, '0')}.png`)));
-  TILE_IDS.forEach((id, k) => ART.tiles[id] = tiles[k]);
-  const entries = await Promise.all(Object.entries(PROP_FILES).map(async ([k, f]) => [k, await loadImage(ART_DIR + f)]));
-  for (const [k, im] of entries) ART.img[k] = im;
+  let sunny = null;
+  if (!new URLSearchParams(location.search).has('rpg')) {
+    try { const r = await fetch(SUNNY_DIR + 'chars.json', { cache: 'no-store' }); if (r.ok) sunny = await r.json(); } catch (e) { sunny = null; }
+  }
+  if (sunny) { await loadSunny(sunny); ART.kind = 'sunny'; } else { await loadRpg(); ART.kind = 'rpg'; }
   ART.ready = true;
 }
-// exact palette swaps (the pack uses flat colours, so this is safe)
+async function loadRpg() {
+  const tiles = await Promise.all(TILE_IDS.map(i => loadImage(`${RPG_DIR}generic-rpg-tile${String(i).padStart(2, '0')}.png`)));
+  TILE_IDS.forEach((id, k) => ART.tiles[id] = tiles[k]);
+  const entries = await Promise.all(Object.entries(PROP_FILES).map(async ([k, f]) => [k, await loadImage(RPG_DIR + f)]));
+  for (const [k, im] of entries) ART.img[k] = im;
+}
+const SUNNY_ANIMS = ['idle', 'run', 'attack', 'dig', 'carry', 'hurt', 'death', 'doing'];
+async function loadSunny(meta) {
+  const S = ART.S = { meta, chars: {}, props: null, pm: null, tileset: null, windmill: null };
+  [S.tileset, S.props, S.pm] = await Promise.all([loadImage(SUNNY_DIR + 'tileset.png'), loadImage(SUNNY_DIR + 'props.png'), fetch(SUNNY_DIR + 'props.json', { cache: 'no-store' }).then(r => r.json())]);
+  try { S.windmill = await loadImage(SUNNY_DIR + 'windmill.png'); } catch (e) { S.windmill = null; }
+  const imgs = await Promise.all(SUNNY_ANIMS.map(a => loadImage(SUNNY_DIR + 'chars/' + a + '.png')));
+  SUNNY_ANIMS.forEach((a, i) => S.chars[a] = imgs[i]);
+  // the banner gets the pack's 9-slice box (3x3 px pieces scaled 4x)
+  const c = document.createElement('canvas'); c.width = 9; c.height = 9; const g = c.getContext('2d');
+  const pieces = ['tl', 'tc', 'tr', 'lc', 'c', 'rc', 'bl', 'bc', 'br'];
+  let ok = true; pieces.forEach((p, i) => { const r = S.pm['w_box_9slice_' + p]; if (!r) { ok = false; return; } g.drawImage(S.props, r.x, r.y, 3, 3, (i % 3) * 3, Math.floor(i / 3) * 3, 3, 3); });
+  if (ok) { const st = document.createElement('style'); st.textContent = `#banner { border-image: url(${c.toDataURL()}) 3 fill / 12px round; background: #fdf7e4; }`; document.head.appendChild(st); }
+  document.body.classList.add('sunny');
+}
+// exact palette swaps (both packs use flat colours, so this is safe)
 const GRASS = ['#6df7b1', '#00c19a', '#017687'], DIRT = ['#e97461', '#fb9585', '#b53772', '#793d4e'];
 const SWAP = {
   sand: { '#e97461': '#d8b984', '#fb9585': '#e8d3a2', '#b53772': '#a58b56', '#793d4e': '#6b5a3a' },
@@ -380,9 +403,10 @@ const SWAP = {
   sick: { '#fb9585': '#c6dcb4', '#e97461': '#9fbf8a' },
 };
 function hexRGB(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
-function recolor(img, maps, scale = 1) {
-  const c = document.createElement('canvas'); c.width = img.width * scale; c.height = img.height * scale; const g = c.getContext('2d', { willReadFrequently: true });
-  g.imageSmoothingEnabled = false; g.drawImage(img, 0, 0, c.width, c.height);
+function recolor(img, maps, scale = 1, sx = 0, sy = 0, sw = 0, sh = 0) {
+  sw = sw || img.width; sh = sh || img.height;
+  const c = document.createElement('canvas'); c.width = sw * scale; c.height = sh * scale; const g = c.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingEnabled = false; g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
   const table = new Map(); for (const m of maps) for (const k in m) table.set(hexRGB(k).join(','), hexRGB(m[k]));
   const id = g.getImageData(0, 0, c.width, c.height); const d = id.data;
   for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const to = table.get(d[i] + ',' + d[i + 1] + ',' + d[i + 2]); if (to) { d[i] = to[0]; d[i + 1] = to[1]; d[i + 2] = to[2]; } }
@@ -394,28 +418,26 @@ function factionPattern(lineage) { return (lineage * 5) % NPAT; }
 function factionBody(lineage) { return (lineage * 3) % CHARS; }
 function hexToInt(h) { return parseInt(h.slice(1), 16); }
 
-// classify a pixel of a pack tile as grass, dirt or other
+// classify a pixel of a pack tile as grass, dirt or other (RPG pack autotiling learned from the tile pixels)
 const GSET = new Set(GRASS.map(h => hexRGB(h).join(','))), DSET = new Set(DIRT.map(h => hexRGB(h).join(',')));
 function tileMasks() {
-  // For every tile: centre class and an 8-bit mask of which sides show grass (N NE E SE S SW W NW).
   const c = document.createElement('canvas'); c.width = 16; c.height = 16; const g = c.getContext('2d', { willReadFrequently: true });
   const masks = new Map(), grassTiles = [], dirtTiles = [];
   const pts = [[8, 1], [14, 1], [14, 8], [14, 14], [8, 14], [1, 14], [1, 8], [1, 1]];
   for (const id of TILE_IDS) {
-    if (id >= 65) continue; // water and waterfall pieces are not used
+    if (id >= 65) continue;
     g.clearRect(0, 0, 16, 16); g.drawImage(ART.tiles[id], 0, 0); const d = g.getImageData(0, 0, 16, 16).data;
     const cls = (x, y) => { const i = (y * 16 + x) * 4; const k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; return GSET.has(k) ? 'g' : DSET.has(k) ? 'd' : '?'; };
     let gc = 0, dc = 0; for (let y = 6; y < 10; y++) for (let x = 6; x < 10; x++) { const k = cls(x, y); if (k === 'g') gc++; else if (k === 'd') dc++; }
     let grassAll = true; for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const k = cls(x, y); if (k === 'd') { grassAll = false; break; } }
     if (grassAll) { grassTiles.push(id); continue; }
-    if (gc > dc) continue; // grass centre with dirt bits: not needed
+    if (gc > dc) continue;
     let m = 0; pts.forEach(([x, y], b) => { if (cls(x, y) === 'g') m |= 1 << b; });
     if (m === 0) { dirtTiles.push(id); continue; }
     if (!masks.has(m)) masks.set(m, []); masks.get(m).push(id);
   }
   return { masks, grassTiles, dirtTiles };
 }
-// crops for tended land, in the pack's palette; three growth stages, 16x16
 function makeCrops() {
   const c = document.createElement('canvas'); c.width = 48; c.height = 16; const g = c.getContext('2d');
   for (let s = 0; s < 3; s++) for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
@@ -429,7 +451,6 @@ function makeCrops() {
   }
   return c;
 }
-// water and its foam edges, in the pack's blues
 function makeWater() {
   const c = document.createElement('canvas'); c.width = 64; c.height = 32; const g = c.getContext('2d');
   for (let f = 0; f < 2; f++) for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
@@ -469,80 +490,233 @@ function makeSlash() { const c = document.createElement('canvas'); c.width = 16;
 function px(ctx, x, y, c) { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); }
 function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 1103515245) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967296; }
 
+// ---------- Sunnyside autotiles
+// Every 15-tile set in the pack answers the same neighbour masks (bits N NE E SE S SW W NW, diagonals only counted
+// when both orthogonal neighbours are present): full, inner corners, edges, diagonal outer corners.
+const SET_MASKS = [255, 127, 253, 124, 223, 31, 255, 28, 247, 255, 241, 112, 199, 7, 193];
+const SUNNY_SETS = {
+  land: [193, 194, 195, 196, 197, 198, 199, 200, 257, 258, 259, 260, 261, 262, 263],
+  river: [470, 471, 472, 473, 474, 475, 476, 477, 534, 535, 536, 537, 538, 539, 540],
+  farm: [460, 461, 462, 463, 464, 465, 466, 467, 524, 525, 526, 527, 528, 529, 530],
+  sand: [482, 483, 484, 485, 486, 487, 488, 489, 546, 547, 548, 549, 550, 551, 552],
+};
+const SUNNY = { ocean: [11 * 16, 18 * 16, 64, 64], shallow: [542, 543, 544, 545], grass: [193, 193, 193, 193, 199, 258], bushes: [307, 155, 156, 157, 158, 219, 220, 221, 222, 91, 92, 93, 94], flowers: [226, 227, 223, 95, 159, 160, 96, 97, 161] };
+function reduceMask(m) { const n = (m & 1) !== 0, e = (m & 4) !== 0, s = (m & 16) !== 0, w = (m & 64) !== 0; let r = m & 0b01010101; if (n && e && (m & 2)) r |= 2; if (s && e && (m & 8)) r |= 8; if (s && w && (m & 32)) r |= 32; if (n && w && (m & 128)) r |= 128; return r; }
+function buildAuto(set) {
+  const tab = new Uint16Array(256); const exact = new Map(); SET_MASKS.forEach((m, i) => { if (!exact.has(m)) exact.set(m, set[i]); });
+  for (let m = 0; m < 256; m++) {
+    const r = reduceMask(m); if (exact.has(r)) { tab[m] = exact.get(r); continue; }
+    const n = r & 1, e = r & 4, s = r & 16, w = r & 64; const k = (n ? 1 : 0) + (e ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0);
+    let id = set[0];
+    if (k === 4) id = set[0];
+    else if (k === 3) id = !n ? set[3] : !w ? set[5] : !e ? set[10] : set[12];
+    else if (k === 2) { if (e && s) id = set[7]; else if (s && w) id = set[11]; else if (n && e) id = set[13]; else if (n && w) id = set[14]; else id = set[0]; }
+    else if (k === 1) id = s ? set[3] : e ? set[5] : w ? set[10] : set[12];
+    tab[m] = id;
+  }
+  return tab;
+}
+function tileRect(id) { return [(id % 64) * 16, Math.floor(id / 64) * 16]; }
+
+// ---------- character atlas: every faction's frames live in one texture so the particle containers batch correctly
+const charAtlas = { canvas: null, g: null, base: null, x: 0, y: 0, rowH: 0, slots: new Map(), fw: 0, fh: 0 };
+function initCharAtlas() {
+  const gl = app.renderer.gl; const max = gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 2048;
+  const c = document.createElement('canvas'); c.width = Math.min(4096, max); c.height = Math.min(2048, max);
+  charAtlas.canvas = c; charAtlas.g = c.getContext('2d'); charAtlas.g.imageSmoothingEnabled = false;
+  charAtlas.base = PIXI.BaseTexture.from(c); charAtlas.x = charAtlas.y = charAtlas.rowH = 0; charAtlas.slots.clear();
+  if (ART.kind === 'sunny') { charAtlas.fw = ART.S.meta.w; charAtlas.fh = ART.S.meta.h; } else { charAtlas.fw = SPRW; charAtlas.fh = SPRH; }
+}
+function atlasAlloc(w, h) {
+  const A = charAtlas;
+  if (A.x + w > A.canvas.width) { A.x = 0; A.y += A.rowH + 1; A.rowH = 0; }
+  if (A.y + h > A.canvas.height) { A.x = 0; A.y = 0; A.rowH = 0; A.slots.clear(); A.g.clearRect(0, 0, A.canvas.width, A.canvas.height); }
+  const r = { x: A.x, y: A.y }; A.x += w + 1; A.rowH = Math.max(A.rowH, h); return r;
+}
+// per-faction character: hair style and overalls colour by lineage; returns { anim: [textures], w, h, ax, ay, swatch }
+function getChar(lineage) {
+  const A = charAtlas; let t = A.slots.get(lineage); if (t) return t;
+  const col = factionColor(lineage), dark = shade(col, 0.62);
+  t = { w: A.fw, h: A.fh, anims: {} };
+  if (ART.kind === 'sunny') {
+    const S = ART.S, n = S.meta.frames, hair = (lineage * 11) % 7; // 0 = no hair layer
+    const maps = { '#374464': col, '#242b42': dark };
+    t.ax = S.meta.anchor[0]; t.ay = S.meta.anchor[1];
+    for (const anim of SUNNY_ANIMS) {
+      const img = S.chars[anim], nf = n[anim]; const base = recolor(img, [maps], 1, 0, 0, nf * A.fw, A.fh);
+      const frames = [];
+      for (let f = 0; f < nf; f++) {
+        const r = atlasAlloc(A.fw, A.fh);
+        A.g.drawImage(base, f * A.fw, 0, A.fw, A.fh, r.x, r.y, A.fw, A.fh);
+        if (hair) A.g.drawImage(img, f * A.fw, hair * A.fh, A.fw, A.fh, r.x, r.y, A.fw, A.fh);
+        A.g.drawImage(img, f * A.fw, 7 * A.fh, A.fw, A.fh, r.x, r.y, A.fw, A.fh);
+        frames.push(new PIXI.Texture(A.base, new PIXI.Rectangle(r.x, r.y, A.fw, A.fh)));
+        if (anim === 'idle' && f === 0) t.swatch = [r.x + 21, r.y + 14, 24, 24];
+      }
+      t.anims[anim] = frames;
+    }
+  } else {
+    const body = factionBody(lineage);
+    const maps = body === 0 ? { '#00c19a': col, '#017687': dark } : { '#6c88ff': col, '#323751': dark };
+    const strip = recolor(body === 0 ? ART.img.gabe : ART.img.mani, [maps]);
+    t.ax = 0.5; t.ay = 1; const frames = [];
+    for (let f = 0; f < NF; f++) { const r = atlasAlloc(SPRW, SPRH); A.g.drawImage(strip, f * SPRW, 0, SPRW, SPRH, r.x, r.y, SPRW, SPRH); frames.push(new PIXI.Texture(A.base, new PIXI.Rectangle(r.x, r.y, SPRW, SPRH))); if (f === 0) t.swatch = [r.x, r.y, 24, 24]; }
+    t.anims = { idle: [frames[0]], run: frames.slice(1) };
+  }
+  A.base.update(); A.slots.set(lineage, t); return t;
+}
+function charAnim(c, name) { return c.anims[name] || c.anims.idle; }
+
 // ---------- pixi scene
 const CH = 48;
-let app, world, waterTex = [], waterSprite, chunks = [], propLayer, bodies, fxLayer, labelLayer, storeLayer, tintOverlay, snowLayer, snowDots = [];
-let atlas = {}, edges, crops, banners, crownTex, slashTex, charTex = new Map(), bannerTex = [], propTex = {}, tileInfo, flowerTex = [];
+let app, world, waterTex = [], waterSprite, chunks = [], propLayer, bodies, shadows, fxLayer, labelLayer, storeLayer, tintOverlay, snowLayer, snowDots = [], cloudLayer, cloudShadowLayer, clouds = [], deathLayer, deaths = [], animLayer, animSprites = [];
+let atlas = {}, edges, crops, banners, crownTex, slashTex, bannerTex = [], propTex = {}, tileInfo, flowerTex = [], auto = {}, shadowTex, uiTex = {}, cropTex = {}, houseTex = [], cloudTex = [], animalTex = {}, windmillTex = [], fireTex = [], treeTex = {};
+function propTexture(name) { const S = ART.S, r = S.pm[name]; if (!r) return null; const fw = r.w / r.frames; return Array.from({ length: r.frames }, (_, f) => new PIXI.Texture(S.propsBase, new PIXI.Rectangle(r.x + f * fw, r.y, fw, r.h))); }
 function initPixi() {
   if (app) { app.destroy(true, { children: true }); state.sprites.clear(); }
-  app = new PIXI.Application({ view: $('gl'), resizeTo: $('stage'), backgroundColor: 0x0f4e9e, antialias: false, resolution: Math.min(devicePixelRatio, 2), autoDensity: true });
+  app = new PIXI.Application({ view: $('gl'), resizeTo: $('stage'), backgroundColor: ART.kind === 'sunny' ? 0x0088c8 : 0x0f4e9e, antialias: false, resolution: Math.min(devicePixelRatio, 2), autoDensity: true });
   PIXI.BaseTexture.defaultOptions.scaleMode = PIXI.SCALE_MODES.NEAREST;
   world = new PIXI.Container(); app.stage.addChild(world);
-  // terrain atlases: one row of all 71 tiles per look (dry, normal, lush, snow), dirt always sand
-  atlas = {};
-  for (const look of ['grass0', 'grass1', 'grass2', 'snow']) {
-    const c = document.createElement('canvas'); c.width = 72 * TILE; c.height = TILE; const g = c.getContext('2d');
-    for (const id of TILE_IDS) g.drawImage(recolor(ART.tiles[id], [SWAP.sand, SWAP[look]]), id * TILE, 0);
-    atlas[look] = c;
+  initCharAtlas(); banners = makeBanners(); crownTex = PIXI.Texture.from(makeCrown()); slashTex = PIXI.Texture.from(makeSlash());
+  const bb = PIXI.BaseTexture.from(banners); bannerTex = Array.from({ length: NPAT }, (_, p) => new PIXI.Texture(bb, new PIXI.Rectangle(p * 16, 0, 16, 24)));
+  if (ART.kind === 'sunny') {
+    const S = ART.S; S.tilesetBase = PIXI.BaseTexture.from(S.tileset); S.propsBase = PIXI.BaseTexture.from(S.props);
+    for (const k in SUNNY_SETS) auto[k] = buildAuto(SUNNY_SETS[k]);
+    const [ox, oy, ow, oh] = SUNNY.ocean; waterTex = [new PIXI.Texture(S.tilesetBase, new PIXI.Rectangle(ox, oy, ow, oh))];
+    waterSprite = new PIXI.TilingSprite(waterTex[0], state.W * TILE, state.H * TILE); world.addChild(waterSprite);
+  } else {
+    atlas = {};
+    for (const look of ['grass0', 'grass1', 'grass2', 'snow']) {
+      const c = document.createElement('canvas'); c.width = 72 * TILE; c.height = TILE; const g = c.getContext('2d');
+      for (const id of TILE_IDS) g.drawImage(recolor(ART.tiles[id], [SWAP.sand, SWAP[look]]), id * TILE, 0);
+      atlas[look] = c;
+    }
+    tileInfo = tileMasks(); edges = makeEdges(); crops = makeCrops();
+    const wb = PIXI.BaseTexture.from(makeWater()); waterTex = [0, 1].map(f => new PIXI.Texture(wb, new PIXI.Rectangle(f * 32, 0, 32, 32)));
+    waterSprite = new PIXI.TilingSprite(waterTex[0], state.W * TILE, state.H * TILE); world.addChild(waterSprite);
   }
-  tileInfo = tileMasks(); edges = makeEdges(); crops = makeCrops(); banners = makeBanners();
-  const wb = PIXI.BaseTexture.from(makeWater()); waterTex = [0, 1].map(f => new PIXI.Texture(wb, new PIXI.Rectangle(f * 32, 0, 32, 32)));
-  waterSprite = new PIXI.TilingSprite(waterTex[0], state.W * TILE, state.H * TILE); world.addChild(waterSprite);
   chunks = []; const cols = Math.ceil(state.W / CH), rows = Math.ceil(state.H / CH);
   for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
     const cv = document.createElement('canvas'); cv.width = CH * TILE; cv.height = CH * TILE;
     const sp = new PIXI.Sprite(PIXI.Texture.from(cv)); sp.position.set(cx * CH * TILE, cy * CH * TILE); world.addChild(sp);
     chunks.push({ cx, cy, cv, g: cv.getContext('2d'), sp, dirty: true });
   }
-  // props
-  propTex = {};
-  const mk = (canvas) => PIXI.Texture.from(canvas);
-  propTex.tree0 = mk(recolor(ART.img.tree0, [SWAP.treeGreen])); propTex.tree1 = mk(recolor(ART.img.tree1, [SWAP.treeDark])); propTex.tree2 = mk(recolor(ART.img.tree1, [SWAP.treeAutumn2])); propTex.tree3 = mk(recolor(ART.img.tree0, [SWAP.treeAutumn]));
-  for (let i = 0; i < 6; i++) propTex['rock' + i] = mk(recolor(ART.img['rock' + i], [SWAP.sand]));
-  propTex.grass0 = PIXI.Texture.from(ART.img.grass0); propTex.grass1 = PIXI.Texture.from(ART.img.grass1);
-  propTex.house = PIXI.Texture.from(ART.img.house); propTex.crate = PIXI.Texture.from(ART.img.crate); propTex.barrel = PIXI.Texture.from(ART.img.barrel);
-  const fb = PIXI.BaseTexture.from(ART.img.flowers); flowerTex = []; for (let r = 0; r < 4; r++) for (let c = 0; c < 7; c++) flowerTex.push(new PIXI.Texture(fb, new PIXI.Rectangle(c * 8, r * 7, 8, 7)));
-  crownTex = mk(makeCrown()); slashTex = mk(makeSlash());
-  const bb = PIXI.BaseTexture.from(banners); bannerTex = Array.from({ length: NPAT }, (_, p) => new PIXI.Texture(bb, new PIXI.Rectangle(p * 16, 0, 16, 24)));
-  charTex.clear();
+  cloudShadowLayer = new PIXI.Container(); world.addChild(cloudShadowLayer);
+  propTex = {}; const mk = (canvas) => PIXI.Texture.from(canvas);
+  if (ART.kind === 'sunny') {
+    const S = ART.S;
+    treeTex = { a: propTexture('tree_01'), b: propTexture('tree_02') };
+    propTex.rock = propTexture('rock')[0]; propTex.mushroom = [propTexture('mushroom_red_01'), propTexture('mushroom_blue_01')];
+    shadowTex = propTexture('shadow')[0]; fireTex = propTexture('fire'); propTex.campfire = propTexture('campfire')[0]; propTex.glint = propTexture('glint');
+    propTex.crate = propTexture('crate_01')[0]; propTex.barrel = propTexture('barrel_closed')[0]; propTex.chest = propTexture('chest_closed')[0]; propTex.well = propTexture('well')[0];
+    houseTex = ['house_green', 'house_red', 'house_green2', 'house_orange', 'house_purple', 'house_blue'].map(n => propTexture(n)).filter(Boolean).map(t => t[0]);
+    cloudTex = []; for (let k = 0; k < 6; k++) { const t = propTexture('cloud_' + k); if (t) cloudTex.push(t[0]); }
+    animalTex = {}; for (const n of ['chicken', 'cow', 'pig', 'sheep', 'duck']) animalTex[n] = propTexture(n);
+    for (const n of ['expression_alerted', 'expression_attack', 'expression_chat', 'expression_confused', 'expression_love', 'expression_stress', 'expression_working', 'indicator']) { const t = propTexture(n); if (t) uiTex[n] = t[0]; }
+    uiTex.greenbar = []; for (let k = 0; k < 7; k++) { const t = propTexture('greenbar_0' + k); if (t) uiTex.greenbar.push(t[0]); }
+    cropTex = {}; for (const c of ['wheat', 'carrot', 'pumpkin', 'cabbage', 'potato', 'beetroot', 'cauliflower', 'kale']) { const st = []; for (let k = 0; k < 6; k++) { const r = S.pm[`${c}_${k}`]; st.push(r || null); } if (st.every(Boolean)) cropTex[c] = st; }
+    tileTexCache.clear();
+    windmillTex = S.windmill ? (() => { const b = PIXI.BaseTexture.from(S.windmill); return Array.from({ length: 9 }, (_, f) => new PIXI.Texture(b, new PIXI.Rectangle(f * 112, 0, 112, 112))); })() : [];
+  } else {
+    propTex.tree0 = mk(recolor(ART.img.tree0, [SWAP.treeGreen])); propTex.tree1 = mk(recolor(ART.img.tree1, [SWAP.treeDark])); propTex.tree2 = mk(recolor(ART.img.tree1, [SWAP.treeAutumn2])); propTex.tree3 = mk(recolor(ART.img.tree0, [SWAP.treeAutumn]));
+    for (let i = 0; i < 6; i++) propTex['rock' + i] = mk(recolor(ART.img['rock' + i], [SWAP.sand]));
+    propTex.grass0 = PIXI.Texture.from(ART.img.grass0); propTex.grass1 = PIXI.Texture.from(ART.img.grass1);
+    propTex.house = PIXI.Texture.from(ART.img.house); propTex.crate = PIXI.Texture.from(ART.img.crate); propTex.barrel = PIXI.Texture.from(ART.img.barrel);
+    const fb = PIXI.BaseTexture.from(ART.img.flowers); flowerTex = []; for (let r = 0; r < 4; r++) for (let c = 0; c < 7; c++) flowerTex.push(new PIXI.Texture(fb, new PIXI.Rectangle(c * 8, r * 7, 8, 7)));
+    shadowTex = null;
+  }
   propLayer = new PIXI.Container(); world.addChild(propLayer);
   storeLayer = new PIXI.Container(); world.addChild(storeLayer);
-  bodies = new PIXI.ParticleContainer(30000, { position: true, uvs: true, scale: true, alpha: true }); world.addChild(bodies);
+  animLayer = new PIXI.Container(); world.addChild(animLayer); animSprites = [];
+  shadows = new PIXI.ParticleContainer(30000, { position: true, uvs: false, scale: true, alpha: true }); world.addChild(shadows);
+  deathLayer = new PIXI.Container(); world.addChild(deathLayer); deaths = [];
+  bodies = new PIXI.ParticleContainer(30000, { position: true, uvs: true, scale: true, alpha: true, tint: true }); world.addChild(bodies);
   fxLayer = new PIXI.Container(); world.addChild(fxLayer);
   labelLayer = new PIXI.Container(); world.addChild(labelLayer);
+  cloudLayer = new PIXI.Container(); world.addChild(cloudLayer); clouds = [];
+  if (cloudTex.length && ART.kind === 'sunny') {
+    const n = Math.max(4, Math.round(state.W * state.H / 9000));
+    for (let i = 0; i < n; i++) {
+      const tex = cloudTex[i % cloudTex.length]; const c = new PIXI.Sprite(tex); c.alpha = 0.92; const sh = new PIXI.Sprite(tex); sh.tint = 0x1a3a5a; sh.alpha = 0.22;
+      c.vx = 4 + hash(i, 1, 9) * 5; c.x = hash(i, 2, 9) * state.W * TILE; c.y = hash(i, 3, 9) * state.H * TILE; c.sh = sh;
+      cloudLayer.addChild(c); cloudShadowLayer.addChild(sh); clouds.push(c);
+    }
+  }
   tintOverlay = new PIXI.Sprite(PIXI.Texture.WHITE); tintOverlay.blendMode = PIXI.BLEND_MODES.MULTIPLY; tintOverlay.alpha = 0; app.stage.addChild(tintOverlay);
   snowLayer = new PIXI.ParticleContainer(600, { position: true, alpha: true }); app.stage.addChild(snowLayer); snowDots = [];
   for (let i = 0; i < 400; i++) { const d = new PIXI.Sprite(PIXI.Texture.WHITE); d.width = d.height = 2; d.alpha = 0; d.vx = (Math.random() - 0.5) * 20; d.vy = 30 + Math.random() * 40; d.x = Math.random() * 2000; d.y = Math.random() * 1200; snowLayer.addChild(d); snowDots.push(d); }
-  state.lastKey = new Uint32Array(state.W * state.H).fill(0xffffffff);
-  state.pixi = true; state.lastFrameDrawn = -1; state.lastPropsFrame = -1;
+  state.lastKey = new Uint32Array(state.W * state.H).fill(0xffffffff); state.kinds = null; state.near = null;
+  state.pixi = true; state.lastFrameDrawn = -1; state.lastPropsFrame = -1; state.propsBuilt = false;
   app.ticker.add(tick);
 }
-// per-faction character strips: body type by lineage, tunic recoloured, plus a sick variant
-function charTextures(lineage, sick) {
-  const key = lineage * 2 + (sick ? 1 : 0);
-  let t = charTex.get(key); if (t) return t;
-  const col = factionColor(lineage), dark = shade(col, 0.62), body = factionBody(lineage);
-  const maps = body === 0 ? { '#00c19a': col, '#017687': dark } : { '#6c88ff': col, '#323751': dark };
-  const strip = recolor(body === 0 ? ART.img.gabe : ART.img.mani, [maps, sick ? SWAP.sick : {}]);
-  const base = PIXI.BaseTexture.from(strip);
-  t = Array.from({ length: NF }, (_, f) => new PIXI.Texture(base, new PIXI.Rectangle(f * SPRW, 0, SPRW, SPRH)));
-  t.canvas = strip; charTex.set(key, t); return t;
-}
+const tileTexCache = new Map();
+function tileTex(id) { let t = tileTexCache.get(id); if (!t) { const [x, y] = tileRect(id); t = new PIXI.Texture(ART.S.tilesetBase, new PIXI.Rectangle(x, y, 16, 16)); tileTexCache.set(id, t); } return t; }
+
 // terrain classes: 0 water, 1 sand, 2 grass
 function cellClass(fert) { return fert < 8 ? 0 : fert < 20 ? 1 : 2; }
+// distance-to-land classes for water (0 = coast, 1, 2, 3 = open sea), recomputed only when the coastline changes
+function computeNear(kinds, W, H) {
+  const near = new Uint8Array(W * H).fill(3), cur = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) cur[i] = kinds[i] > 0 ? 1 : 0;
+  for (let d = 0; d < 3; d++) {
+    const next = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = y * W + x; if (cur[i]) { next[i] = 1; continue; }
+      const yn = ((y - 1 + H) % H) * W, ys = ((y + 1) % H) * W, yc = y * W, xe = (x + 1) % W, xw = (x - 1 + W) % W;
+      if (cur[yn + x] || cur[ys + x] || cur[yc + xe] || cur[yc + xw] || cur[yn + xe] || cur[yn + xw] || cur[ys + xe] || cur[ys + xw]) { next[i] = 1; if (near[i] === 3) near[i] = d; }
+    }
+    cur.set(next);
+  }
+  return near;
+}
 function drawTerrain(idx) {
   const [food, cult, fert] = layersOf(idx); const f = state.frames[idx]; const winter = f.season < 0.42;
   const W = state.W, H = state.H; const kinds = state.kinds || (state.kinds = new Uint8Array(W * H));
-  for (let i = 0; i < W * H; i++) kinds[i] = cellClass(fert[i]);
-  const cols = Math.ceil(W / CH); const look = winter ? 'snow' : null;
+  let coastChanged = !state.near;
+  for (let i = 0; i < W * H; i++) { const k = cellClass(fert[i]); if ((k > 0) !== (kinds[i] > 0)) coastChanged = true; kinds[i] = k; }
+  if (coastChanged) state.near = computeNear(kinds, W, H);
+  const near = state.near; const cols = Math.ceil(W / CH); const look = winter ? 'snow' : null; const sunny = ART.kind === 'sunny';
   const gi = (x, y) => kinds[((y + H) % H) * W + ((x + W) % W)];
+  const gcult = (x, y) => cult[((y + H) % H) * W + ((x + W) % W)];
+  const S = ART.S, ts = sunny ? S.tileset : null;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = y * W + x, k = kinds[i];
     let mask = 0, lookRow = look || (food[i] >= 16 ? 'grass2' : food[i] >= 6 ? 'grass1' : 'grass0');
+    let stage = cult[i] >= 26 ? 3 : cult[i] >= 12 ? 2 : cult[i] >= 5 ? 1 : 0;
+    let key;
+    if (sunny) {
+      if (stage && hash(x, y, 10) > 0.66) stage = 0; // fields are plots with grass strips between them
+      // masks: water cells vs land (river set), sand vs sand, farm vs farm
+      const n = [gi(x, y - 1), gi(x + 1, y - 1), gi(x + 1, y), gi(x + 1, y + 1), gi(x, y + 1), gi(x - 1, y + 1), gi(x - 1, y), gi(x - 1, y - 1)];
+      if (k === 0) { if (near[i] === 0) n.forEach((v, b) => { if (v === 0) mask |= 1 << b; }); else mask = near[i]; }
+      else if (k === 1) n.forEach((v, b) => { if (v === 1) mask |= 1 << b; });
+      let fmask = 0; if (stage) { const fn = [gcult(x, y - 1), gcult(x + 1, y - 1), gcult(x + 1, y), gcult(x + 1, y + 1), gcult(x, y + 1), gcult(x - 1, y + 1), gcult(x - 1, y), gcult(x - 1, y - 1)]; fn.forEach((v, b) => { if (v >= 5 && hash(x + [0, 1, 1, 1, 0, -1, -1, -1][b], y + [-1, -1, 0, 1, 1, 1, 0, -1][b], 10) <= 0.66) fmask |= 1 << b; }); }
+      key = (k << 28) | (mask << 20) | (stage << 16) | (fmask << 8) | (near[i] << 2) | (k === 0 && near[i] === 0 ? 2 : 0) | 1;
+      if (state.lastKey[i] === key) continue;
+      state.lastKey[i] = key;
+      const ch = chunks[Math.floor(y / CH) * cols + Math.floor(x / CH)]; ch.dirty = true;
+      const lx = (x % CH) * TILE, ly = (y % CH) * TILE; const g = ch.g; g.clearRect(lx, ly, TILE, TILE);
+      const put = (id, alpha) => { const [tx, ty] = tileRect(id); if (alpha !== undefined) g.globalAlpha = alpha; g.drawImage(ts, tx, ty, 16, 16, lx, ly, 16, 16); if (alpha !== undefined) g.globalAlpha = 1; };
+      if (k === 0) {
+        if (near[i] === 0) put(auto.river[mask]);
+        else if (near[i] === 1) put(SUNNY.shallow[0]);
+        else if (near[i] === 2) put(SUNNY.shallow[0], 0.45);
+        continue;
+      }
+      const gv = SUNNY.grass; put(hash(x, y, 6) < 0.8 ? gv[0] : gv[Math.floor(hash(x, y, 5) * gv.length)]);
+      if (k === 1) put(auto.sand[mask]);
+      if (stage) {
+        put(auto.farm[fmask]);
+        const names = Object.keys(cropTex); if (names.length) {
+          const c = cropTex[names[Math.floor(hash(x, y, 9) * names.length)]]; const r = c[stage === 1 ? 1 : stage === 2 ? 3 : 5];
+          const w = Math.min(16, r.w), h = Math.min(16, r.h); g.drawImage(S.props, r.x, r.y, w, h, lx + Math.floor((16 - w) / 2), ly + 15 - h, w, h);
+        }
+      }
+      continue;
+    }
     if (k === 1) { const n = [gi(x, y - 1), gi(x + 1, y - 1), gi(x + 1, y), gi(x + 1, y + 1), gi(x, y + 1), gi(x - 1, y + 1), gi(x - 1, y), gi(x - 1, y - 1)]; n.forEach((v, b) => { if (v === 2) mask |= 1 << b; }); }
     if (k === 0) { if (gi(x, y - 1) > 0) mask |= 1; if (gi(x + 1, y) > 0) mask |= 2; if (gi(x, y + 1) > 0) mask |= 4; if (gi(x - 1, y) > 0) mask |= 8; }
-    const stage = cult[i] >= 26 ? 3 : cult[i] >= 12 ? 2 : cult[i] >= 5 ? 1 : 0;
-    const key = (k << 28) | (mask << 20) | (stage << 16) | (['grass0', 'grass1', 'grass2', 'snow'].indexOf(lookRow) << 12) | 1;
+    key = (k << 28) | (mask << 20) | (stage << 16) | (['grass0', 'grass1', 'grass2', 'snow'].indexOf(lookRow) << 12) | 1;
     if (state.lastKey[i] === key) continue;
     state.lastKey[i] = key;
     const ch = chunks[Math.floor(y / CH) * cols + Math.floor(x / CH)]; ch.dirty = true;
@@ -555,7 +729,7 @@ function drawTerrain(idx) {
     if (stage && k === 2) { g.drawImage(crops, (stage - 1) * 16, 0, 16, 16, lx, ly, TILE, TILE); }
   }
   for (const ch of chunks) { if (ch.dirty) { ch.dirty = false; ch.sp.texture.baseTexture.update(); } }
-  // scattered props on wild grass, rebuilt only when the frame's keys changed for that chunk
+  // scattered props on wild grass, rebuilt when the season flips or the map is (re)loaded
   if (state.propsSeason !== winter || !state.propsBuilt) {
     state.propsSeason = winter; state.propsBuilt = true;
     propLayer.removeChildren().forEach(c => c.destroy());
@@ -565,18 +739,26 @@ function drawTerrain(idx) {
       const r = hash(x, y, 77); const dens = 0.015 + 0.09 * (fert[i] / 63);
       if (r >= dens) continue;
       const u = hash(x, y, 78);
-      let tex, sc = 1, oy = 0;
-      if (r < dens * 0.12) { tex = propTex['rock' + Math.floor(u * 6)]; }
-      else if (r < dens * 0.3) { tex = flowerTex[Math.floor(u * flowerTex.length)]; }
-      else if (r < dens * 0.45) { tex = u < 0.5 ? propTex.grass0 : propTex.grass1; }
-      else { tex = propTex['tree' + (fert[i] > 45 ? (u < 0.7 ? 0 : 1) : (u < 0.6 ? 2 : 3))]; sc = 0.5; oy = 2; }
-      items.push({ x, y, tex, sc, oy });
+      let tex, sc = 1, oy = 0, ox = 0;
+      if (sunny) {
+        if (r < dens * 0.08) { tex = propTex.rock; oy = -1; }
+        else if (r < dens * 0.24) { tex = tileTex(SUNNY.bushes[Math.floor(u * SUNNY.bushes.length)]); }
+        else if (r < dens * 0.36) { tex = tileTex(SUNNY.flowers[Math.floor(u * SUNNY.flowers.length)]); }
+        else if (r < dens * 0.39) { tex = propTex.mushroom[u < 0.5 ? 0 : 1][0]; }
+        else { const t = fert[i] > 40 ? treeTex.a : treeTex.b; tex = t[Math.floor(u * t.length)]; oy = 3; ox = Math.round((hash(x, y, 79) - 0.5) * 6); }
+      } else {
+        if (r < dens * 0.12) { tex = propTex['rock' + Math.floor(u * 6)]; }
+        else if (r < dens * 0.3) { tex = flowerTex[Math.floor(u * flowerTex.length)]; }
+        else if (r < dens * 0.45) { tex = u < 0.5 ? propTex.grass0 : propTex.grass1; }
+        else { tex = propTex['tree' + (fert[i] > 45 ? (u < 0.7 ? 0 : 1) : (u < 0.6 ? 2 : 3))]; sc = 0.5; oy = 2; }
+      }
+      items.push({ x, y, tex, sc, oy, ox });
     }
     items.sort((a, b) => a.y - b.y);
-    for (const it of items) { const s = new PIXI.Sprite(it.tex); s.anchor.set(0.5, 1); s.scale.set(it.sc); s.position.set(it.x * TILE + TILE / 2, it.y * TILE + TILE - 1 + it.oy); if (winter && it.tex !== propTex.house) s.tint = 0xdde6f0; propLayer.addChild(s); }
+    for (const it of items) { const s = new PIXI.Sprite(it.tex); s.anchor.set(0.5, 1); s.scale.set(it.sc); s.position.set(it.x * TILE + TILE / 2 + it.ox, it.y * TILE + TILE - 1 + it.oy); if (winter) s.tint = 0xdde6f0; propLayer.addChild(s); }
   }
   tintOverlay.width = app.screen.width; tintOverlay.height = app.screen.height;
-  if (winter) { tintOverlay.tint = 0xb7c7e6; tintOverlay.alpha = 0.4; } else if (f.climate < 0.5) { tintOverlay.tint = 0xe6c9a0; tintOverlay.alpha = 0.35; } else { tintOverlay.alpha = 0; }
+  if (winter) { tintOverlay.tint = sunny ? 0x9db3dc : 0xb7c7e6; tintOverlay.alpha = sunny ? 0.62 : 0.4; } else if (f.climate < 0.5) { tintOverlay.tint = 0xe6c9a0; tintOverlay.alpha = 0.35; } else { tintOverlay.alpha = 0; }
   state.snowing = winter;
 }
 function nearestMask(mask) { let best = 0, bd = 99; for (const m of tileInfo.masks.keys()) { let d = 0, x = m ^ mask; while (x) { d += x & 1; x >>= 1; } if (d < bd) { bd = d; best = m; } } return best; }
@@ -596,9 +778,15 @@ function tick() {
     }
     applyFollow();
   }
-  waterSprite.texture = waterTex[Math.floor(animClock * 2) % 2];
+  if (ART.kind === 'sunny') { waterSprite.tilePosition.x = (animClock * 3) % 64; waterSprite.tilePosition.y = (animClock * 1.5) % 64; }
+  else waterSprite.texture = waterTex[Math.floor(animClock * 2) % 2];
   const sw = app.screen.width, sh = app.screen.height;
   for (const d of snowDots) { if (!state.snowing) { d.alpha = 0; continue; } d.alpha = 0.7; d.x += d.vx * dt; d.y += d.vy * dt; if (d.y > sh) { d.y = -4; d.x = Math.random() * sw; } if (d.x > sw) d.x = 0; if (d.x < 0) d.x = sw; }
+  const WW = state.W * TILE, HH = state.H * TILE;
+  for (const c of clouds) { c.x += c.vx * dt; if (c.x > WW + 20) c.x = -c.width; c.sh.position.set(c.x + 12, c.y + 18); }
+  const af = Math.floor(animClock * 5);
+  for (const s of animSprites) { s.texture = s.frames[(af + s.off) % s.frames.length]; }
+  for (let i = deaths.length - 1; i >= 0; i--) { const d = deaths[i]; const fr = Math.floor((animClock - d.t0) * 10); if (fr >= d.frames.length) { deathLayer.removeChild(d.sp); d.sp.destroy(); deaths.splice(i, 1); } else d.sp.texture = d.frames[fr]; }
   draw(false);
 }
 function checkMajor() {
@@ -617,57 +805,106 @@ function showBanner(d, e) {
   $('b-icon').textContent = d.icon; $('b-kicker').textContent = `${t('tick')} ${e.tick.toLocaleString()}`; $('b-title').textContent = d.text; $('b-sub').textContent = d.sub || '';
   $('banner').classList.add('show'); clearTimeout(state.bannerT); state.bannerT = setTimeout(() => $('banner').classList.remove('show'), 4500);
 }
+function addAnim(frames, x, y, scale = 1, off = 0) { const s = new PIXI.Sprite(frames[0]); s.frames = frames; s.off = off; s.anchor.set(0.5, 1); s.scale.set(scale); s.position.set(x, y); animLayer.addChild(s); animSprites.push(s); return s; }
 
 function draw(force) {
   if (!state.pixi) return;
   const idx = state.frame; const f = state.frames[idx]; const A = agentsOf(idx); const B = idx + 1 < state.frames.length ? agentsOf(idx + 1) : null;
-  const s = state.sub;
-  if (force || state.lastFrameDrawn !== idx) { drawTerrain(idx); state.lastFrameDrawn = idx; updateHud(f, A); renderLeaders(A); renderFactions(A); markEvents(f.tick); drawTimeline(); drawMinimap(idx, A); }
+  const s = state.sub; const sunny = ART.kind === 'sunny';
+  if (force || state.lastFrameDrawn !== idx) { drawTerrain(idx); updateHud(f, A); renderLeaders(A); renderFactions(A); markEvents(f.tick); drawTimeline(); drawMinimap(idx, A); }
+  const stepped = state.lastFrameDrawn === idx - 1 && !force;
+  state.lastFrameDrawn = idx;
   const z = state.cam.zoom / TILE; world.scale.set(z);
   world.position.set(Math.round(app.screen.width / 2 - state.cam.x * TILE * z), Math.round(app.screen.height / 2 - state.cam.y * TILE * z));
   const alive = new Set(); const W = state.W, H = state.H;
-  const runFrame = 1 + Math.floor(animClock * 10) % 6;
   const detail = state.cam.zoom >= 2.5 ? 1 : 0.7;
+  const fr10 = animClock * 10;
   for (let i = 0; i < A.n; i++) {
     const id = A.id[i]; alive.add(id);
     const lin = A.lineage[i], sick = (A.flags[i] & 1) ? 1 : 0;
-    const tex = charTextures(lin, sick);
+    const C = getChar(lin);
     let sp = state.sprites.get(id);
-    if (!sp) { sp = { body: new PIXI.Sprite(tex[0]) }; sp.body.anchor.set(0.5, 1); bodies.addChild(sp.body); state.sprites.set(id, sp); }
+    if (!sp) {
+      sp = { body: new PIXI.Sprite(C.anims.idle[0]), lin }; sp.body.anchor.set(C.ax, C.ay); bodies.addChild(sp.body); state.sprites.set(id, sp);
+      if (shadowTex) { sp.sh = new PIXI.Sprite(shadowTex); sp.sh.anchor.set(0.5, 0.5); sp.sh.alpha = 0.5; shadows.addChild(sp.sh); }
+    }
+    sp.lin = lin;
     let x = A.x[i], y = A.y[i], moving = false, dx = A.mdx[i];
     if (B) { const j = B.index.get(id); if (j !== undefined) { const ddx = B.x[j] - x, ddy = B.y[j] - y; if (Math.abs(ddx) < W / 2 && Math.abs(ddy) < H / 2) { x += ddx * s; y += ddy * s; moving = ddx * ddx + ddy * ddy > 0.04; if (Math.abs(ddx) > 0.05) dx = ddx; } } }
-    sp.body.texture = tex[moving ? runFrame : 0];
+    let frames;
+    if (sunny) {
+      const act = A.action[i];
+      const name = moving ? 'run' : act === 1 ? 'attack' : A.energy[i] < 15 ? 'hurt' : act === 0 ? 'dig' : act === 2 ? 'carry' : act === 3 ? 'doing' : 'idle';
+      frames = charAnim(C, name);
+      sp.body.texture = frames[Math.floor(fr10 * (name === 'idle' ? 0.6 : 1) + id) % frames.length];
+      sp.body.tint = sick ? 0xa9d9a0 : 0xffffff;
+    } else {
+      frames = moving ? C.anims.run : C.anims.idle; sp.body.texture = frames[Math.floor(fr10 + id) % frames.length]; sp.body.tint = sick ? 0xb9e6a9 : 0xffffff;
+    }
     sp.body.scale.set((dx < 0 ? -1 : 1) * detail, detail);
-    const bob = moving ? 0 : Math.sin(animClock * 3 + id) * 0.4;
-    sp.body.position.set(x * TILE + TILE / 2, y * TILE + TILE + bob);
-    sp.body.alpha = A.energy[i] < 15 ? 0.55 : 1;
+    const bob = (moving || sunny) ? 0 : Math.sin(animClock * 3 + id) * 0.4;
+    const px = x * TILE + TILE / 2, py = y * TILE + TILE + bob;
+    sp.body.position.set(px, py);
+    sp.body.alpha = A.energy[i] < 15 ? 0.7 : 1;
+    if (sp.sh) { sp.sh.position.set(px, py - 2); sp.sh.scale.set(detail); }
   }
-  for (const [id, sp] of state.sprites) if (!alive.has(id)) { bodies.removeChild(sp.body); sp.body.destroy(); state.sprites.delete(id); }
+  for (const [id, sp] of state.sprites) if (!alive.has(id)) {
+    if (sunny && stepped && deaths.length < 300 && sp.lin !== undefined) {
+      const C = getChar(sp.lin); const d = new PIXI.Sprite(C.anims.death[0]); d.anchor.set(C.ax, C.ay); d.scale.copyFrom(sp.body.scale); d.position.copyFrom(sp.body.position); deathLayer.addChild(d); deaths.push({ sp: d, frames: C.anims.death, t0: animClock });
+    }
+    bodies.removeChild(sp.body); sp.body.destroy(); if (sp.sh) { shadows.removeChild(sp.sh); sp.sh.destroy(); } state.sprites.delete(id);
+  }
   if (force || state.lastPropsFrame !== idx) {
     state.lastPropsFrame = idx;
-    for (const L of [storeLayer, fxLayer, labelLayer]) L.removeChildren().forEach(c => c.destroy({ children: true }));
-    // houses where people have settled: one per 5x5 block with at least four settled agents
+    for (const L of [storeLayer, fxLayer, labelLayer, animLayer]) L.removeChildren().forEach(c => c.destroy({ children: true })); animSprites = [];
+    // villages where people have settled: one house per 7x7 block with at least eight settled agents
     const blocks = new Map();
     for (let i = 0; i < A.n; i++) if (A.flags[i] & 4) { const k = Math.floor(A.y[i] / 7) * 1000 + Math.floor(A.x[i] / 7); blocks.set(k, (blocks.get(k) || 0) + 1); }
-    for (const [k, n] of blocks) { if (n < 8) continue; const bx = k % 1000, by = Math.floor(k / 1000); const h = new PIXI.Sprite(propTex.house); h.anchor.set(0.5, 1); h.scale.set(0.5); h.position.set(bx * 7 * TILE + TILE * (1.5 + hash(bx, by, 5) * 4), by * 7 * TILE + TILE * (2 + hash(bx, by, 6) * 4)); storeLayer.addChild(h); }
-    for (const st of A.stores) {
-      const sp = new PIXI.Sprite(propTex.house); sp.anchor.set(0.5, 1); sp.scale.set(0.75); sp.position.set(st.x * TILE, st.y * TILE + 10); storeLayer.addChild(sp);
-      const cr = new PIXI.Sprite(propTex.crate); cr.anchor.set(0.5, 1); cr.position.set(st.x * TILE + 30, st.y * TILE + 10); storeLayer.addChild(cr);
-      const ba = new PIXI.Sprite(propTex.barrel); ba.anchor.set(0.5, 1); ba.position.set(st.x * TILE - 30, st.y * TILE + 10); storeLayer.addChild(ba);
-      const g = new PIXI.Graphics(); const fill = Math.min(1, st.food / 3000);
-      g.beginFill(0x1b1b2a).drawRect(-14, 12, 28, 5).endFill(); g.beginFill(hexToInt(factionColor(st.lineage))).drawRect(-13, 13, 26 * fill, 3).endFill(); g.position.set(st.x * TILE, st.y * TILE); storeLayer.addChild(g);
+    for (const [k, n] of blocks) {
+      if (n < 8) continue; const bx = k % 1000, by = Math.floor(k / 1000);
+      const hx = bx * 7 * TILE + TILE * (1.5 + hash(bx, by, 5) * 4), hy = by * 7 * TILE + TILE * (2 + hash(bx, by, 6) * 4);
+      if (sunny) {
+        const h = new PIXI.Sprite(houseTex[Math.floor(hash(bx, by, 7) * houseTex.length)]); h.anchor.set(0.5, 1); h.scale.set(0.85); h.position.set(hx, hy); storeLayer.addChild(h);
+        if (n >= 14 && fireTex.length) { const cf = new PIXI.Sprite(propTex.campfire); cf.anchor.set(0.5, 1); cf.position.set(hx + 30, hy + 8); storeLayer.addChild(cf); addAnim(fireTex, hx + 30, hy - 2, 1, bx); }
+        if (n >= 11) { const names = Object.keys(animalTex); const an = animalTex[names[Math.floor(hash(bx, by, 8) * names.length)]]; if (an) { const a = addAnim(an, hx - 34, hy + 10, 0.75, by); a.scale.x *= hash(bx, by, 9) < 0.5 ? -1 : 1; } }
+      } else { const h = new PIXI.Sprite(propTex.house); h.anchor.set(0.5, 1); h.scale.set(0.5); h.position.set(hx, hy); storeLayer.addChild(h); }
     }
-    // attackers swing
-    for (let i = 0; i < A.n; i++) if (A.action[i] === 1) { const sl = new PIXI.Sprite(slashTex); sl.anchor.set(0.5, 0.5); sl.position.set(A.x[i] * TILE + TILE / 2 + (A.mdx[i] < 0 ? -10 : 10), A.y[i] * TILE + 4); sl.scale.set(A.mdx[i] < 0 ? -1 : 1, 1); sl.alpha = 0.9; fxLayer.addChild(sl); }
+    for (const st of A.stores) {
+      const fill = Math.min(1, st.food / 3000);
+      if (sunny) {
+        if (windmillTex.length) { const wm = addAnim(windmillTex, st.x * TILE, st.y * TILE + 12, 0.6, Math.floor(st.owner % 9)); wm.anchor.set(0.5, 0.86); }
+        else { const w = new PIXI.Sprite(propTex.well); w.anchor.set(0.5, 1); w.position.set(st.x * TILE, st.y * TILE + 10); storeLayer.addChild(w); }
+        const cr = new PIXI.Sprite(propTex.crate); cr.anchor.set(0.5, 1); cr.position.set(st.x * TILE + 26, st.y * TILE + 12); storeLayer.addChild(cr);
+        const ba = new PIXI.Sprite(propTex.barrel); ba.anchor.set(0.5, 1); ba.position.set(st.x * TILE - 26, st.y * TILE + 12); storeLayer.addChild(ba);
+        const ch = new PIXI.Sprite(propTex.chest); ch.anchor.set(0.5, 1); ch.position.set(st.x * TILE + 14, st.y * TILE + 22); storeLayer.addChild(ch);
+        if (uiTex.greenbar && uiTex.greenbar.length) { const gb = new PIXI.Sprite(uiTex.greenbar[Math.round(fill * 6)]); gb.anchor.set(0.5, 0); gb.scale.set(2); gb.position.set(st.x * TILE, st.y * TILE + 14); storeLayer.addChild(gb); }
+        const g = new PIXI.Graphics(); g.beginFill(hexToInt(factionColor(st.lineage))).drawRect(-3, 0, 6, 3).endFill(); g.position.set(st.x * TILE, st.y * TILE + 28); storeLayer.addChild(g);
+      } else {
+        const sp = new PIXI.Sprite(propTex.house); sp.anchor.set(0.5, 1); sp.scale.set(0.75); sp.position.set(st.x * TILE, st.y * TILE + 10); storeLayer.addChild(sp);
+        const cr = new PIXI.Sprite(propTex.crate); cr.anchor.set(0.5, 1); cr.position.set(st.x * TILE + 30, st.y * TILE + 10); storeLayer.addChild(cr);
+        const ba = new PIXI.Sprite(propTex.barrel); ba.anchor.set(0.5, 1); ba.position.set(st.x * TILE - 30, st.y * TILE + 10); storeLayer.addChild(ba);
+        const g = new PIXI.Graphics();
+        g.beginFill(0x1b1b2a).drawRect(-14, 12, 28, 5).endFill(); g.beginFill(hexToInt(factionColor(st.lineage))).drawRect(-13, 13, 26 * fill, 3).endFill(); g.position.set(st.x * TILE, st.y * TILE); storeLayer.addChild(g);
+      }
+    }
+    // attack swings and love bubbles (the pack's characters swing their own sword, so only the fallback needs a slash)
+    if (!sunny) for (let i = 0; i < A.n; i++) if (A.action[i] === 1) { const sl = new PIXI.Sprite(slashTex); sl.anchor.set(0.5, 0.5); sl.position.set(A.x[i] * TILE + TILE / 2 + (A.mdx[i] < 0 ? -10 : 10), A.y[i] * TILE + 4); sl.scale.set(A.mdx[i] < 0 ? -1 : 1, 1); sl.alpha = 0.9; fxLayer.addChild(sl); }
+    if (sunny && state.cam.zoom >= 3 && uiTex.expression_love) { let n = 0; for (let i = 0; i < A.n && n < 400; i++) if (A.action[i] === 3) { const b = new PIXI.Sprite(uiTex.expression_love); b.anchor.set(0.5, 1); b.position.set(A.x[i] * TILE + TILE / 2 + 6, A.y[i] * TILE - 2); fxLayer.addChild(b); n++; } }
     const leaders = []; for (let i = 0; i < A.n; i++) if (A.flags[i] & 2) leaders.push(i);
     leaders.sort((a, b) => A.followers[b] - A.followers[a]);
     const style = new PIXI.TextStyle({ fontFamily: 'system-ui, sans-serif', fontSize: 11, fontWeight: '600', fill: '#fff3c4', stroke: '#1b1b2a', strokeThickness: 3 });
+    const orderIcons = ['expression_alerted', 'indicator', 'expression_attack', 'expression_stress', 'expression_chat'];
     for (const [k, i] of leaders.entries()) {
       const cx = A.x[i] * TILE + TILE / 2, cy = A.y[i] * TILE + TILE;
       const cr = new PIXI.Sprite(crownTex); cr.anchor.set(0.5, 1); cr.position.set(cx, cy - 22); fxLayer.addChild(cr);
       const fl = new PIXI.Sprite(bannerTex[factionPattern(A.lineage[i])]); fl.anchor.set(0.2, 1); fl.tint = hexToInt(factionColor(A.lineage[i]));
       const sc = Math.min(2, 0.9 + Math.sqrt(A.followers[i]) * 0.1); fl.scale.set(sc); fl.position.set(cx + 8, cy - 4); fxLayer.addChild(fl);
-      const ord = A.under[i]; if (ord) { const gl = new PIXI.Text(['⌂', '➜', '⚔', '✋', '⇅'][ord - 1], new PIXI.TextStyle({ fontSize: 10, fill: '#fff', stroke: '#000', strokeThickness: 2 })); gl.anchor.set(0.5, 1); gl.position.set(cx + 16, cy - 22 * sc); fxLayer.addChild(gl); }
+      const ord = A.under[i];
+      if (ord) {
+        const tex = sunny ? uiTex[orderIcons[ord - 1]] : null;
+        if (tex) { const b = new PIXI.Sprite(tex); b.anchor.set(0.5, 1); b.scale.set(1.5); b.position.set(cx + 18, cy - 22 * sc); fxLayer.addChild(b); }
+        else { const gl = new PIXI.Text(['⌂', '➜', '⚔', '✋', '⇅'][ord - 1], new PIXI.TextStyle({ fontSize: 10, fill: '#fff', stroke: '#000', strokeThickness: 2 })); gl.anchor.set(0.5, 1); gl.position.set(cx + 16, cy - 22 * sc); fxLayer.addChild(gl); }
+      }
       if (k < 40 && A.name[i] && (A.followers[i] >= 15 || k < 12)) { const nm = (state.meta.names || {})[A.name[i]] || `#${A.name[i]}`; const tx = new PIXI.Text(nm, style); tx.anchor.set(0.5, 1); tx.scale.set(1 / Math.max(1, z * 0.9)); tx.position.set(cx, cy - 26 - 8 * sc); labelLayer.addChild(tx); }
     }
   }
@@ -682,15 +919,17 @@ function updateHud(f, A) {
   $('era').textContent = T[lang].eras[f.era] || f.era; $('era').style.borderColor = ERA_COLORS[f.era] || '#666';
 }
 function drawMinimap(idx, A) {
-  const mm = $('mm'), g = mm.getContext('2d'); const W = state.W, H = state.H; mm.width = W; mm.height = H;
+  const mm = $('mm'), g = mm.getContext('2d', { willReadFrequently: true }); const W = state.W, H = state.H; mm.width = W; mm.height = H;
   const img = g.createImageData(W, H); const d = img.data; const kinds = state.kinds; const [food, cult] = layersOf(idx);
   for (let i = 0; i < W * H; i++) { const k = kinds[i]; let c = k === 0 ? [0, 141, 240] : k === 1 ? [216, 185, 132] : cult[i] >= 5 ? [217, 166, 42] : food[i] >= 12 ? [18, 181, 140] : [110, 170, 100]; d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255; }
   g.putImageData(img, 0, 0);
   for (let i = 0; i < A.n; i += 2) { g.fillStyle = factionColor(A.lineage[i]); g.fillRect(A.x[i] | 0, A.y[i] | 0, 1, 1); }
+  state.mmBase = g.getImageData(0, 0, W, H);
   state.mmView = true; drawMinimapView();
 }
 function drawMinimapView() {
-  const mm = $('mm'), g = mm.getContext('2d'); if (!app) return;
+  const mm = $('mm'), g = mm.getContext('2d'); if (!app || !state.mmBase) return;
+  g.putImageData(state.mmBase, 0, 0);
   const vw = app.screen.width / state.cam.zoom, vh = app.screen.height / state.cam.zoom;
   g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.strokeRect(state.cam.x - vw / 2, state.cam.y - vh / 2, vw, vh);
 }
@@ -699,7 +938,7 @@ $('mm').addEventListener('click', e => { const r = $('mm').getBoundingClientRect
 // ---------- panels
 function swatch(lineage) {
   const c = document.createElement('canvas'); c.width = 24; c.height = 24; c.style.width = '24px'; c.style.height = '24px';
-  const strip = charTextures(lineage, 0).canvas; c.getContext('2d').drawImage(strip, 0, 0, 24, 24, 0, 0, 24, 24); return c;
+  const C = getChar(lineage); const [sx, sy, sw, sh] = C.swatch; c.getContext('2d').drawImage(charAtlas.canvas, sx, sy, sw, sh, 0, 0, 24, 24); return c;
 }
 function renderFactions(A) {
   const counts = new Map(); const lead = new Map(); const custom = new Map();

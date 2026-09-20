@@ -23,24 +23,52 @@ python3 ../viewer/serve.py            # rồi mở http://127.0.0.1:8765/index.h
 ```
 
 `viewer/index.html` là game viewer 2D pixel art chạy trong trình duyệt bằng **PixiJS** (WebGL, đã kèm sẵn
-trong `viewer/lib`, không cần mạng). Hình ảnh dùng **Generic RPG Pack** của Bakudas và Gabe Fern, giấy phép
-CC0, nằm trong `viewer/assets/rpg` kèm `CREDITS.md`. Viewer đổi màu lúc mở trang: đất hồng cam của pack thành
-cát, áo nhân vật thành màu phe, tán cây thành xanh và vàng thu, phủ trắng mùa đông. Những gì pack không có
-(nước, bờ cát, cây trồng, cờ hiệu, vương miện, nhát chém) được vẽ bằng code theo đúng bảng màu của pack.
+trong `viewer/lib`, không cần mạng). Viewer có hai bộ hình:
 
-- **Bản đồ**: đất cằn nhất thành biển có sóng, đất nghèo thành bờ cát, đất tốt thành cỏ với ba sắc theo
-  thức ăn. Mép cỏ và cát dùng bộ autotile 8 hướng của pack, viewer tự đọc mặt nạ từng tile lúc nạp nên
-  đường bờ uốn tự nhiên. Ruộng có cây trồng ba giai đoạn theo mức canh tác. Cây xanh, cây thu, đá, hoa,
-  bụi cỏ rải theo độ màu mỡ. Làng đông có nhà gỗ, kho là nhà lớn kèm thùng và rương. Mùa đông cỏ phủ tuyết.
-- **Nhân vật** là Gabe và Mani 24x24 của pack, 7 khung chạy, thân hình đổi theo dòng họ, áo đổi theo màu phe.
-  Vị trí nội suy giữa hai khung chụp nên chạy mượt dù chỉ chụp mỗi 25 tick. Người ốm da xanh, người đói mờ đi,
-  người đang đánh có nhát chém, thủ lĩnh đội vương miện và cắm cờ hiệu.
+- **Sunnyside World** (Daniel Diggle, bán trên itch.io) là bộ chính. Đây là pack trả phí, không được phân
+  phối lại, nên **không có file nào của nó trong repo**. Mua pack rồi chạy một lệnh, viewer tự nhận:
+
+  ```bash
+  pip install pillow
+  python3 tools/import_sunnyside.py ~/Downloads/Sunnyside_World_ASSET_PACK_V2.1.zip
+  # ghi vào viewer/assets/sunnyside (đã có trong .gitignore), nhận cả zip lẫn thư mục đã giải nén
+  ```
+
+  Script cắt 14 hoạt ảnh nhân vật (mỗi khung 80x48, tám lớp: thân, sáu kiểu tóc, dụng cụ, màu đã chuẩn hoá
+  để đổi màu chính xác), chép tileset 16px, đóng gói cây, mùa màng, gia súc, lửa, khói, biểu cảm, thanh
+  máu, khung 9-slice, và cắt sáu ngôi nhà mái xanh, đỏ, cam, tím, lam cùng sáu cụm mây ngay từ bản đồ mẫu
+  của pack. Cối xay gió 9 khung tách riêng.
+- **Generic RPG Pack** của Bakudas và Gabe Fern, giấy phép CC0, nằm trong `viewer/assets/rpg` kèm
+  `CREDITS.md`, là bộ dự phòng khi chưa có Sunnyside (hoặc thêm `&rpg=1` vào địa chỉ để ép dùng).
+
+Với Sunnyside, cách vẽ như sau:
+
+- **Bản đồ**: biển sâu là khối sóng của pack trôi chậm, nước nông sáng dần vào bờ, ô nước sát đất dùng bộ
+  autotile sông nên bờ uốn và bo góc chéo. Cỏ có sáu biến thể, bãi cát là bộ autotile cát phủ trên cỏ, ruộng
+  là các thửa đất canh tác có lối cỏ xen giữa, trên thửa mọc lúa mì, cà rốt, bí, bắp cải, khoai, củ dền, súp
+  lơ, cải xoăn theo ba giai đoạn canh tác. Cây to hai loại theo độ màu mỡ, bụi, hoa, nấm, đá rải trên đất
+  hoang. Mỗi bộ autotile 15 tile của pack trả lời cùng một bảng mặt nạ 8 hướng (đủ, bốn cạnh, bốn góc trong,
+  bốn góc ngoài chéo), viewer suy ra tile từ mặt nạ và tự chọn tile gần nhất cho hình dạng pack không có.
+- **Nhân vật** 80x48 với hoạt ảnh thật của pack: chạy khi di chuyển, vung kiếm khi tấn công, cuốc đất khi
+  thu hoạch, khuân đồ khi chia sẻ, ôm nhau khi sinh sản, ôm bụng khi đói, ngã xuống và hoá thành đầu lâu
+  khi chết (tối đa 300 hoạt ảnh chết cùng lúc). Quần yếm đổi theo màu phe, kiểu tóc đổi theo dòng họ, người
+  ốm ngả xanh, ai cũng có bóng đổ. Mọi khung của mọi dòng họ nằm trong một texture 4096x2048 nên hàng chục
+  nghìn sprite vẫn vẽ trong một lần gọi.
+- **Làng** đông có nhà của pack (mái xanh, đỏ, cam, tím, lam theo vị trí), làng rất đông có thêm lửa trại
+  cháy và gà, bò, lợn, cừu, vịt đi lại. **Kho chung** là cối xay gió quay, thùng, rương, thanh xanh mức đầy.
+- **Thủ lĩnh** đội vương miện, cắm cờ hiệu màu phe to theo số người theo, kèm tên và bong bóng biểu cảm của
+  pack cho lệnh đang ra (cảnh giác, mũi tên, tấn công, căng thẳng, trò chuyện). Người đang sinh sản có
+  bong bóng trái tim khi phóng đủ gần.
+- **Mây** trôi qua bản đồ kèm bóng mây trên mặt đất. Banner sự kiện lớn dùng khung 9-slice của pack.
+
+Với bộ CC0 dự phòng: đất hồng cam của pack thành cát, áo nhân vật thành màu phe, tán cây thành xanh và vàng
+thu, phủ trắng mùa đông; nước, bờ cát, cây trồng, cờ hiệu, vương miện, nhát chém vẽ bằng code theo bảng màu
+của pack; nhân vật là Gabe và Mani 24x24 với 7 khung chạy.
+
 - **Minimap** góc trái với địa hình và chấm phe, bấm để bay tới. Tông màu đổi theo mùa và hạn hán, tuyết rơi
   mùa đông. Bản đồ chia 16 mảnh, chỉ mảnh có ô đổi mới được vẽ lại.
-- **Phe phái** là dòng họ. Mỗi dòng họ có màu áo riêng từ bảng 24 màu và một hoạ tiết trên áo trong sáu mẫu,
-  nên phân biệt được cả khi mù màu. Bảng phe phái bên phải hiện thị phần, thủ lĩnh và sprite mẫu, bấm để bay tới.
-- **Thủ lĩnh** có cờ hiệu màu phe, to theo số người theo, kèm tên và biểu tượng mệnh lệnh đang ra.
-- **Kho chung** là nhà kho gỗ mái đỏ với thanh đầy màu phe.
+- **Phe phái** là dòng họ. Mỗi dòng họ có màu áo riêng từ bảng 24 màu, kiểu tóc (Sunnyside) hoặc hoạ tiết
+  áo (CC0) riêng, nên phân biệt được cả khi mù màu. Bảng phe phái bên phải hiện thị phần, thủ lĩnh và sprite mẫu, bấm để bay tới.
 - **Sử ký song ngữ Việt Anh**, phím L để đổi. Sim ghi loại sự kiện, viewer dịch theo loại và có biểu tượng.
 - **Sự kiện lớn** (đổi thời đại, thủ lĩnh đầu tiên, đại thủ lĩnh, dịch bệnh, kho đầu tiên, tập quán, sụp đổ,
   tuyệt chủng, đất chết, chiến binh, định cư, chia sẻ) hiện banner giữa màn hình và camera bay tới, có tuỳ chọn
@@ -58,7 +86,8 @@ run đang chạy.
 Đo trên máy ảo 4 nhân, không GPU: sim đạt khoảng 700.000 agent-tick mỗi giây, tức một thế giới 4.000 agent
 chạy 175 tick mỗi giây, 20.000 tick trong 80 giây. Kết quả giống hệt từng byte dù bao nhiêu luồng. Viewer
 vẽ vài nghìn sprite hoạt ảnh bằng WebGL, chạy tốt trên GPU tích hợp; ở đây kiểm tra bằng Chromium không đầu
-với GL phần mềm. Tôi chưa chạy trên máy của bạn, nên hai điều cần xem: RAM của trình duyệt bằng cỡ file
+với GL phần mềm (16 khung hình mỗi giây với 2.200 nhân vật hoạt ảnh và bản đồ 256x256 khi không có GPU,
+bộ nhớ JS 115 MB). Tôi chưa chạy trên máy của bạn, nên hai điều cần xem: RAM của trình duyệt bằng cỡ file
 ảnh chụp cộng vài chục MB, và với run trên 50.000 tick nên chụp thưa hơn hoặc xem trực tiếp.
 
 ## Chạy thử
@@ -389,6 +418,11 @@ sim/src/
   events.rs   sử ký: khám phá, thống trị, tuyệt chủng, nạn đói, chiến tranh, tầng lớp mới, thời đại, thủ lĩnh
   render.rs   xuất PPM
   rng.rs      xorshift64* có seed
+tools/
+  import_sunnyside.py  nhập pack Sunnyside World (mua riêng) vào viewer/assets/sunnyside
+viewer/
+  index.html  viewer PixiJS, hai bộ hình, sử ký song ngữ
+  serve.py    server tĩnh có Range để xem trực tiếp
 ```
 
 ## Bước tiếp theo
