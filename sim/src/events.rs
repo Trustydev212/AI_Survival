@@ -261,5 +261,8 @@ pub fn kind_of(text: &str) -> &'static str {
     if text.contains("first fields burned") {
         return "first_burn";
     }
+    if text.contains("first boat") {
+        return "first_sail";
+    }
     "other"
 }

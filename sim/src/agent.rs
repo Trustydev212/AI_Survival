@@ -81,6 +81,8 @@ pub struct Agent {
     pub home_y: f32,
     /// Ticks of illness left; 0 = healthy.
     pub sick: u16,
+    /// Standing on water this tick (needs seafaring knowledge to survive it).
+    pub afloat: bool,
     /// Ticks of immunity left after recovering.
     pub immune: u16,
     pub skill: [f32; N_SKILL],

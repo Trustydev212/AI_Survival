@@ -5,7 +5,7 @@ use crate::orders::{Order, N_ORDER};
 use crate::rng::Rng;
 
 pub const N_MEM: usize = 4;
-pub const N_IN: usize = 75;
+pub const N_IN: usize = 76;
 pub const N_HID: usize = 16;
 pub const N_ACT: usize = 5;
 // move_x, move_y, go/stay, action scores, memory, order scores, order direction

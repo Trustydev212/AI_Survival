@@ -12,7 +12,7 @@
 //!         pop agents of 22 bytes: u32 id u16 x*64 u16 y*64 u16 lineage u32 name u16 followers
 //!           u8 flags u8 energy i8 mdx*100 i8 mdy*100 u8 under(0 none, 1..5 order) u8 action
 //!         stores of 14 bytes: u16 x*64 u16 y*64 f32 food u16 lineage u32 owner name id
-//! flags: 1 sick, 2 leader, 4 settled, 8 obeyed, 16 has custom
+//! flags: 1 sick, 2 leader, 4 settled, 8 obeyed, 16 has custom, 32 afloat (in a boat)
 
 use crate::agent::Agent;
 use crate::store::Store;
@@ -122,6 +122,9 @@ impl Snapshot {
             }
             if a.custom.is_some() && a.custom_strength >= custom_min {
                 flags |= 16;
+            }
+            if a.afloat {
+                flags |= 32;
             }
             body.push(flags);
             body.push(a.energy.clamp(0.0, 255.0) as u8);

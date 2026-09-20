@@ -18,6 +18,8 @@ pub struct Window {
     pub attack_wins: u32,
     pub shares: u32,
     pub immigrants: u32,
+    /// Times an agent moved from land onto the sea this window.
+    pub voyages: u32,
     pub actions: [u32; N_ACT],
     pub discoveries: u32,
     pub learned: u32,

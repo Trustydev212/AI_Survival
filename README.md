@@ -15,6 +15,7 @@ chỉ có xuất ảnh PPM, CSV, sử ký, và bảng kết cục khi chạy nhi
 
 ![viewer](docs/viewer.png)
 ![map](docs/viewer-map.png)
+![boats](docs/viewer-boats.png)
 
 ```bash
 cd sim && ./target/release/sim --seed 2 --ticks 20000 --snapshot-every 25 --out ../viewer/out
@@ -49,6 +50,7 @@ Với Sunnyside, cách vẽ như sau:
   lơ, cải xoăn theo ba giai đoạn canh tác. Cây to hai loại theo độ màu mỡ, bụi, hoa, nấm, đá rải trên đất
   hoang. Mỗi bộ autotile 15 tile của pack trả lời cùng một bảng mặt nạ 8 hướng (đủ, bốn cạnh, bốn góc trong,
   bốn góc ngoài chéo), viewer suy ra tile từ mặt nạ và tự chọn tile gần nhất cho hình dạng pack không có.
+- **Thuyền**: ai đang trên biển ngồi trong thuyền thúng của pack (4 khung nhấp nhô), bóng dưới chân tắt đi.
 - **Nhân vật** 80x48 với hoạt ảnh thật của pack: chạy khi di chuyển, vung kiếm khi tấn công, cuốc đất khi
   thu hoạch, khuân đồ khi chia sẻ, ôm nhau khi sinh sản, ôm bụng khi đói, ngã xuống và hoá thành đầu lâu
   khi chết (tối đa 300 hoạt ảnh chết cùng lúc). Tóc, áo và quần yếm cùng nhuộm màu phe (kiểu tóc theo dòng họ), dưới chân là
@@ -123,8 +125,12 @@ Cùng seed luôn cho cùng kết quả, nên có thể replay và so sánh thí 
 **Thế giới** là lưới ô cuộn tròn. Mỗi ô có độ màu mỡ tiềm năng, sinh ra từ value noise
 rồi ngưỡng hoá để đất tốt tụ thành từng vùng và khoảng 40% bản đồ gần như cằn cỗi. Phần trũng nhất của
 noise là **biển**: không ai đứng, đi hay sinh ra trên đó; ai đi tới bờ thì trượt dọc bờ hoặc dừng lại, nên
-đất liền chia thành các lục địa và hồ, và du mục không thể băng thẳng qua nước. Các kết quả thí nghiệm ghi
-bên dưới được đo trước khi có biển. Thức ăn mọc lại theo độ màu mỡ và theo mùa. Mùa đông giảm tốc độ mọc
+đất liền chia thành các lục địa và hồ, và du mục không thể băng thẳng qua nước, cho tới khi họ có
+**thuyền**. Thuyền không có sẵn: nó là một chiều phát minh (`sea`), ai cộng dồn đủ 0,25 thì đi được trên
+nước. Trên nước tiêu hao năng lượng gấp 1,6 lần, không sinh con được, nhưng hái được cá: 60% tốc độ hái
+trên đất, nhân với năng lực đi biển, và biển không bao giờ cạn. Ai đang ở trên biển mà kiến thức đi biển bị
+quên (thế hệ mới không kịp học) thì chìm dần. Sử ký ghi chuyến ra khơi đầu tiên của mỗi thế giới. Các kết
+quả thí nghiệm ghi bên dưới được đo trước khi có biển và thuyền, trừ mục "Sau khi có biển". Thức ăn mọc lại theo độ màu mỡ và theo mùa. Mùa đông giảm tốc độ mọc
 xuống 20%.
 
 **Đất có thể chết.** Mỗi đơn vị thức ăn hái đi bào mòn độ màu mỡ một chút. Đất được nghỉ, còn nhiều
@@ -271,9 +277,11 @@ một bó hiệu ứng trên mười chiều:
 | resist | chống bệnh |
 | teach, invent, share | dạy nhanh hơn, phát minh nhanh hơn, cho nhiều hơn |
 | soil | bào mòn đất thêm mỗi lần hái (dương là tệ) |
+| sea | đi biển: cộng dồn tới 0,25 là có thuyền |
 
 Lợi ích chính thiên về việc người phát minh đang làm: đang hái thì ra thứ về hái, đang đánh thì ra thứ
-về đánh, đang ốm mà nghỉ thì ra thứ về chống bệnh, đang chia sẻ thì ra thứ về dạy học. Bậc phát minh
+về đánh, đang ốm mà nghỉ thì ra thứ về chống bệnh, đang chia sẻ thì ra thứ về dạy học. Người phát minh
+đứng cách biển không quá 4 ô thì hơn một phần ba số lần lại tìm ra thứ về **đi biển**. Bậc phát minh
 tăng theo số thứ người đó đã biết, nên lợi ích lớn dần. **Mọi phát minh đều có giá**: hoặc tiêu hao nhiều
 hơn, hoặc bào mòn đất nhiều hơn. Phát minh về hái và ruộng thường trả giá bằng đất.
 
@@ -386,6 +394,15 @@ Chạy lại 8 thế giới 20.000 tick sau khi thêm biển không đi qua đư
 2 bùng-vỡ, 1 sụp đổ (seed 4 chết đói ở tick đầu vì bộ tộc sinh ra trên một đảo nhỏ, dân về 19). Đỉnh dân số
 từ 3.500 đến 10.000, kiến thức 9 đến 18 phát minh mỗi đầu người ở các thế giới sống sót. Biển chia bản đồ
 thành lục địa và hồ, nên chiến tranh và dịch bệnh lan chậm hơn giữa các bờ, còn đảo nhỏ là bẫy.
+
+### Sau khi có thuyền
+
+Cùng 8 seed, thêm chiều phát minh đi biển và nghề cá. Ba thế giới (seed 2, 3, 6) tìm ra thuyền, ở tick
+8.700 đến 16.700, luôn do người sống sát bờ; năm thế giới còn lại chạy y hệt như trước vì không ai phát minh
+ra nó. Ba thế giới có thuyền chính là ba thế giới hưng thịnh của đợt này (4 bùng-vỡ, 1 sụp đổ ở các thế
+giới không thuyền). Ở seed 2, ngay khi thuyền lan ra, đến 316 người cùng lúc ra hồ đánh cá, dòng họ đó lên
+tới 28 phát minh mỗi đầu người, cao nhất từng thấy. Với cá không bao giờ cạn, biển trở thành kho dự trữ
+mà chiến tranh và hạn hán không chạm tới. Cần thêm seed để nói chắc đó là nguyên nhân hay chỉ là trùng hợp.
 
 ### Đối chứng: có mệnh lệnh và không có mệnh lệnh
 

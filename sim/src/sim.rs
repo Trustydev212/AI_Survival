@@ -165,6 +165,7 @@ impl Sim {
             profile: [0.0; N_PROFILE],
             known: 0,
             caps: [0.0; N_EFFECT],
+            afloat: false,
             still: 0,
             emotion: [0.0; N_EMO],
             memory: [0.0; N_MEM],
@@ -564,8 +565,9 @@ impl Sim {
                 let mut nx = self.place(ox + d.mx * self.cfg.speed, self.cfg.width);
                 let mut ny = self.place(oy + d.my * self.cfg.speed, self.cfg.height);
                 let (mut mx, mut my) = (d.mx, d.my);
-                // The sea is not walkable: slide along the coast, or stop at it.
-                if self.world.is_water(nx, ny) {
+                // The sea is not walkable without boats: slide along the coast, or stop at it.
+                let sailor = a.caps[E_SEA] >= self.cfg.sea_threshold;
+                if self.world.is_water(nx, ny) && !sailor {
                     if !self.world.is_water(nx, oy) {
                         ny = oy;
                         my = 0.0;
@@ -579,11 +581,19 @@ impl Sim {
                         my = 0.0;
                     }
                 }
+                let afloat = self.world.is_water(nx, ny);
                 let a = &mut self.agents[i];
                 a.x = nx;
                 a.y = ny;
                 a.mdx = mx;
                 a.mdy = my;
+                let was = a.afloat;
+                a.afloat = afloat;
+                if afloat && !was {
+                    self.window.voyages += 1;
+                    let lineage = self.agents[i].lineage;
+                    self.events.fire(self.tick, "first_sail", format!("first boat: lineage {} sets out to sea at ({:.0}, {:.0})", lineage, nx, ny));
+                }
             }
 
             match d.action {
@@ -594,7 +604,13 @@ impl Sim {
                         let rate = cfg.gather_rate * (1.0 + a.caps[E_GATHER]).max(0.2) * (1.0 + 0.5 * a.skill[SK_GATHER]);
                         (a.x, a.y, rate, (1.0 + a.caps[E_SOIL]).max(0.0))
                     };
-                    let take = self.world.harvest(ax, ay, rate, drain, cfg.wrap);
+                    // Fishing: the sea feeds those who can float on it, and it never wears out.
+                    let afloat = self.agents[i].afloat;
+                    let take = if afloat {
+                        cfg.fish_yield * rate * (1.0 + self.agents[i].caps[E_SEA]).max(0.0)
+                    } else {
+                        self.world.harvest(ax, ay, rate, drain, cfg.wrap)
+                    };
                     let a = &mut self.agents[i];
                     a.train(SK_GATHER, cfg.skill_gain);
                     a.energy += take;
@@ -639,7 +655,7 @@ impl Sim {
                 Action::Reproduce => {
                     let cfg = &self.cfg;
                     let room = cfg.max_agents == 0 || n + births.len() < cfg.max_agents;
-                    if self.agents[i].energy >= cfg.repro_threshold && room {
+                    if self.agents[i].energy >= cfg.repro_threshold && room && !self.agents[i].afloat {
                         let child_genome = self.agents[i].genome.mutated(&mut self.rng, cfg.p_mut, cfg.sigma);
                         let (px, py) = (self.agents[i].x, self.agents[i].y);
                         let (nx, ny) = (self.rng.normal(), self.rng.normal());
@@ -1035,6 +1051,21 @@ impl Sim {
         }
     }
 
+    /// Is there sea within `reach` cells along the four axes?
+    fn near_sea(&self, x: f32, y: f32, reach: i32) -> bool {
+        let geo = Geo { wrap: self.cfg.wrap };
+        for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+            for step in 0..=reach {
+                let px = geo.place(x + (dx * step) as f32, self.cfg.width);
+                let py = geo.place(y + (dy * step) as f32, self.cfg.height);
+                if self.world.is_water(px, py) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// A new innovation is born into the world and known first by its discoverer.
     fn discover(&mut self, i: usize, doing: Action) {
         let id = self.innovations.len();
@@ -1042,7 +1073,8 @@ impl Sim {
             let a = &self.agents[i];
             ((1 + a.known_count() / 4).min(6) as u8, a.still >= self.cfg.settle_ticks, a.sick > 0, a.lineage, a.x, a.y)
         };
-        let inn = Innovation::generate(&mut self.rng, id, tier, doing, settled, sick, self.tick, lineage);
+        let coastal = self.near_sea(x, y, 4);
+        let inn = Innovation::generate(&mut self.rng, id, tier, doing, settled, sick, coastal, self.tick, lineage);
         let text = format!("innovation: {} by lineage {} at ({:.0}, {:.0})", inn.describe(), lineage, x, y);
         self.innovations.push(inn);
         let a = &mut self.agents[i];
@@ -1317,6 +1349,7 @@ fn decide(
             input[70 + k] = v;
         }
         input[74] = regions.water[regions.index(a.x, a.y)];
+        input[75] = a.caps[E_SEA];
     }
 
         let mut t = a.genome.think(&input);
@@ -1463,6 +1496,12 @@ for (k, a) in slice.iter_mut().enumerate() {
             cost *= cfg.rest_factor;
         }
         cost *= (1.0 + a.caps[E_METABOLISM]).max(0.3);
+        if a.afloat {
+            cost *= cfg.sea_cost;
+            if a.caps[E_SEA] < cfg.sea_threshold {
+                cost += cfg.drown_drain; // the boats were forgotten under them
+            }
+        }
         if a.sick > 0 {
             cost += cfg.sick_drain / (1.0 + a.caps[E_RESIST]).max(0.2);
             a.sick -= 1;

@@ -106,6 +106,16 @@ pub struct Config {
     pub no_orders: bool,
     pub defection_cost: f32,
 
+    // the sea
+    /// Summed "sea" effect an agent needs before it can move onto water.
+    pub sea_threshold: f32,
+    /// Energy cost multiplier while afloat.
+    pub sea_cost: f32,
+    /// Energy lost per tick when afloat without seafaring knowledge (forgotten boats).
+    pub drown_drain: f32,
+    /// Fishing while afloat, as a fraction of the land gather rate (does not deplete).
+    pub fish_yield: f32,
+
     // customs
     pub custom_gain: f32,
     pub custom_decay: f32,
@@ -219,6 +229,10 @@ impl Default for Config {
             conserve_saving: 0.5,
             no_orders: false,
             defection_cost: 0.03,
+            sea_threshold: 0.25,
+            sea_cost: 1.6,
+            drown_drain: 3.0,
+            fish_yield: 0.6,
 
             custom_gain: 0.01,
             custom_decay: 0.9995,
@@ -280,6 +294,10 @@ impl Config {
                     c.seeds = Some((a, b));
                 }
                 "--threads" => set!(threads),
+                "--sea-threshold" => set!(sea_threshold),
+                "--sea-cost" => set!(sea_cost),
+                "--drown-drain" => set!(drown_drain),
+                "--fish-yield" => set!(fish_yield),
                 "--width" => set!(width),
                 "--height" => set!(height),
                 "--agents" => set!(agents),

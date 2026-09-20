@@ -17,9 +17,10 @@ pub const E_TEACH: usize = 6; // knowledge transmission
 pub const E_INVENT: usize = 7; // discovery rate
 pub const E_SHARE: usize = 8; // amount given when sharing
 pub const E_SOIL: usize = 9; // extra soil exhaustion per harvest (+ is worse)
-pub const N_EFFECT: usize = 10;
+pub const E_SEA: usize = 10; // seafaring: boats once it passes the threshold in config
+pub const N_EFFECT: usize = 11;
 pub const EFFECT_NAMES: [&str; N_EFFECT] =
-    ["gather", "metabolism", "attack", "defense", "farm", "resist", "teach", "invent", "share", "soil"];
+    ["gather", "metabolism", "attack", "defense", "farm", "resist", "teach", "invent", "share", "soil", "sea"];
 
 pub const MAX_INNOVATIONS: usize = 64;
 
@@ -34,7 +35,9 @@ pub struct Innovation {
 
 impl Innovation {
     /// Generate a new innovation. `doing` biases which benefit appears; `tier` scales it.
-    pub fn generate(rng: &mut Rng, id: usize, tier: u8, doing: Action, settled: bool, sick: bool, tick: u64, lineage: u32) -> Innovation {
+    /// `coastal` discoverers (within a few cells of the sea) sometimes find ways onto the water instead.
+    #[allow(clippy::too_many_arguments)]
+    pub fn generate(rng: &mut Rng, id: usize, tier: u8, doing: Action, settled: bool, sick: bool, coastal: bool, tick: u64, lineage: u32) -> Innovation {
         let mut effects = [0.0f32; N_EFFECT];
         let scale = 0.15 * (tier as f32).powf(0.8);
         let magnitude = |rng: &mut Rng| scale * (0.7 + 0.6 * rng.f32());
@@ -49,7 +52,10 @@ impl Innovation {
             Action::Rest if sick => &[E_RESIST, E_RESIST, E_METABOLISM],
             Action::Rest => &[E_METABOLISM, E_DEFENSE, E_INVENT, E_RESIST],
         };
-        let primary = pool[rng.range(pool.len())];
+        let mut primary = pool[rng.range(pool.len())];
+        if coastal && rng.f32() < 0.35 {
+            primary = E_SEA;
+        }
         let m = magnitude(rng);
         // Metabolism and soil are costs, so a benefit there is a reduction.
         effects[primary] += if primary == E_METABOLISM || primary == E_SOIL { -m } else { m };
@@ -64,7 +70,7 @@ impl Innovation {
         // Every innovation has a price: it burns more energy, or it wears the land.
         let price = m * (0.4 + 0.6 * rng.f32());
         let land_biased = matches!(primary, E_GATHER | E_FARM);
-        let p_soil_price = if primary == E_SOIL { 0.0 } else if land_biased { 0.75 } else { 0.35 };
+        let p_soil_price = if primary == E_SOIL || primary == E_SEA { 0.0 } else if land_biased { 0.75 } else { 0.35 };
         if rng.f32() < p_soil_price {
             effects[E_SOIL] += price;
         } else {

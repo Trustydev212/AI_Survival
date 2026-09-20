@@ -191,6 +191,7 @@ const EV = {
   plague:       { icon: '☣', major: true, re: /plague: a sickness appears/, vi: () => 'Dịch bệnh bùng phát', en: () => 'A plague breaks out', sub: { vi: () => 'bệnh lây theo tiếp xúc, làng đông chịu nặng nhất', en: () => 'spreads by contact; crowded villages suffer most' } },
   plague_toll:  { icon: '☣', major: false, re: /plague toll: (\d+) dead of sickness, (\d+) infected/, vi: m => `Dịch: ${num(m[1])} chết, ${num(m[2])} nhiễm`, en: m => `Plague: ${num(m[1])} dead, ${num(m[2])} infected` },
   raids:        { icon: '🔥', major: false, re: /raids: (\d+) fields burned/, vi: m => `Cướp bóc: ${m[1]} ruộng bị đốt`, en: m => `Raids: ${m[1]} fields burned` },
+  first_sail:   { icon: '⛵', major: true, re: /first boat: lineage (\d+) sets out to sea at \((\d+), (\d+)\)/, vi: m => `Chuyến ra khơi đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} sets out to sea for the first time`, sub: { vi: () => 'thuyền là phát minh của họ, biển không còn là biên giới', en: () => 'boats are their invention; the sea is no longer a border' } },
   first_burn:   { icon: '🔥', major: true, re: /first fields burned/, vi: () => 'Ruộng bị đốt lần đầu', en: () => 'The first fields are burned', sub: { vi: () => 'kẻ cướp được trang bị tốt đã học cách đốt làng', en: () => 'well-armed raiders have learned to torch villages' } },
   drought:      { icon: '☀', major: false, re: /drought: rains fail for (\d+)/, vi: m => `Hạn hán: mưa ngừng ${m[1]} tick`, en: m => `Drought: rains fail for ${m[1]} ticks` },
   plenty:       { icon: '🌾', major: false, re: /plenty/, vi: () => 'Năm được mùa', en: () => 'A year of plenty' },
@@ -584,7 +585,7 @@ function charAnim(c, name) { return c.anims[name] || c.anims.idle; }
 // ---------- pixi scene
 const CH = 48;
 let app, world, waterTex = [], waterSprite, chunks = [], propLayer, bodies, shadows, fxLayer, labelLayer, storeLayer, tintOverlay, snowLayer, snowDots = [], cloudLayer, cloudShadowLayer, clouds = [], deathLayer, deaths = [], animLayer, animSprites = [];
-let atlas = {}, edges, crops, banners, crownTex, slashTex, bannerTex = [], propTex = {}, tileInfo, flowerTex = [], auto = {}, shadowTex, uiTex = {}, cropTex = {}, houseTex = [], cloudTex = [], animalTex = {}, windmillTex = [], fireTex = [], treeTex = {};
+let atlas = {}, edges, crops, banners, crownTex, slashTex, bannerTex = [], propTex = {}, tileInfo, flowerTex = [], auto = {}, shadowTex, uiTex = {}, cropTex = {}, houseTex = [], cloudTex = [], animalTex = {}, windmillTex = [], fireTex = [], treeTex = {}, boatTex = [], boats;
 function propTexture(name) { const S = ART.S, r = S.pm[name]; if (!r) return null; const fw = r.w / r.frames; return Array.from({ length: r.frames }, (_, f) => new PIXI.Texture(S.propsBase, new PIXI.Rectangle(r.x + f * fw, r.y, fw, r.h))); }
 function initPixi() {
   if (app) { app.destroy(true, { children: true }); state.sprites.clear(); }
@@ -621,7 +622,7 @@ function initPixi() {
     const S = ART.S;
     treeTex = { a: propTexture('tree_01'), b: propTexture('tree_02') };
     propTex.rock = propTexture('rock')[0]; propTex.mushroom = [propTexture('mushroom_red_01'), propTexture('mushroom_blue_01')];
-    shadowTex = propTexture('shadow')[0]; fireTex = propTexture('fire'); propTex.campfire = propTexture('campfire')[0]; propTex.glint = propTexture('glint');
+    shadowTex = propTexture('shadow')[0]; fireTex = propTexture('fire'); boatTex = propTexture('coracle') || []; propTex.campfire = propTexture('campfire')[0]; propTex.glint = propTexture('glint');
     propTex.crate = propTexture('crate_01')[0]; propTex.barrel = propTexture('barrel_closed')[0]; propTex.chest = propTexture('chest_closed')[0]; propTex.well = propTexture('well')[0];
     houseTex = ['house_green', 'house_red', 'house_green2', 'house_orange', 'house_purple', 'house_blue'].map(n => propTexture(n)).filter(Boolean).map(t => t[0]);
     cloudTex = []; for (let k = 0; k < 6; k++) { const t = propTexture('cloud_' + k); if (t) cloudTex.push(t[0]); }
@@ -637,12 +638,13 @@ function initPixi() {
     propTex.grass0 = PIXI.Texture.from(ART.img.grass0); propTex.grass1 = PIXI.Texture.from(ART.img.grass1);
     propTex.house = PIXI.Texture.from(ART.img.house); propTex.crate = PIXI.Texture.from(ART.img.crate); propTex.barrel = PIXI.Texture.from(ART.img.barrel);
     const fb = PIXI.BaseTexture.from(ART.img.flowers); flowerTex = []; for (let r = 0; r < 4; r++) for (let c = 0; c < 7; c++) flowerTex.push(new PIXI.Texture(fb, new PIXI.Rectangle(c * 8, r * 7, 8, 7)));
-    shadowTex = null;
+    shadowTex = null; boatTex = [];
   }
   propLayer = new PIXI.Container(); world.addChild(propLayer);
   storeLayer = new PIXI.Container(); world.addChild(storeLayer);
   animLayer = new PIXI.Container(); world.addChild(animLayer); animSprites = [];
   shadows = new PIXI.ParticleContainer(30000, { position: true, uvs: false, scale: true, alpha: true, tint: true }); world.addChild(shadows);
+  boats = new PIXI.ParticleContainer(5000, { position: true, uvs: true, scale: true }); world.addChild(boats);
   deathLayer = new PIXI.Container(); world.addChild(deathLayer); deaths = [];
   bodies = new PIXI.ParticleContainer(30000, { position: true, uvs: true, scale: true, alpha: true, tint: true }); world.addChild(bodies);
   fxLayer = new PIXI.Container(); world.addChild(fxLayer);
@@ -861,13 +863,18 @@ function draw(force) {
     const px = x * TILE + TILE / 2, py = y * TILE + TILE + bob;
     sp.body.position.set(px, py);
     sp.body.alpha = A.energy[i] < 15 ? 0.7 : 1;
-    if (sp.sh) { sp.sh.position.set(px, py - 2); sp.sh.scale.set(detail * 1.15, detail); sp.sh.tint = hexToInt(factionColor(lin)); }
+    const afloat = (A.flags[i] & 32) !== 0;
+    if (sp.sh) { sp.sh.position.set(px, py - 2); sp.sh.scale.set(detail * 1.15, detail); sp.sh.tint = hexToInt(factionColor(lin)); sp.sh.alpha = afloat ? 0 : 0.7; }
+    if (afloat && boatTex.length) {
+      if (!sp.boat) { sp.boat = new PIXI.Sprite(boatTex[0]); sp.boat.anchor.set(0.5, 0.55); boats.addChild(sp.boat); }
+      sp.boat.texture = boatTex[Math.floor(animClock * 4 + id) % boatTex.length]; sp.boat.position.set(px, py - 3); sp.boat.scale.set(0.6 * detail);
+    } else if (sp.boat) { boats.removeChild(sp.boat); sp.boat.destroy(); sp.boat = null; }
   }
   for (const [id, sp] of state.sprites) if (!alive.has(id)) {
     if (sunny && stepped && deaths.length < 300 && sp.lin !== undefined) {
       const C = getChar(sp.lin); const d = new PIXI.Sprite(C.anims.death[0]); d.anchor.set(C.ax, C.ay); d.scale.copyFrom(sp.body.scale); d.position.copyFrom(sp.body.position); deathLayer.addChild(d); deaths.push({ sp: d, frames: C.anims.death, t0: animClock });
     }
-    bodies.removeChild(sp.body); sp.body.destroy(); if (sp.sh) { shadows.removeChild(sp.sh); sp.sh.destroy(); } state.sprites.delete(id);
+    bodies.removeChild(sp.body); sp.body.destroy(); if (sp.sh) { shadows.removeChild(sp.sh); sp.sh.destroy(); } if (sp.boat) { boats.removeChild(sp.boat); sp.boat.destroy(); } state.sprites.delete(id);
   }
   if (force || state.lastPropsFrame !== idx) {
     state.lastPropsFrame = idx;
@@ -982,7 +989,7 @@ function renderEventList() {
   const box = $('events'); box.innerHTML = '';
   for (const [i, e] of state.events.entries()) {
     const d = describeEvent(e); const el = document.createElement('div');
-    el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
+    el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience','first_sail'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
     el.dataset.i = i; el.innerHTML = `<span class="ic">${d.icon}</span><span><span class="t">${e.tick}</span>${d.text.replace(/</g, '&lt;')}${d.sub ? ' <span style="color:var(--muted)">· ' + d.sub + '</span>' : ''}</span>`;
     if (e.x != null) el.onclick = () => { flyTo(e.x, e.y); state.follow = null; state.frame = frameAt(e.tick); state.sub = 0; syncButtons(); draw(true); };
     box.appendChild(el);
