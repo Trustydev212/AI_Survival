@@ -3,6 +3,7 @@
 
 use crate::agent::Agent;
 use crate::innovation::Innovation;
+use crate::orders::{Order, N_ORDER};
 use crate::stats::{Metrics, Window};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -18,6 +19,8 @@ pub struct EventLog {
     fired: HashSet<String>,
     lineage_peak: HashMap<u32, f32>,
     era: &'static str,
+    obey_peak: f32,
+    custom: [bool; N_ORDER],
     settled_peak: f32,
     known_peak: f32,
     writer: Option<std::io::BufWriter<std::fs::File>>,
@@ -32,6 +35,8 @@ impl EventLog {
             fired: HashSet::new(),
             lineage_peak: HashMap::new(),
             era: "wild",
+            obey_peak: 0.0,
+            custom: [false; N_ORDER],
             settled_peak: 0.0,
             known_peak: 0.0,
             writer,
@@ -141,6 +146,28 @@ impl EventLog {
             if c[crate::brain::Action::Share as usize] >= 0.2 {
                 self.fire(tick, "sharers", format!("a sharing culture emerged: {:.0}% of agents give food to kin over 20% of the time", share * 100.0));
             }
+        }
+
+        // Obedience: the moment leading starts to mean something, and what it is used for.
+        if m.obedience >= 0.5 {
+            self.fire(tick, "obedience", format!("the word of leaders now carries: {:.0}% of orders are obeyed", m.obedience * 100.0));
+        }
+        if m.obedience > self.obey_peak {
+            self.obey_peak = m.obedience;
+        }
+        for o in 0..N_ORDER {
+            if self.custom[o] || m.order_mix[o] < 0.5 || m.obedience < 0.4 {
+                continue;
+            }
+            self.custom[o] = true;
+            let what = match Order::ALL[o] {
+                Order::Hold => "a custom of staying: leaders call their people to hold their ground and they listen",
+                Order::Move => "a custom of migration: leaders call their people onward and they follow",
+                Order::Raid => "a custom of raiding: leaders call their people to war and they answer",
+                Order::Conserve => "a custom of restraint: leaders call their people off the land and they obey",
+                Order::Pool => "a custom of pooling: leaders call for food to be shared and it is",
+            };
+            self.fire(tick, "", format!("{} ({:.0}% of orders, {:.0}% obeyed)", what, m.order_mix[o] * 100.0, m.obedience * 100.0));
         }
 
         // Eras, collapses and forgetting.

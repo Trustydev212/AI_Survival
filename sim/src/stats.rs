@@ -2,6 +2,7 @@
 
 use crate::agent::{Agent, EMO_NAMES, N_EMO, N_SKILL, SKILL_NAMES};
 use crate::brain::{Action, N_ACT};
+use crate::orders::{Order, N_ORDER};
 use crate::strategy::{self, StrategyReport};
 use std::collections::HashMap;
 use std::io::Write;
@@ -32,6 +33,9 @@ pub struct Window {
     pub bounties: u32,
     pub imitations: u32,
     pub leader_deaths: u32,
+    pub orders: [u32; N_ORDER],
+    pub obeyed: u32,
+    pub defied: u32,
 }
 
 pub struct Metrics {
@@ -58,6 +62,11 @@ pub struct Metrics {
     pub skill: [f32; N_SKILL],
     pub leaders: usize,
     pub max_followers: u16,
+    /// Share of orders obeyed this window, and what leaders are calling for.
+    pub obedience: f32,
+    pub order_mix: [f32; N_ORDER],
+    /// Mean soil health of the regions agents actually live in.
+    pub lived_soil: f32,
     pub level: usize,
     pub era: &'static str,
     pub w: Window,
@@ -77,8 +86,8 @@ pub fn level_of(mean_known: f32, settled: f32) -> usize {
 
 #[allow(clippy::too_many_arguments)]
 pub fn compute(
-    tick: u64, season: f32, climate: f32, agents: &[Agent], food: f32, soil: f32, innovations: usize,
-    cultivated: usize, settled: f32, w: Window,
+    tick: u64, season: f32, climate: f32, agents: &[Agent], food: f32, soil: f32, lived_soil: f32,
+    innovations: usize, cultivated: usize, settled: f32, order_mix: [f32; N_ORDER], w: Window,
 ) -> Metrics {
     let pop = agents.len();
     let n = pop.max(1) as f32;
@@ -102,6 +111,8 @@ pub fn compute(
     for k in skill.iter_mut() {
         *k /= n;
     }
+    let under = (w.obeyed + w.defied).max(1) as f32;
+    let obedience = w.obeyed as f32 / under;
     let leaders = agents.iter().filter(|a| a.is_leader).count();
     let max_followers = agents.iter().map(|a| a.followers).max().unwrap_or(0);
 
@@ -180,6 +191,9 @@ pub fn compute(
         skill,
         leaders,
         max_followers,
+        obedience,
+        order_mix,
+        lived_soil,
         level,
         era: ERA_NAMES[level],
         w,
@@ -188,8 +202,10 @@ pub fn compute(
 
 pub fn print_header() {
     println!(
-        "{:>7} {:>4} {:>5} {:>6} {:>4} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:<8} {}",
-        "tick", "clim", "pop", "energy", "soil", "lin", "gini", "born", "starv", "kill", "plag", "attk", "share", "strat", "innov", "known", "field", "stay", "fear", "angr", "joy", "bond", "skil", "lead", "era", "dominant strategies"
+        "{:>7} {:>4} {:>5} {:>6} {:>4} {:>5} {:>4} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:>4} {:<9} {:<8} {}",
+        "tick", "clim", "pop", "energy", "soil", "lsoil", "lin", "gini", "born", "starv", "kill", "plag", "attk",
+        "share", "strat", "innov", "known", "field", "stay", "fear", "angr", "joy", "bond", "skil", "lead", "obey",
+        "order", "era", "dominant strategies"
     );
 }
 
@@ -203,62 +219,104 @@ pub fn print_row(m: &Metrics) {
         .map(|s| format!("[{:.0}% {}]", 100.0 * s.count as f32 / counted as f32, strategy::describe(&s.centroid)))
         .collect();
     println!(
-        "{:>7} {:>4.2} {:>5} {:>6.1} {:>4.2} {:>5} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5} {:>5.1} {:>5} {:>4.0} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4} {:<8} {}",
-        m.tick,
-        m.climate,
-        m.pop,
-        m.mean_energy,
-        m.soil,
-        m.lineages,
-        m.gini,
-        m.w.births,
-        m.w.starved,
-        m.w.killed,
-        m.w.plague_deaths,
-        m.w.attacks,
-        m.w.shares,
-        m.strat.effective,
-        m.innovations,
-        m.mean_known,
-        m.cultivated,
-        m.settled * 100.0,
-        m.emotion[0],
-        m.emotion[1],
-        m.emotion[2],
-        m.emotion[3],
-        (m.skill[0] + m.skill[1] + m.skill[2]) / 3.0,
-        m.leaders,
-        m.era,
+        "{:>7} {:>4.2} {:>5} {:>6.1} {:>4.2} {:>5.2} {:>4} {:>5.2} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5.1} {:>5} {:>5.1} {:>5} {:>4.0} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4.2} {:>4} {:>4.2} {:<9} {:<8} {}",
+        m.tick, m.climate, m.pop, m.mean_energy, m.soil, m.lived_soil, m.lineages, m.gini, m.w.births, m.w.starved,
+        m.w.killed, m.w.plague_deaths, m.w.attacks, m.w.shares, m.strat.effective, m.innovations, m.mean_known,
+        m.cultivated, m.settled * 100.0, m.emotion[0], m.emotion[1], m.emotion[2], m.emotion[3],
+        (m.skill[0] + m.skill[1] + m.skill[2]) / 3.0, m.leaders, m.obedience, dominant_order(&m.order_mix), m.era,
         strats.join(" ")
     );
 }
 
+/// The call most leaders are making, with its share, e.g. "hold 62%".
+pub fn dominant_order(mix: &[f32; N_ORDER]) -> String {
+    let mut best = 0;
+    for o in 1..N_ORDER {
+        if mix[o] > mix[best] {
+            best = o;
+        }
+    }
+    if mix[best] <= 0.0 {
+        return "-".to_string();
+    }
+    format!("{} {:.0}%", Order::ALL[best].name(), mix[best] * 100.0)
+}
+
 pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
-    let acts: Vec<&str> = Action::ALL.iter().map(|a| a.name()).collect();
-    let emos: Vec<String> = EMO_NAMES.iter().map(|e| format!("mean_{e}")).collect();
-    let skills: Vec<String> = SKILL_NAMES.iter().map(|e| format!("skill_{e}")).collect();
-    writeln!(
-        out,
-        "tick,season,climate,pop,mean_energy,mean_inventory,food,soil_health,lineages,top_lineage_share,gini,action_entropy,marker_spread,strategy_entropy,effective_strategies,births,starved,aged,killed,plague_deaths,attacks,attack_wins,shares,immigrants,innovations,mean_known,discoveries,learned,cultivated_cells,settled_share,sick_share,droughts,outbreaks,infections,windfalls,accidents,fields_burned,floods,wildfires,harsh_winters,bounties,imitations,leaders,max_followers,leader_deaths,level,era,{},{},{}",
-        emos.join(","),
-        skills.join(","),
-        acts.join(",")
-    )
+    let mut c: Vec<String> = [
+        "tick", "season", "climate", "pop", "mean_energy", "mean_inventory", "food", "soil_health", "lived_soil",
+        "obedience", "lineages", "top_lineage_share", "gini", "action_entropy", "marker_spread", "strategy_entropy",
+        "effective_strategies", "births", "starved", "aged", "killed", "plague_deaths", "attacks", "attack_wins",
+        "shares", "immigrants", "innovations", "mean_known", "discoveries", "learned", "cultivated_cells",
+        "settled_share", "sick_share", "droughts", "outbreaks", "infections", "windfalls", "accidents",
+        "fields_burned", "floods", "wildfires", "harsh_winters", "bounties", "imitations", "leaders",
+        "max_followers", "leader_deaths", "level",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    c.extend(EMO_NAMES.iter().map(|e| format!("mean_{e}")));
+    c.extend(SKILL_NAMES.iter().map(|e| format!("skill_{e}")));
+    c.extend(Order::ALL.iter().map(|o| format!("order_{}", o.name())));
+    c.extend(Action::ALL.iter().map(|a| a.name().to_string()));
+    c.push("era".to_string());
+    writeln!(out, "{}", c.join(","))
 }
 
 pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
-    let acts: Vec<String> = m.w.actions.iter().map(|c| c.to_string()).collect();
-    let emos: Vec<String> = m.emotion.iter().map(|e| format!("{e:.4}")).collect();
-    let skills: Vec<String> = m.skill.iter().map(|e| format!("{e:.4}")).collect();
-    writeln!(
-        out,
-        "{},{:.3},{:.2},{},{:.2},{:.2},{:.1},{:.4},{},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{:.4},{:.4},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
-        m.tick, m.season, m.climate, m.pop, m.mean_energy, m.mean_inv, m.food, m.soil, m.lineages, m.top_share, m.gini,
-        m.action_entropy, m.marker_spread, m.strat.entropy, m.strat.effective, m.w.births, m.w.starved, m.w.aged,
-        m.w.killed, m.w.plague_deaths, m.w.attacks, m.w.attack_wins, m.w.shares, m.w.immigrants, m.innovations,
-        m.mean_known, m.w.discoveries, m.w.learned, m.cultivated, m.settled, m.sick, m.w.droughts, m.w.outbreaks,
-        m.w.infections, m.w.windfalls, m.w.accidents, m.w.burned, m.w.floods, m.w.wildfires, m.w.harsh_winters,
-        m.w.bounties, m.w.imitations, m.leaders, m.max_followers, m.w.leader_deaths, m.level, m.era,
-        emos.join(","), skills.join(","), acts.join(",")
-    )
+    let mut f: Vec<String> = Vec::with_capacity(70);
+    let mut n = |v: f32| f.push(format!("{v:.4}"));
+    n(m.tick as f32);
+    n(m.season);
+    n(m.climate);
+    n(m.pop as f32);
+    n(m.mean_energy);
+    n(m.mean_inv);
+    n(m.food);
+    n(m.soil);
+    n(m.lived_soil);
+    n(m.obedience);
+    n(m.lineages as f32);
+    n(m.top_share);
+    n(m.gini);
+    n(m.action_entropy);
+    n(m.marker_spread);
+    n(m.strat.entropy);
+    n(m.strat.effective);
+    let w = &m.w;
+    for v in [
+        w.births, w.starved, w.aged, w.killed, w.plague_deaths, w.attacks, w.attack_wins, w.shares, w.immigrants,
+    ] {
+        n(v as f32);
+    }
+    n(m.innovations as f32);
+    n(m.mean_known);
+    n(w.discoveries as f32);
+    n(w.learned as f32);
+    n(m.cultivated as f32);
+    n(m.settled);
+    n(m.sick);
+    for v in [
+        w.droughts, w.outbreaks, w.infections, w.windfalls, w.accidents, w.burned, w.floods, w.wildfires,
+        w.harsh_winters, w.bounties, w.imitations,
+    ] {
+        n(v as f32);
+    }
+    n(m.leaders as f32);
+    n(m.max_followers as f32);
+    n(w.leader_deaths as f32);
+    n(m.level as f32);
+    for v in m.emotion {
+        n(v);
+    }
+    for v in m.skill {
+        n(v);
+    }
+    for v in m.order_mix {
+        n(v);
+    }
+    for v in w.actions {
+        n(v as f32);
+    }
+    writeln!(out, "{},{}", f.join(","), m.era)
 }

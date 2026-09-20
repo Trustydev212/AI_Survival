@@ -1,13 +1,18 @@
 //! A tiny recurrent MLP brain plus the genome that encodes it and the agent's temperament.
 //! Learning happens only through inheritance and mutation (neuroevolution).
 
+use crate::orders::{Order, N_ORDER};
 use crate::rng::Rng;
 
 pub const N_MEM: usize = 4;
-pub const N_IN: usize = 53;
+pub const N_IN: usize = 66;
 pub const N_HID: usize = 16;
 pub const N_ACT: usize = 5;
-pub const N_OUT: usize = 3 + N_ACT + N_MEM; // move_x, move_y, go/stay, action scores, memory
+// move_x, move_y, go/stay, action scores, memory, order scores, order direction
+pub const N_OUT: usize = 3 + N_ACT + N_MEM + N_ORDER + 2;
+const O_MEM: usize = 3 + N_ACT;
+const O_ORDER: usize = O_MEM + N_MEM;
+const O_ORDER_DIR: usize = O_ORDER + N_ORDER;
 pub const N_WEIGHTS: usize = N_IN * N_HID + N_HID + N_HID * N_OUT + N_OUT;
 pub const N_TEMPER: usize = 9; // 4 emotion decay genes, 4 emotion sensitivity genes, 1 charisma gene
 
@@ -103,9 +108,10 @@ impl Genome {
         1.0 - d / 1.732
     }
 
-    /// Forward pass. Returns (move_x, move_y, action, memory). Movement is zero when the
-    /// go/stay output is negative, so staying put is one sign flip away from roaming.
-    pub fn think(&self, input: &[f32; N_IN]) -> (f32, f32, Action, [f32; N_MEM]) {
+    /// Forward pass. Movement is zero when the go/stay output is negative, so staying
+    /// put is one sign flip away from roaming. Every brain also forms an order; it only
+    /// reaches anyone if this agent happens to be a leader.
+    pub fn think(&self, input: &[f32; N_IN]) -> Thought {
         let w = &self.weights;
         let mut hidden = [0.0f32; N_HID];
         let mut off = 0;
@@ -141,12 +147,24 @@ impl Genome {
         }
         let mut mem = [0.0f32; N_MEM];
         for m in 0..N_MEM {
-            mem[m] = fast_tanh(out[3 + N_ACT + m]);
+            mem[m] = fast_tanh(out[O_MEM + m]);
         }
+        let mut best_order = 0;
+        for o in 1..N_ORDER {
+            if out[O_ORDER + o] > out[O_ORDER + best_order] {
+                best_order = o;
+            }
+        }
+        let (odx, ody) = {
+            let (x, y) = (fast_tanh(out[O_ORDER_DIR]), fast_tanh(out[O_ORDER_DIR + 1]));
+            let len = (x * x + y * y).sqrt();
+            if len < 0.01 { (0.0, 0.0) } else { (x / len, y / len) }
+        };
+        let order = Order::ALL[best_order];
         if out[2] <= 0.0 {
-            return (0.0, 0.0, Action::ALL[best], mem);
+            return Thought { mx: 0.0, my: 0.0, action: Action::ALL[best], memory: mem, order, odx, ody };
         }
-        (fast_tanh(out[0]), fast_tanh(out[1]), Action::ALL[best], mem)
+        Thought { mx: fast_tanh(out[0]), my: fast_tanh(out[1]), action: Action::ALL[best], memory: mem, order, odx, ody }
     }
 }
 
@@ -160,4 +178,15 @@ fn fast_tanh(x: f32) -> f32 {
     let x = x.clamp(-4.5, 4.5);
     let x2 = x * x;
     x * (27.0 + x2) / (27.0 + 9.0 * x2)
+}
+
+/// One tick of a brain's output.
+pub struct Thought {
+    pub mx: f32,
+    pub my: f32,
+    pub action: Action,
+    pub memory: [f32; N_MEM],
+    pub order: Order,
+    pub odx: f32,
+    pub ody: f32,
 }

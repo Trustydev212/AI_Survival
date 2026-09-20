@@ -1,5 +1,6 @@
 use crate::brain::{Action, Genome, N_ACT, N_MEM};
 use crate::innovation::N_EFFECT;
+use crate::orders::Order;
 
 /// Behaviour profile dimensions: the five action frequencies plus mobility.
 pub const N_PROFILE: usize = N_ACT + 1;
@@ -88,6 +89,13 @@ pub struct Agent {
     pub tenure: u16,
     /// 0 = never led; otherwise the id its name is derived from.
     pub name: u32,
+    /// The order this agent is currently giving. Only reaches anyone while it leads.
+    pub order: Order,
+    pub order_dx: f32,
+    pub order_dy: f32,
+    /// The order this agent was under when it last acted, and whether it obeyed.
+    pub under: Option<Order>,
+    pub obeyed: bool,
 }
 
 impl Agent {
@@ -134,4 +142,12 @@ pub struct Decision {
     pub target: u32, // nearest agent index at decision time, u32::MAX if none
     pub memory: [f32; N_MEM],
     pub leader: u32,
+    /// The order this agent issues this tick.
+    pub order: Order,
+    pub odx: f32,
+    pub ody: f32,
+    /// The order it was under while deciding, and that order's direction.
+    pub under: Option<Order>,
+    pub under_dx: f32,
+    pub under_dy: f32,
 }

@@ -91,6 +91,18 @@ pub struct Config {
     pub leader_min_followers: u16,
     pub leader_min_prestige: f32,
     pub prestige_decay: f32,
+    pub defiance_cost: f32,
+    pub raid_bonus: f32,
+    pub hold_bonus: f32,
+    pub pool_bonus: f32,
+    pub march_saving: f32,
+    pub conserve_saving: f32,
+    /// Control switch: leaders still form, but no order ever reaches anyone.
+    pub no_orders: bool,
+
+    // perception
+    pub region_side: usize,
+    pub region_refresh: u64,
 }
 
 impl Default for Config {
@@ -175,6 +187,16 @@ impl Default for Config {
             leader_min_followers: 5,
             leader_min_prestige: 5.0,
             prestige_decay: 0.999,
+            defiance_cost: 0.002,
+            raid_bonus: 12.0,
+            hold_bonus: 1.5,
+            pool_bonus: 1.5,
+            march_saving: 0.3,
+            conserve_saving: 0.5,
+            no_orders: false,
+
+            region_side: 12,
+            region_refresh: 50,
         }
     }
 }
@@ -190,6 +212,11 @@ impl Config {
             }
             if key == "--quiet" {
                 c.quiet = true;
+                i += 1;
+                continue;
+            }
+            if key == "--no-orders" {
+                c.no_orders = true;
                 i += 1;
                 continue;
             }
@@ -251,6 +278,12 @@ impl Config {
                 "--p-imitate" => set!(p_imitate),
                 "--skill-gain" => set!(skill_gain),
                 "--leader-min-followers" => set!(leader_min_followers),
+                "--raid-bonus" => set!(raid_bonus),
+                "--hold-bonus" => set!(hold_bonus),
+                "--march-saving" => set!(march_saving),
+                "--conserve-saving" => set!(conserve_saving),
+                "--region-side" => set!(region_side),
+                "--region-refresh" => set!(region_refresh),
                 _ => return Err(format!("unknown flag {key}\n{HELP}")),
             }
             i += 2;
@@ -295,4 +328,9 @@ USAGE: sim [--flag value ...]
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
   --skill-gain F    skill gained per practice (0.002)
   --leader-min-followers N   kin needed to count as a leader (5)
+  --raid-bonus F --hold-bonus F --march-saving F --conserve-saving F
+                    what obeying each kind of order is worth (12 / 1.5 / 0.3 / 0.5)
+  --no-orders       control run: leaders still form but their orders reach no one
+  --region-side N   world cells per side of a perception region (12)
+  --region-refresh N   ticks between coarse-map refreshes (50)
 ";

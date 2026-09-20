@@ -21,9 +21,9 @@ cargo build --release
 ./target/release/sim --help
 ```
 
-Một run kết thúc sớm nếu tuyệt chủng. Kết cục được phân loại: `extinct`, `collapsed` (dân số trung bình
-năm cuối dưới một phần tư năm tốt nhất), `fallen` (tụt thời đại), `surviving`, `flourishing`, hoặc
-`flourishing on dying land` (thịnh vượng nhưng đất đã cạn quá nửa).
+Một run kết thúc sớm nếu tuyệt chủng. Kết cục được phân loại: `extinct`, `collapsed` (dân số cuối dưới
+một phần tư giai đoạn tốt nhất), `boom and bust` (dao động trên bốn lần ở cuối run), `fallen` (tụt thời đại),
+`surviving`, `flourishing`, và biến thể `on dying land` khi đất đã cạn quá nửa.
 
 1000 agent, 20.000 tick chạy khoảng 25 giây trên một nhân CPU (khoảng 800 tick/giây,
 lúc cao điểm hơn 3000 agent). Không phụ thuộc crate ngoài.
@@ -94,6 +94,33 @@ dễ phát minh, gắn bó làm chia sẻ và dạy học nhiều hơn. Người
 hạn hán, năm được mùa, mùa đông khắc nghiệt, dịch bệnh, lũ lụt, cháy rừng, vùng trù phú.
 Dịch bệnh lây theo tiếp xúc, ăn nặng nhất ở làng đông người, miễn dịch sau khi khỏi rồi phai dần.
 
+## Nhìn xa hơn ô đang đứng
+
+Agent chỉ thấy ô dưới chân thì không thể phân biệt một mảnh đất mệt với một vùng đang chết, nên không
+bao giờ rời đi kịp. Vì vậy thế giới có thêm **bản đồ vùng**: chia bản đồ thành ô vuông 12x12, mỗi 50 tick
+tính lại độ khoẻ đất, lượng thức ăn và mật độ dân của từng vùng, rồi tính hướng tới vùng hứa hẹn nhất
+trong 8 vùng lân cận. Não nhận sáu input: đất vùng này, thức ăn vùng này, mật độ vùng này, hướng x,
+hướng y tới vùng tốt hơn, và mức chênh lệch. Chi phí gần như bằng không vì tính một lần cho cả thế giới.
+
+## Mệnh lệnh của thủ lĩnh
+
+Mỗi bộ não đều sinh ra một mệnh lệnh mỗi tick, nhưng nó chỉ tới tai ai đó nếu người này đang là thủ lĩnh.
+Mệnh lệnh tới người theo chậm một tick, đúng như tin tức cần thời gian lan.
+
+| Mệnh lệnh | Coi là tuân lệnh khi | Phần thưởng khi tuân |
+|---|---|---|
+| hold | đứng yên | chăm ruộng hiệu quả gấp 1,5 |
+| move | đi cùng hướng được chỉ | chi phí di chuyển giảm 30% |
+| raid | hành động là tấn công | sức đánh cộng thêm 12 |
+| conserve | không hái lượm | nếu nghỉ thì tiêu hao giảm một nửa |
+| pool | hành động là chia sẻ | cho đi nhiều hơn 1,5 lần |
+
+**Không ai bị ép tuân lệnh.** Cùng một bộ não vừa chọn hành động vừa quyết định có theo lệnh hay không,
+và nó nhìn thấy lệnh đó dưới dạng input. Tuân lệnh làm tăng gắn bó, cãi lệnh làm giảm gắn bó và làm
+thủ lĩnh mất uy tín. Vì vậy thủ lĩnh ra lệnh sai sẽ mất người theo. Tỉ lệ tuân lệnh của cả xã hội là một
+chỉ số được đo, và khi một loại lệnh chiếm quá nửa với tỉ lệ tuân trên 40% thì sử ký ghi nhận một **tập quán**
+đã hình thành, ví dụ "tập quán ở lại" hay "tập quán kiềm chế".
+
 ## Học tập, rèn luyện, lãnh đạo
 
 **Kỹ năng**: hái lượm, chiến đấu, canh tác tăng theo số lần làm, và học lỏm được từ họ hàng giỏi hơn
@@ -102,7 +129,7 @@ Dịch bệnh lây theo tiếp xúc, ăn nặng nhất ở làng đông người
 **Bắt chước**: gặp họ hàng giàu gấp rưỡi mình, não có xác suất nhỏ pha 10% trọng số về phía họ.
 Gặp thủ lĩnh thì xác suất gấp ba. Đây là học trong đời, tắt bằng `--p-imitate 0` để so sánh.
 
-**Thủ lĩnh**: uy tín tích luỹ từ con cái, phát minh, thắng trận, chia sẻ, và phai dần. Sức hút là gen.
+**Thủ lĩnh**: uy tín tích luỹ từ con cái, phát minh, thắng trận, chia sẻ, và phai dần khi bị cãi lệnh. Sức hút là gen.
 Mỗi agent theo họ hàng có uy tín nhân sức hút cao nhất trong tầm nhìn, và chỉ đổi thủ lĩnh khi có người
 hơn hẳn 25%. Ai có từ 5 người theo là thủ lĩnh; giữ được 200 tick liên tục thì được đặt tên.
 Thủ lĩnh dạy nhanh gấp đôi, người theo đánh mạnh hơn khi thủ lĩnh vừa ra trận, và cảm xúc lan từ
@@ -230,7 +257,7 @@ sim/src/
 ## Bước tiếp theo
 
 1. Bỏ trần dân số cứng 4.000 để sức chứa hoàn toàn do đất quyết định. Cần tối ưu tốc độ trước.
-2. Não nhìn được xa hơn: trạng thái đất quanh vùng, không chỉ ô đang đứng, để có thể chọn di cư trước khi đất chết.
-3. Thủ lĩnh ra quyết định tập thể: ra lệnh di cư, chiến tranh, cấm hái ở vùng cạn.
-4. Tập quán lan truyền như meme, độc lập với phát minh, ví dụ "không hái ở đất dưới 30%".
+2. Dao động bùng-vỡ đang là kết cục phổ biến. Cần xem xã hội có tiến hoá ra cách tự hãm sinh sản không.
+3. Tập quán lan truyền như meme, độc lập với phát minh và với thủ lĩnh đang sống.
+4. Xung đột giữa các thủ lĩnh: tranh giành người theo, liên minh, chia tách.
 5. Lớp hiển thị bằng Godot 4 đọc trạng thái từ lõi này, camera bám sử ký và thủ lĩnh.

@@ -5,6 +5,8 @@ use crate::brain::{Action, Genome, N_IN, N_MEM};
 use crate::config::Config;
 use crate::events::EventLog;
 use crate::innovation::*;
+use crate::orders::{Order, N_ORDER};
+use crate::region::RegionGrid;
 use crate::rng::Rng;
 use crate::spatial::SpatialHash;
 use crate::stats::Window;
@@ -23,6 +25,8 @@ pub struct Sim {
     pub innovations: Vec<Innovation>,
     /// Hall of fame: name id -> (peak followers, lineage, tick of peak).
     pub hall: std::collections::HashMap<u32, (u16, u32, u64)>,
+    /// Coarse view of the land, so brains can see beyond the cell they stand on.
+    pub regions: RegionGrid,
     spatial: SpatialHash,
     followers: Vec<u16>,
     learned: Vec<(u32, u64)>,
@@ -42,9 +46,11 @@ impl Sim {
             cfg.soil_drain, cfg.soil_recovery, &mut rng,
         );
         let spatial = SpatialHash::new(cfg.width as f32, cfg.height as f32, cfg.vision, cfg.wrap);
+        let regions = RegionGrid::new(&world, cfg.region_side);
         let mut sim = Sim {
             rng,
             world,
+            regions,
             agents: Vec::with_capacity(cfg.max_agents),
             tick: 0,
             window: Window::default(),
@@ -163,6 +169,11 @@ impl Sim {
             is_leader: false,
             tenure: 0,
             name: 0,
+            order: Order::Hold,
+            order_dx: 0.0,
+            order_dy: 0.0,
+            under: None,
+            obeyed: false,
         }
     }
 
@@ -170,6 +181,9 @@ impl Sim {
         self.weather();
         let season = self.world.season(self.tick);
         self.world.regrow(season);
+        if self.tick % self.cfg.region_refresh == 0 {
+            self.regions.refresh(&self.world, &self.agents, self.cfg.wrap);
+        }
         self.spatial.rebuild(self.agents.iter().map(|a| (a.x, a.y)));
         self.sense_and_think(season);
         self.act();
@@ -401,14 +415,52 @@ impl Sim {
             input[50] = a.skill[SK_FIGHT];
             input[51] = a.skill[SK_FARM];
             input[52] = (a.followers as f32 / 10.0).min(2.0);
-
-            let (mut mx, mut my, action, memory) = a.genome.think(&input);
-            // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
-            if mx * mx + my * my < 0.09 {
-                mx = 0.0;
-                my = 0.0;
+            // The land beyond arm's reach: is this region tired, is anywhere better?
+            let r = self.regions.index(a.x, a.y);
+            input[53] = self.regions.soil[r];
+            input[54] = self.regions.food[r];
+            input[55] = self.regions.crowd[r];
+            input[56] = self.regions.best_dx[r];
+            input[57] = self.regions.best_dy[r];
+            input[58] = self.regions.best_gain[r];
+            // What I have been told to do, by my leader or, if I lead, by myself.
+            // An order only carries from someone the group already recognises as a leader.
+            let (under, under_dx, under_dy) = if cfg.no_orders {
+                (None, 0.0, 0.0)
+            } else if leader != NO_LEADER && agents[leader as usize].is_leader {
+                let l = &agents[leader as usize];
+                (Some(l.order), l.order_dx, l.order_dy)
+            } else if a.is_leader {
+                (Some(a.order), a.order_dx, a.order_dy)
+            } else {
+                (None, 0.0, 0.0)
+            };
+            if let Some(o) = under {
+                input[59 + o as usize] = 1.0;
+                input[64] = under_dx;
+                input[65] = under_dy;
             }
-            self.decisions.push(Decision { mx, my, action, target: nearest, memory, leader });
+
+            let mut t = a.genome.think(&input);
+            // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
+            if t.mx * t.mx + t.my * t.my < 0.09 {
+                t.mx = 0.0;
+                t.my = 0.0;
+            }
+            self.decisions.push(Decision {
+                mx: t.mx,
+                my: t.my,
+                action: t.action,
+                target: nearest,
+                memory: t.memory,
+                leader,
+                order: t.order,
+                odx: t.odx,
+                ody: t.ody,
+                under,
+                under_dx,
+                under_dy,
+            });
         }
     }
 
@@ -468,14 +520,46 @@ impl Sim {
         for i in 0..n {
             let d = self.decisions[i];
             self.window.actions[d.action as usize] += 1;
+            // Obedience is a choice, made by the same brain that chose the action.
+            let obeyed = match d.under {
+                Some(o) => o.obeyed(d.action, d.mx, d.my, d.under_dx, d.under_dy),
+                None => false,
+            };
+            if let Some(o) = d.under {
+                self.window.orders[o as usize] += 1;
+                if obeyed {
+                    self.window.obeyed += 1;
+                } else {
+                    self.window.defied += 1;
+                }
+            }
             {
                 let a = &mut self.agents[i];
                 a.last_action = d.action;
                 a.memory = d.memory;
+                a.order = d.order;
+                a.order_dx = d.odx;
+                a.order_dy = d.ody;
+                a.under = d.under;
+                a.obeyed = obeyed;
                 a.record(d.action, (d.mx * d.mx + d.my * d.my).sqrt());
+                // Acting together binds people; defying a leader loosens the tie.
+                if d.under.is_some() {
+                    if obeyed {
+                        a.feel(BOND, 0.02);
+                    } else {
+                        a.feel(BOND, -0.03);
+                    }
+                }
+            }
+            // A leader whose people ignore it loses standing.
+            if !obeyed && d.leader != NO_LEADER {
+                if let Some(l) = self.agents.get_mut(d.leader as usize) {
+                    l.prestige -= self.cfg.defiance_cost;
+                }
             }
 
-            // Movement (costed in metabolise).
+            // Movement (costed in metabolise). Marching together is cheaper than wandering.
             {
                 let a = &self.agents[i];
                 let nx = self.place(a.x + d.mx * self.cfg.speed, self.cfg.width);
@@ -534,6 +618,10 @@ impl Sim {
                 }
                 Action::Rest => {
                     self.tend_if_settled(i);
+                    // Rationing under a conserve order: organised idleness costs less.
+                    if obeyed && d.under == Some(Order::Conserve) {
+                        self.agents[i].energy += self.cfg.base_cost * self.cfg.conserve_saving;
+                    }
                 }
             }
 
@@ -550,7 +638,9 @@ impl Sim {
         let cfg = &self.cfg;
         let a = &mut self.agents[i];
         if a.still >= cfg.settle_ticks {
-            let gain = cfg.cult_gain * (1.0 + a.caps[E_FARM]).max(0.0) * (1.0 + a.skill[SK_FARM]);
+            // People holding a place together work it better than each alone.
+            let together = if a.obeyed && a.under == Some(Order::Hold) { cfg.hold_bonus } else { 1.0 };
+            let gain = cfg.cult_gain * together * (1.0 + a.caps[E_FARM]).max(0.0) * (1.0 + a.skill[SK_FARM]);
             a.train(SK_FARM, cfg.skill_gain);
             let (ax, ay) = (a.x, a.y);
             if !a.has_home {
@@ -568,13 +658,9 @@ impl Sim {
         if defending && a.still >= self.cfg.settle_ticks {
             s += 30.0 * a.caps[E_DEFENSE];
         }
-        // Fighting beside a leader who just charged: coordinated assault.
-        if !defending && a.leader != NO_LEADER {
-            if let Some(l) = self.agents.get(a.leader as usize) {
-                if l.last_action == Action::Attack {
-                    s += 10.0;
-                }
-            }
+        // A raid called and answered: everyone striking on the same word hits harder.
+        if !defending && a.obeyed && a.under == Some(Order::Raid) {
+            s += self.cfg.raid_bonus;
         }
         s + 15.0 * a.emotion[ANGER] - 15.0 * a.emotion[FEAR]
     }
@@ -658,7 +744,8 @@ impl Sim {
             return;
         }
         let g = &self.agents[i];
-        let amount = cfg.share_amount * (1.0 + g.emotion[BOND]) * (1.0 + g.caps[E_SHARE]).max(0.2);
+        let pooled = if g.obeyed && g.under == Some(Order::Pool) { cfg.pool_bonus } else { 1.0 };
+        let amount = cfg.share_amount * pooled * (1.0 + g.emotion[BOND]) * (1.0 + g.caps[E_SHARE]).max(0.2);
         let give = g.inventory.min(amount);
         if give <= 0.0 {
             return;
@@ -800,7 +887,11 @@ impl Sim {
             } else {
                 (0.0, false) // newborns this tick
             };
-            let mut cost = cfg.base_cost + cfg.move_cost * moved;
+            let mut move_cost = cfg.move_cost;
+            if a.obeyed && a.under == Some(Order::Move) {
+                move_cost *= 1.0 - cfg.march_saving;
+            }
+            let mut cost = cfg.base_cost + move_cost * moved;
             if resting {
                 cost *= cfg.rest_factor;
             }
@@ -927,6 +1018,24 @@ impl Sim {
         a.prestige += 2.0;
         self.window.discoveries += 1;
         self.events.fire(self.tick, "", text);
+    }
+
+    /// What the leaders of this world are currently calling for, weighted by following.
+    pub fn order_mix(&self) -> [f32; N_ORDER] {
+        let mut mix = [0.0f32; N_ORDER];
+        let mut total = 0.0;
+        for a in &self.agents {
+            if a.is_leader {
+                mix[a.order as usize] += a.followers as f32;
+                total += a.followers as f32;
+            }
+        }
+        if total > 0.0 {
+            for m in mix.iter_mut() {
+                *m /= total;
+            }
+        }
+        mix
     }
 
     pub fn settled_share(&self) -> f32 {
