@@ -92,20 +92,27 @@ bùng nổ dân số mà không có kỹ thuật.
 
 **Độ tin.** Gợi ý. Cần thí nghiệm tách "đông" khỏi "biết": `tools/lab.py run population`.
 
-### 8. Học trong đời làm ra người dùng đồ vật
+### 8. Học trong đời chưa chứng minh được là có ích (kết quả đầu không lặp lại)
 
-**Phát biểu.** Bật học trong đời (phần dẻo Hebb có điều biến bởi phần thưởng) không đổi rõ kết cục hay dân số
-với 8 thế giới, nhưng làm số đồ vật mỗi đầu người tăng gấp đôi và nhiều người cầm đồ hơn. Học nhanh gấp ba
-không tốt hơn học vừa.
+**Phát biểu.** Bật học trong đời (phần dẻo Hebb có điều biến bởi phần thưởng) không đổi kết cục, dân số,
+kiến thức hay đồ vật một cách đo được. Đợt đầu (8 thế giới, mặc định cũ chỉ họ hàng nghe) thấy đồ vật mỗi
+đầu người tăng gấp đôi; đợt hai (16 thế giới, mặc định cuối nghe cả người lạ) không thấy lại. Học nhanh gấp
+ba không tốt hơn, có phần kém hơn.
 
 **Bằng chứng.** `tools/lab.py run learning --seeds 1-8` (docs/lab/learning.md): đồ vật mỗi đầu người 0,39
 có học so với 0,21 không học, hiệu số +0,33 với khoảng tin cậy 95% [+0,01, +0,70]; tỉ lệ người có đồ 18%
 so với 13%, hiệu số +0,15 với KTC [+0,00, +0,31]. Dân số, kiến thức, đất, kết cục: khoảng tin cậy còn chứa 0.
 Học nhanh gấp ba: đồ vật mỗi đầu người 0,19, tức là không hơn không học.
 
-**Độ tin.** Có bằng chứng cho đồ vật; chưa rõ cho phần còn lại. Cách đọc: học theo phần thưởng dạy được
-một việc cụ thể trong đời (chế tác rồi dùng thứ mình làm ra), nhưng không dạy được chiến lược sống, thứ vẫn
-thuộc về tiến hoá.
+**Lặp lại trên mặc định cuối**, 16 seed (docs/lab/learning.md bản mới): kết cục tốt 9/16 có học, 8/16 không
+học, 6/16 học nhanh; đồ vật mỗi đầu người 0,47 so với 0,53 so với 0,34; kiến thức mỗi đầu 36,7 so với 62,5
+so với 52,6; định cư 68% so với 89% so với 84%. Chỉ số duy nhất khác 0 là chính độ dẻo não (thứ được bật
+tắt). Không học lại biết nhiều hơn và ở yên hơn, tuy khoảng tin cậy còn chứa 0.
+
+**Độ tin.** Kết quả đầu không lặp lại; coi như chưa có bằng chứng. Cách đọc: khi người lạ nghe được nhau
+(mặc định cuối), phần lớn cái mà học trong đời từng đem lại đã đến qua kênh nghe; học theo phần thưởng chỉ
+dạy được việc cụ thể trong đời, và ngay việc đó cũng có đường khác. Tiến hoá vẫn giữ tốc độ học thấp
+(`learn_rate` trung vị 2 đến 3 phần nghìn ở mọi nhánh): não mềm không được chọn lọc ưu ái.
 
 ### 9. Nghe người lạ đáng giá hơn nghe họ hàng
 
@@ -198,9 +205,10 @@ lại như một cờ thí nghiệm.
    Sự kiện "tiếng gọi bắt đầu có nghĩa" nay đòi cả hai từ 0,2 bit. Trong một thế giới thử (seed 3, 3.000
    tick), nội dung tăng dần từ 0 lên 0,09 bit khi dân số lên 2.000, trong khi hiểu đứng ở 0,08: tiếng gọi
    bắt đầu phản ánh người nói trước khi ai đó dùng được nó.
-2. **Học trong đời học được gì?** Đã biết nó làm ra người dùng đồ vật (mục 8). Chưa biết tiến hoá đẩy tốc độ
-   học đi đâu: `plastic` trung vị 0,01 với học mặc định, tức là đa số não học chậm. Câu hỏi: có dòng họ nào
-   tiến hoá ra não mềm hẳn không, và họ sống ra sao?
+2. **Học trong đời học được gì?** Chưa đo được gì bền (mục 8): lợi ích ở đợt đầu biến mất khi người lạ nghe
+   được nhau. Tiến hoá không đẩy tốc độ học lên: `plastic` trung vị 0,01, `learn_rate` 2 đến 3 phần nghìn.
+   Câu hỏi còn lại: có việc nào trong thế giới này mà chỉ học trong đời mới làm nổi, còn tiến hoá và nghe thì
+   không? Nếu không có, học là chi phí thuần.
 3. **Phân công lao động có nổi lên không?** Có người chỉ chế tác, người chỉ hái không? Từ giờ có chỉ số
    `division_of_labour` (0 đến 1): thông tin tương hỗ giữa *ai* và *làm gì*, chia cho entropy của việc làm,
    tính trên hồ sơ hành động có quên dần của từng người (Gorelick và cộng sự). 0 là mọi người sống cùng một
