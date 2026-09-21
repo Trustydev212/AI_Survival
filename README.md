@@ -553,6 +553,7 @@ Trên mặc định cuối cùng (nghe cả người lạ, không bầy thú), h
 
 | Thí nghiệm | Kết quả | Báo cáo |
 |---|---|---|
+| cách não học (5 nhánh) | bước học dài giết 10/16 thế giới; cùng cách học với bước ngắn hơn mười lần thì ngang luật cũ (9/16) và biết gần gấp đôi. Nhánh chọn việc ngẫu nhiên mà không học cho kiến thức cao nhất, 74,1 so với 36,4, KTC không chứa 0 | docs/lab/brains.md |
 | trần phát minh (128 so với 512) | thế giới cũ chạm trần 128 ở tick 6.500 rồi ngừng phát minh vĩnh viễn dù vẫn sống. Gỡ trần: 243 phát minh ở tick 20.000 và vẫn lên, kiến thức mỗi người 118 lên 135, đất tốt hơn | docs/THEORY.md mục 14 |
 | mệnh lệnh và tập quán, lặp lại | **đảo chiều**: không mệnh lệnh cho 12/16 kết cục tốt so với 9/16, kiến thức 54,7 so với 36,7, bùng-vỡ 2,94 so với 3,39. Phát biểu "thủ lĩnh là cái phanh" phải rút lại | docs/lab/customs.md |
 | chế tác, lặp lại | lặp lại và mạnh hơn: phát minh −62,8 và kiến thức −35,2 khi tắt chế tác (KTC không chứa 0), nhưng dân số đỉnh 4.516 so với 3.624, đất khoẻ hơn, định cư 93% so với 68%. Chế tác mua tri thức bằng dân số và bằng đất | docs/lab/crafting.md |

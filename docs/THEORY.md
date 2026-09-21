@@ -224,33 +224,39 @@ Giả thuyết "có việc cần phối hợp thì tiếng gọi có nghĩa" **c
 không phạt nặng người thử, hoặc cần thời gian dài hơn nhiều. Vì kết quả này, bầy thú tắt mặc định và giữ
 lại như một cờ thí nghiệm.
 
-### 13. Cái đầu học từ hậu quả của chính mình thì hiệu quả và hết tò mò
+### 13. Bước học dài giết thế giới, việc học thì không
 
-**Phát biểu.** Thay luật Hebb bằng actor-critic có vết đủ điều kiện làm kiến thức mỗi người rơi
-khoảng bốn lần, trong khi vẫn sống được. Thủ phạm không phải sự ngẫu nhiên của chính sách, mà là
-chính việc học.
+**Phát biểu.** Thay luật Hebb bằng actor-critic có vết đủ điều kiện **không** làm xã hội kém đi, miễn là
+bước học đủ ngắn. Ở bước 0,1 thì 10 trên 16 thế giới tuyệt chủng; ở bước 0,01, cùng một cách học ấy ngang
+bằng luật cũ về kết cục và biết gần gấp đôi. Phát biểu trước của tôi, rằng cái đầu học từ hậu quả thì hết
+tò mò, **sai**: nó là hiện tượng của một tham số đặt sai, không phải của việc học.
 
-**Bằng chứng.** Một thế giới (seed 3, 3.000 tick), cùng bản đồ, bốn cách học: Hebb cho dân số 2.125
-và kiến thức 47,3; chỉ chọn việc theo xác suất mà **không học gì** cho 2.826 và 43,3; bật học
-gradient cho 1.436 và 10,1; thêm kênh truyền lại cái đã học cho 1.226 và 5,1. Nhánh không học là
-nhánh quyết định: nó chứng minh việc rút thăm hành động không hề có hại, nên phần kiến thức mất đi
-là do học. Nới tầm nhìn của nhà phê bình từ 20 tick lên 100 tick không cứu được (kiến thức 7,7);
-chỉ liều hơn mới kéo lại số đồ vật mỗi người (2,3) chứ không kéo lại kiến thức.
+**Bằng chứng.** `tools/lab.py run brains --seeds 1-16` trên thế giới v5 (docs/lab/brains.md):
 
-**Cách đọc.** Phần thưởng của thế giới này là của cải và tâm trạng tăng **ngay trong tick đó**. Chế
-tác tốn ngay và trả công muộn, rải rác. Một cái đầu học từ hậu quả trước mắt học được rằng chế tác
-là việc dở, và bỏ. Cái gì không được trả công thì không được học, dù nhìn xa đến đâu.
+| nhánh | kết cục tốt | tuyệt chủng | phát minh | kiến thức mỗi người | dân đỉnh |
+|---|---|---|---|---|---|
+| Hebb (mặc định) | 9/16 | 2 | 145 | 36,4 | 2.648 |
+| chỉ lấy mẫu, không học | 6/16 | 1 | 153 | **74,1** | **4.468** |
+| gradient, bước 0,1 | 3/16 | **10** | 17,5 | 0 | 1.000 |
+| gradient + truyền nghề | 7/16 | 5 | 63 | 30,6 | 1.310 |
+| gradient, bước 0,01 | **9/16** | 1 | **154** | 64,2 | 3.508 |
 
-**Độ tin.** Mới một thế giới, chưa chạy 16 seed; coi là dấu hiệu mạnh chứ chưa phải bằng chứng.
-Một điều phải nói rõ: trong nhánh gradient chỉ các đầu ra hành động học trong đời, còn trí nhớ,
-mệnh lệnh và tín hiệu thì không, nên mọi so sánh về ngôn ngữ giữa hai nhánh là không công bằng.
+Nhánh bước 0,1 kém hơn mặc định ở tám chỉ số với khoảng tin cậy không chứa 0. Nhánh bước 0,01 chỉ khác
+mặc định đúng ở độ dẻo não, tức là ở chính thứ được bật, và không khác ở bất kỳ chỉ số kết cục nào.
 
-**Bài học kỹ thuật, ghi lại vì nó tốn nhiều lần chạy.** Bản đầu cập nhật trọng số theo đúng công
-thức sách vở và giết sạch mọi thế giới: dân số 1.000 xuống 62, phân công lao động vọt lên 0,98,
-tức mỗi người khoá cứng vào một hành động rồi chết. Nguyên nhân là vết tích luỹ dài gấp khoảng bảy
-lần một bước đơn lẻ, khiến nhà phê bình dao động và bơm nhiễu vào bộ chọn việc. Sửa bằng cách chuẩn
-hoá cả hai bước theo độ lớn của chính cái vết. Sau đó sai số dự báo xuống 0,08 và không còn sụp
-trên cả dải rộng. Chi tiết trong docs/HOC-MAY.md.
+**Kết quả sạch nhất lại nằm ở nhánh đối chứng.** Chọn việc theo xác suất mà **không học gì cả** cho kiến
+thức mỗi người 74,1 so với 36,4 của mặc định, hiệu số +31,0 với khoảng tin cậy [+0,7, +60,8], tức là khác
+0. Đổi lại kết cục tốt chỉ 6/16 so với 9/16. Đọc thẳng: **một chút ngẫu nhiên trong hành động mua được
+tri thức bằng sự ổn định**. Ai cũng làm đúng việc tối ưu thì không ai thử việc mới.
+
+**Độ tin.** Có bằng chứng cho hai điều: bước học dài thì giết, và ngẫu nhiên thì làm giàu tri thức. Chưa
+có bằng chứng rằng học bằng gradient hơn luật Hebb; nó chỉ ngang. Truyền nghề ngang cứu được nhánh hỏng
+(7/16 so với 3/16) nhưng thua học chậm, nên giả thuyết cũ của tôi rằng gradient cộng bắt chước sẽ thắng
+tất cả cũng **sai**.
+
+**Bài học phương pháp, đắt nhất phiên này.** Tôi dò bước học trên một seed và 3.000 tick, thấy ổn, rồi kết
+luận trên 16 seed và 20.000 tick rằng việc học tự nó có hại. Sai lầm không nằm ở chỗ thiếu dữ liệu mà ở
+chỗ **dò tham số và kiểm định trên hai thang thời gian khác nhau**. Chế độ sàng lọc sinh ra từ đây.
 
 ### 14. Trần của thế giới, không phải trần của xã hội
 
