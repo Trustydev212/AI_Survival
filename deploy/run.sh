@@ -26,6 +26,10 @@ SHIFT="${SHIFT:-200000}"
 # five times the knowledge and three times the inventions, at a third of the tick rate. For a
 # machine that runs anyway, that is a trade worth making.
 MAP="${MAP:-384}"
+# Section 18: rich spots nobody can see from a distance are the first thing in this world worth
+# telling somebody about, and whether that ever turns into speech is a question for millions of
+# ticks rather than for a screen. This is the run that can answer it, so they are on.
+FINDS="${FINDS:-60}"
 PUBLISH="${PUBLISH:-900}"
 SIM="$PWD/sim/target/release/sim"
 
@@ -41,6 +45,7 @@ while true; do
       --snapshot-window 20000 \
       --quiet \
       --width "$MAP" --height "$MAP" \
+      --finds "$FINDS" \
       --out "$WORLD_DIR" \
       >> "$WORLD_DIR/run.log" 2>&1
   code=$?

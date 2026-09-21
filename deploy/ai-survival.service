@@ -12,6 +12,7 @@ WorkingDirectory=/opt/ai-survival
 Environment=WORLD_DIR=/opt/ai-survival/world
 Environment=SHIFT=200000
 Environment=MAP=384
+Environment=FINDS=60
 Environment=PUBLISH=900
 ExecStart=/opt/ai-survival/deploy/run.sh
 Restart=always

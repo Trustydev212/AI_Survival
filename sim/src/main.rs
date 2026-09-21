@@ -401,7 +401,16 @@ fn run_forever(cfg: Config) {
     let mut sim = open_world(&cfg, &save_path, generation);
     let mut csv = generation_csv(&cfg, generation);
     let mut ticks_this_session = 0u64;
-    let mut last_metrics = (1.0f32, 0.0f32, 0.0f32);
+    let started_at = std::time::Instant::now();
+    let started_tick = sim.tick;
+    // Take a reading before the first tick. A shift that picks a world up has no statistics window
+    // for another five hundred ticks, and the frames written before then used to carry the
+    // placeholder: a world resumed looked, for its first few frames, like one that knew nothing.
+    let mut last_metrics = (
+        sim.world.soil_health(),
+        0.0f32,
+        if sim.agents.is_empty() { 0.0 } else { sim.agents.iter().map(|a| a.known_count() as f32).sum::<f32>() / sim.agents.len() as f32 },
+    );
     // The live picture is a rolling window. A world with no end cannot keep every frame, so the
     // file starts over every so often and the viewer is shown the recent stretch.
     let mut snap = open_window(&cfg, &sim);
@@ -446,6 +455,7 @@ fn run_forever(cfg: Config) {
         if cfg.save_every > 0 && t % cfg.save_every == 0 {
             put_down(&sim, &save_path);
             let _ = sim.ark.save(&ark_path(&cfg));
+            write_status(&cfg, &sim, generation, ticks_this_session as f64 / started_at.elapsed().as_secs_f64().max(0.001), started_tick);
         }
         if sim.agents.is_empty() {
             // Read the age back off its own record rather than off this shift, because a
@@ -472,6 +482,7 @@ fn run_forever(cfg: Config) {
         if cfg.ticks > 0 && ticks_this_session >= cfg.ticks {
             put_down(&sim, &save_path);
             let _ = sim.ark.save(&ark_path(&cfg));
+            write_status(&cfg, &sim, generation, ticks_this_session as f64 / started_at.elapsed().as_secs_f64().max(0.001), started_tick);
             eprintln!("stopping this shift at tick {t}, generation {generation}");
             return;
         }
@@ -547,6 +558,20 @@ fn generation_csv(cfg: &Config, generation: u32) -> BufWriter<std::fs::File> {
         stats::csv_header(&mut w).unwrap();
     }
     w
+}
+
+/// A line anyone can read to see the world is alive: where it is, how fast, and what it has.
+/// Written beside the world every time it is put down, and published with it.
+fn write_status(cfg: &Config, sim: &sim::Sim, generation: u32, rate: f64, started: u64) {
+    let known = if sim.agents.is_empty() { 0.0 } else { sim.agents.iter().map(|a| a.known_count() as f32).sum::<f32>() / sim.agents.len() as f32 };
+    let body = format!(
+        "{{\"world\":{},\"generation\":{generation},\"tick\":{},\"people\":{},\"things\":{},\"known_per_head\":{:.1},\"buildings\":{},\"ticks_per_second\":{:.0},\"this_shift\":{},\"written\":\"{}\"}}\n",
+        version::WORLD, sim.tick, sim.agents.len(),
+        sim.innovations.iter().filter(|i| !i.name.is_empty()).count(), known,
+        sim.world.building_count(), rate, sim.tick.saturating_sub(started),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+    );
+    let _ = std::fs::write(format!("{}/status.json", cfg.out_dir), body);
 }
 
 fn put_down(sim: &sim::Sim, path: &str) {
