@@ -63,6 +63,9 @@ while true; do
   now=$(date +%s)
   if [ "$PUBLISH" -gt 0 ] && [ $((now - last_publish)) -ge "$PUBLISH" ]; then
     ./deploy/publish.sh "$WORLD_DIR" >> "$WORLD_DIR/publish.log" 2>&1 || true
+    # Nhật ký đi lên nhánh riêng, nhỏ và đọc được từ bất cứ đâu. Hỏng thì bỏ qua: thế giới
+    # không được dừng chỉ vì mạng trục trặc.
+    ./deploy/publish-log.sh "$WORLD_DIR" >> "$WORLD_DIR/publish.log" 2>&1 || true
     last_publish=$now
   fi
 done

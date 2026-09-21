@@ -85,6 +85,24 @@ Deepest thing made: Kuhelin (3 deep): bind(hollow(clay), hollow(sharpen(wood))) 
 Họ không chết đói. Đất còn nguyên vẹn, thức ăn còn hơn trăm nghìn đơn vị. Họ chỉ **thôi sinh con**, rồi
 già đi suốt bốn nghìn tick. Nếu chỉ ghi "mọi người đã chết" thì không ai biết điều đó.
 
+## Nhật ký đọc được từ xa
+
+`deploy/publish-log.sh` đẩy bốn file lên nhánh `world-log` của chính repo, mỗi lần một commit duy
+nhất bị ghi đè: `status.json`, `chronicle.txt`, `postmortem.txt` và `ark.bin`. Tổng vài trăm KB.
+Ghi đè là cố ý, vì giữ lịch sử thì một năm chạy thành vài GB, mà lịch sử thật đã nằm trong nội dung
+biên niên sử rồi.
+
+Nó chạy cùng nhịp với việc đưa lên web, mười lăm phút một lần, và hỏng thì bỏ qua: thế giới không
+được dừng chỉ vì mạng trục trặc.
+
+Nhờ đó bất kỳ ai, kể cả một phiên làm việc mới, cũng đọc được thế giới đang ở đâu và các nền văn minh
+đã chết vì gì, mà không cần đăng nhập vào máy. Và `ark.bin` cho phép chấm điểm bộ não từ xa:
+
+```bash
+git fetch origin world-log && git checkout origin/world-log -- ark.bin
+sim --eval ark.bin --ticks 2500
+```
+
 ## Thứ duy nhất sống sót qua ngày tận thế
 
 Trước đây khi mọi người chết, thế giới mới bắt đầu với bộ não **ngẫu nhiên hoàn toàn**. Chạy một triệu
