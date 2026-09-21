@@ -44,19 +44,27 @@ pub struct Sim {
     pub defected: std::collections::HashMap<(u32, u32), u32>,
     learned: Vec<(u32, Known)>,
     /// Recipe signature (process, sorted parts) -> innovation index, so the same thing is never registered twice.
-    recipes: std::collections::HashMap<(u8, [Ing; 3]), u16>,
+    pub recipes: std::collections::HashMap<(u8, [Ing; 3]), u16>,
     /// Registry indices freed by forgotten recipes.
-    free_slots: Vec<u16>,
+    pub free_slots: Vec<u16>,
     infected: Vec<u32>,
     apprentice: Vec<(u32, [f32; N_SKILL])>,
     imitations: Vec<(u32, u32)>,
     decisions: Vec<Decision>,
     next_lineage: u32,
     next_name: u32,
-    next_id: u32,
+    pub next_id: u32,
 }
 
 impl Sim {
+    /// Rebuild everything that is derived from the agents and the map: the spatial index and
+    /// the store index. A world read back from a file has none of it, because none of it is
+    /// state, and keeping it out of the file keeps the file honest.
+    pub fn refresh_indices(&mut self) {
+        self.spatial.rebuild(self.agents.iter().map(|a| (a.x, a.y)));
+        self.stores.rebuild_index(&self.regions);
+    }
+
     pub fn new(cfg: Config, events: EventLog) -> Sim {
         let mut rng = Rng::new(cfg.seed);
         let world = World::generate(

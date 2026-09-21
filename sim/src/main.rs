@@ -6,6 +6,7 @@ mod events;
 mod herd;
 mod innovation;
 mod orders;
+mod persist;
 mod render;
 mod region;
 mod rng;
@@ -97,7 +98,15 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
     let mut csv = BufWriter::new(std::fs::File::create(&csv_path).expect("create csv"));
     stats::csv_header(&mut csv).unwrap();
     let events_path = format!("{}/events_seed{}.txt", cfg.out_dir, cfg.seed);
-    let mut sim = sim::Sim::new(cfg.clone(), events::EventLog::new(Some(&events_path), !cfg.quiet));
+    let log = events::EventLog::new(Some(&events_path), !cfg.quiet);
+    let mut sim = match &cfg.load_path {
+        Some(p) => persist::load(&cfg, p, log).unwrap_or_else(|e| {
+            eprintln!("could not pick up {p}: {e}");
+            std::process::exit(1);
+        }),
+        None => sim::Sim::new(cfg.clone(), log),
+    };
+    let start_tick = sim.tick;
     if !cfg.quiet {
         stats::print_header();
     }
@@ -138,7 +147,7 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         }
         // A run shorter than one window used to end in a panic, which made a quick trial of
         // the sim impossible; the last tick always closes a window now.
-        if t % cfg.log_every == 0 || sim.agents.is_empty() || t == cfg.ticks {
+        if t % cfg.log_every == 0 || sim.agents.is_empty() || t == start_tick + cfg.ticks {
             let window = sim.take_window();
             let m = stats::compute(
                 t, sim.world.season(t), sim.world.climate, &sim.agents, sim.world.total_food(), sim.world.soil_health(),
@@ -173,6 +182,13 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         snapshot::write_meta(&meta, cfg.width, cfg.height, frames, &names, &stats::ERA_NAMES, cfg.seed, sim.tick, cfg.snapshot_every).expect("write meta");
     }
 
+    if let Some(path) = &cfg.save_path {
+        if let Err(e) = persist::save(&sim, path) {
+            eprintln!("could not put the world down at {path}: {e}");
+        } else if !cfg.quiet {
+            eprintln!("world saved to {path} at tick {}", sim.tick);
+        }
+    }
     let m = last.expect("at least one stats window");
     // Population swings within a year and between booms, so judge the end against the
     // best stretch of the run, both smoothed over several windows.

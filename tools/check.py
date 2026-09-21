@@ -13,6 +13,7 @@ is deterministic, an unchanged fingerprint proves the worlds are identical down 
 decimal; a changed one names the configuration that moved. Change behaviour on purpose, bless it,
 and the commit then carries the record of exactly which worlds moved.
 """
+import csv
 import hashlib
 import json
 import os
@@ -64,6 +65,40 @@ def world_version():
     return 0
 
 
+def continuity():
+    """A world put down and picked up must carry on as if nothing happened.
+
+    Getting this right took four attempts: the random stream was being nudged on the way back in,
+    the recipe table was left behind so known things looked new, the id counter restarted, and the
+    map of where the good land is only rebuilds on a schedule so it came back blank. Each one made
+    the world drift instead of continue, and none of them was visible without this comparison.
+    """
+    a, b, c = (os.path.join(WORK, k) for k in ("cont_a", "cont_b", "cont_c"))
+    for d in (a, b, c):
+        shutil.rmtree(d, ignore_errors=True)
+        os.makedirs(d, exist_ok=True)
+    state = os.path.join(WORK, "cont.bin")
+    small = ["--width", "96", "--height", "96", "--agents", "400", "--quiet"]
+    runs = [
+        [SIM, "--seed", "5", "--ticks", "3000", "--out", a],
+        [SIM, "--seed", "5", "--ticks", "1500", "--save", state, "--out", b],
+        [SIM, "--seed", "5", "--ticks", "1500", "--load", state, "--out", c],
+    ]
+    for cmd in runs:
+        r = subprocess.run(cmd + small, capture_output=True, text=True)
+        if r.returncode != 0:
+            return f"CRASH: {(r.stderr or r.stdout).strip().splitlines()[-1][:120]}"
+    rows = {}
+    for d in (a, c):
+        with open(os.path.join(d, "stats_seed5.csv")) as fh:
+            rows[d] = {r["tick"]: r for r in csv.DictReader(fh)}
+    for tick, row in rows[c].items():
+        straight = rows[a].get(tick)
+        if straight and (straight["pop"] != row["pop"] or straight["mean_known"] != row["mean_known"]):
+            return f"lệch tại tick {tick}: dân {straight['pop']} -> {row['pop']}"
+    return "ok"
+
+
 def main():
     bless = "--bless" in sys.argv
     if not os.path.exists(SIM):
@@ -74,6 +109,9 @@ def main():
         print(r.stdout[-3000:])
         sys.exit("unit tests failed")
     print("  ok")
+    print("nối lại thế giới ...", flush=True)
+    cont = continuity()
+    print("  " + cont)
     world = world_version()
     stored = json.load(open(REF)) if os.path.exists(REF) else {}
     ref = stored.get("fingerprints", {})
@@ -93,6 +131,8 @@ def main():
         else:
             print(f"  {name:<16} {fp}  giữ nguyên")
     shutil.rmtree(WORK, ignore_errors=True)
+    if cont != "ok":
+        broken.append("nối lại thế giới: " + cont)
     for b in broken:
         print("HỎNG  ", b)
     for m in moved:

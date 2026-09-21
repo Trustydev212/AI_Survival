@@ -135,6 +135,11 @@ pub struct Config {
     // minds
     /// Multiplier on within-life learning rates; 0 turns learning off (a control).
     pub learn_scale: f32,
+    /// Put the world down to a file when the run ends, and pick one up instead of making a new
+    /// one. Together these let a world outlive a single command, which is what a world with no
+    /// chosen stopping point needs.
+    pub save_path: Option<String>,
+    pub load_path: Option<String>,
     /// Take away every ready-made way to coordinate: no leaders, no orders, no customs.
     /// What is left is position, the six things a body can do, and a call anyone may make.
     /// The repo hands societies a leader mechanism, an order mechanism and a custom mechanism,
@@ -312,6 +317,8 @@ impl Default for Config {
             wear: 1.0,
             shelter_warmth: 0.35,
             learn_scale: 1.0,
+            save_path: None,
+            load_path: None,
             bare: false,
             grad_rule: false,
             gamma: 0.95,
@@ -463,6 +470,8 @@ impl Config {
                 "--log-every" => set!(log_every),
                 "--image-every" => set!(image_every),
                 "--out" => c.out_dir = val.clone(),
+                "--save" => c.save_path = Some(val.clone()),
+                "--load" => c.load_path = Some(val.clone()),
                 "--wrap" => c.wrap = val == "1" || val == "true",
                 "--regrow" => set!(regrow),
                 "--max-food" => set!(max_food),
@@ -555,6 +564,8 @@ USAGE: sim [--flag value ...]
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
   --seed random     pick a world at random; the seed chosen is printed, so it can be replayed
   --bare            no leaders, no orders, no customs: only bodies, actions and calls
+  --save PATH       write the whole world to PATH when the run ends
+  --load PATH       carry on from a world written by --save
   --gradient        learn by actor-critic with traces instead of the Hebbian rule
   --gamma F         how far ahead a gradient mind counts the future (0.95)
   --trace-lambda F  how long a choice stays creditable (0.9)

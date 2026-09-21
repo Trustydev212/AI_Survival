@@ -13,6 +13,17 @@ impl Rng {
         Rng(z | 1)
     }
 
+    /// The whole state, so a world can be put down and picked up mid-stream.
+    pub fn state(&self) -> u64 {
+        self.0
+    }
+
+    pub fn from_state(state: u64) -> Self {
+        // Exactly the state given. Nudging it (an `| 1`, say) restarts a different stream and a
+        // world picked up again then drifts away from the one put down.
+        Rng(if state == 0 { 1 } else { state })
+    }
+
     #[inline]
     pub fn next_u64(&mut self) -> u64 {
         let mut x = self.0;

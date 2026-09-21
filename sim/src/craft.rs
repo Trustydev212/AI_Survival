@@ -90,6 +90,9 @@ pub enum Slot {
     Shelter = 6, // not carried: built where its maker settles
 }
 pub const N_SLOT: usize = 7;
+impl Slot {
+    pub const ALL: [Slot; N_SLOT] = [Slot::Tool, Slot::Weapon, Slot::Armour, Slot::Boat, Slot::Vessel, Slot::Fire, Slot::Shelter];
+}
 pub const SLOT_NAMES: [&str; N_SLOT] = ["tool", "weapon", "armour", "boat", "vessel", "fire", "shelter"];
 pub const NO_ITEM: u16 = u16::MAX;
 
