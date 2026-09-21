@@ -142,6 +142,9 @@ pub struct Config {
     /// write down what it reached and begin another. --ticks then means how long this shift runs
     /// before putting the world down, which is how a machine that cannot run forever still can.
     pub forever: bool,
+    /// How long a window of the live picture covers before it starts over. A world that never
+    /// ends cannot keep every frame, so the viewer is shown a rolling recent window instead.
+    pub snapshot_window: u64,
     /// Put the world down every this many ticks (0 = only at the end).
     pub save_every: u64,
     pub save_path: Option<String>,
@@ -324,6 +327,7 @@ impl Default for Config {
             shelter_warmth: 0.35,
             learn_scale: 1.0,
             forever: false,
+            snapshot_window: 20_000,
             save_every: 0,
             save_path: None,
             load_path: None,
@@ -485,6 +489,7 @@ impl Config {
                 "--out" => c.out_dir = val.clone(),
                 "--save" => c.save_path = Some(val.clone()),
                 "--save-every" => set!(save_every),
+                "--snapshot-window" => set!(snapshot_window),
                 "--load" => c.load_path = Some(val.clone()),
                 "--wrap" => c.wrap = val == "1" || val == "true",
                 "--regrow" => set!(regrow),
@@ -580,6 +585,7 @@ USAGE: sim [--flag value ...]
   --bare            no leaders, no orders, no customs: only bodies, actions and calls
   --forever         no stopping point: save as it goes, start a new age when everyone dies
   --save-every N    put the world down every N ticks (0 = only at the end)
+  --snapshot-window N  how many ticks of live picture to keep before starting over (20000)
   --save PATH       write the whole world to PATH when the run ends
   --load PATH       carry on from a world written by --save
   --gradient        learn by actor-critic with traces instead of the Hebbian rule

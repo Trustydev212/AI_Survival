@@ -584,6 +584,10 @@ nghĩa là ca này chạy bao lâu rồi nghỉ, nên một máy không chạy m
 generation 0  seed 11  lived 4545 ticks  peak 111 people  14 things  1.8 known per head at its best
 ```
 
+Chạy liên tục trên một VPS nhỏ và đưa lên GitHub Pages: xem `deploy/README.md`. Hai lõi, hai GB RAM là
+đủ. `deploy/run.sh` chạy mãi và tự nhặt thế giới lên sau mỗi lần dừng; `deploy/publish.sh` đẩy viewer
+cộng cửa sổ gần đây lên nhánh `gh-pages` mười lăm phút một lần.
+
 `world/chronicle.txt` là thứ sống lâu hơn các thế giới: mỗi dòng một nền văn minh, nó vươn tới đâu và sống
 được bao lâu. Đó là thứ duy nhất ở đây viết ra để đọc lại sau nhiều năm.
 

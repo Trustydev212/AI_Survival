@@ -1,0 +1,21 @@
+# Keep the world running across reboots.
+#   sudo cp deploy/ai-survival.service /etc/systemd/system/
+#   sudo systemctl enable --now ai-survival
+[Unit]
+Description=AI Survival: a world that does not stop
+After=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/ai-survival
+Environment=WORLD_DIR=/opt/ai-survival/world
+Environment=SHIFT=200000
+Environment=PUBLISH=900
+ExecStart=/opt/ai-survival/deploy/run.sh
+Restart=always
+RestartSec=15
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

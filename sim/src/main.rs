@@ -401,6 +401,10 @@ fn run_forever(cfg: Config) {
     let mut csv = generation_csv(&cfg, generation);
     let mut peak_pop = sim.agents.len();
     let mut ticks_this_session = 0u64;
+    let mut last_metrics = (1.0f32, 0.0f32, 0.0f32);
+    // The live picture is a rolling window. A world with no end cannot keep every frame, so the
+    // file starts over every so often and the viewer is shown the recent stretch.
+    let mut snap = open_window(&cfg, &sim);
     eprintln!("world=v{} forever: generation {generation} from tick {}", version::WORLD, sim.tick);
     loop {
         sim.step();
@@ -420,8 +424,22 @@ fn run_forever(cfg: Config) {
             }
             stats::csv_row(&mut csv, &m).unwrap();
             let _ = csv.flush();
+            last_metrics = (m.soil, m.obedience, m.mean_known);
             sim.events.check_window(&m, &sim.agents, &sim.innovations, cfg.log_every, &sim.defected);
             sim.defected.clear();
+        }
+        if let Some(sn) = snap.as_mut() {
+            if cfg.snapshot_window > 0 && t % cfg.snapshot_window == 0 {
+                snap = open_window(&cfg, &sim);
+            } else if t % cfg.snapshot_every == 0 {
+                let (soil, obey, known) = last_metrics;
+                let era = stats::level_of(known, sim.settled_share()) as u8;
+                let _ = sn.frame(t, era, &sim.world, &sim.agents, &sim.stores.list, &sim.herds, soil, obey, known,
+                    sim.world.season(t), cfg.settle_ticks, cfg.custom_min, &sim.innovations);
+                if sn.frames % 10 == 1 {
+                    write_live_meta(&cfg, sn.frames, &sim, t);
+                }
+            }
         }
         if cfg.save_every > 0 && t % cfg.save_every == 0 {
             put_down(&sim, &save_path);
@@ -440,6 +458,7 @@ fn run_forever(cfg: Config) {
             generation += 1;
             sim = open_world(&cfg, "", generation);
             csv = generation_csv(&cfg, generation);
+            snap = open_window(&cfg, &sim);
             peak_pop = sim.agents.len();
             put_down(&sim, &save_path);
             continue;
@@ -450,6 +469,32 @@ fn run_forever(cfg: Config) {
             return;
         }
     }
+}
+
+/// Start a fresh window of the live picture. The viewer always reads the same two names, so a
+/// window starting over looks to it like a world being reloaded rather than a new address.
+fn open_window(cfg: &Config, sim: &sim::Sim) -> Option<snapshot::Snapshot> {
+    if cfg.snapshot_every == 0 {
+        return None;
+    }
+    let path = format!("{}/live.bin", cfg.out_dir);
+    match snapshot::Snapshot::create(&path, &sim.world) {
+        Ok(s) => {
+            write_live_meta(cfg, 0, sim, sim.tick);
+            Some(s)
+        }
+        Err(e) => {
+            eprintln!("could not open the live picture: {e}");
+            None
+        }
+    }
+}
+
+fn write_live_meta(cfg: &Config, frames: u32, sim: &sim::Sim, tick: u64) {
+    let mut names: Vec<(u32, String)> = sim.hall.keys().map(|id| (*id, agent::name_of(*id))).collect();
+    names.sort();
+    let meta = format!("{}/live.json", cfg.out_dir);
+    let _ = snapshot::write_meta(&meta, cfg.width, cfg.height, frames, &names, &stats::ERA_NAMES, cfg.seed, tick, cfg.snapshot_every);
 }
 
 fn seed_for(cfg: &Config, generation: u32) -> u64 {
