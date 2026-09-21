@@ -565,6 +565,27 @@ Trên mặc định cuối cùng (nghe cả người lạ, không bầy thú), h
 
 Cách đọc từng kết quả và độ tin nằm trong docs/THEORY.md, mục 8 đến 12.
 
+## Thế giới không có mốc dừng
+
+Mọi bảng số ở trên đo trên một cửa sổ thời gian do người chọn, và mục 15 của docs/THEORY.md cho thấy chính
+cái cửa sổ ấy quyết định câu trả lời: cùng một thế giới, dừng ở 20.000 tick thì "thịnh vượng", chạy tới
+60.000 thì "bùng và vỡ". Chế độ `--forever` không chọn cửa sổ nào.
+
+```bash
+./target/release/sim --forever --save-every 5000 --out world/
+```
+
+Nó chạy tới khi bị dừng, đặt thế giới xuống theo chu kỳ nên không mất gì, và khi một nền văn minh chết hẳn
+thì ghi lại nó đã làm được đến đâu rồi bắt đầu một nền khác trên đất mới, đếm số thế hệ. `--ticks` lúc này
+nghĩa là ca này chạy bao lâu rồi nghỉ, nên một máy không chạy mãi được vẫn nối được nhiều ca:
+
+```
+generation 0  seed 11  lived 4545 ticks  peak 111 people  14 things  1.8 known per head at its best
+```
+
+`world/chronicle.txt` là thứ sống lâu hơn các thế giới: mỗi dòng một nền văn minh, nó vươn tới đâu và sống
+được bao lâu. Đó là thứ duy nhất ở đây viết ra để đọc lại sau nhiều năm.
+
 ### Đối chứng: có mệnh lệnh và không có mệnh lệnh
 
 Cùng 12 seed, 30.000 tick, một nhánh mặc định, một nhánh `--no-orders` (thủ lĩnh vẫn hình thành
@@ -599,6 +620,7 @@ nghe lời đã đủ tạo khác biệt. Mẫu 12 còn nhỏ, chưa phải kế
 Repo này là nơi quan sát một xã hội thu nhỏ, nên có sẵn cách đặt câu hỏi và trả lời bằng đối chứng:
 
 ```bash
+./target/release/sim --forever --save-every 5000 --out world/   # thế giới không có mốc dừng
 ./target/release/sim --seed 3 --ticks 20000 --save world.bin    # đặt thế giới xuống
 ./target/release/sim --load world.bin --ticks 20000 --save world.bin  # nhặt lên chạy tiếp
 ./tools/programme.sh                          # chạy cả một chương trình dài, không cần trông

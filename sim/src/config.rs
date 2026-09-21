@@ -138,6 +138,12 @@ pub struct Config {
     /// Put the world down to a file when the run ends, and pick one up instead of making a new
     /// one. Together these let a world outlive a single command, which is what a world with no
     /// chosen stopping point needs.
+    /// Run with no chosen stopping point: save at intervals, and when a civilisation dies out
+    /// write down what it reached and begin another. --ticks then means how long this shift runs
+    /// before putting the world down, which is how a machine that cannot run forever still can.
+    pub forever: bool,
+    /// Put the world down every this many ticks (0 = only at the end).
+    pub save_every: u64,
     pub save_path: Option<String>,
     pub load_path: Option<String>,
     /// Take away every ready-made way to coordinate: no leaders, no orders, no customs.
@@ -317,6 +323,8 @@ impl Default for Config {
             wear: 1.0,
             shelter_warmth: 0.35,
             learn_scale: 1.0,
+            forever: false,
+            save_every: 0,
             save_path: None,
             load_path: None,
             bare: false,
@@ -400,6 +408,11 @@ impl Config {
                 i += 1;
                 continue;
             }
+            if key == "--forever" {
+                c.forever = true;
+                i += 1;
+                continue;
+            }
             if key == "--gradient" {
                 c.grad_rule = true;
                 i += 1;
@@ -471,6 +484,7 @@ impl Config {
                 "--image-every" => set!(image_every),
                 "--out" => c.out_dir = val.clone(),
                 "--save" => c.save_path = Some(val.clone()),
+                "--save-every" => set!(save_every),
                 "--load" => c.load_path = Some(val.clone()),
                 "--wrap" => c.wrap = val == "1" || val == "true",
                 "--regrow" => set!(regrow),
@@ -564,6 +578,8 @@ USAGE: sim [--flag value ...]
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
   --seed random     pick a world at random; the seed chosen is printed, so it can be replayed
   --bare            no leaders, no orders, no customs: only bodies, actions and calls
+  --forever         no stopping point: save as it goes, start a new age when everyone dies
+  --save-every N    put the world down every N ticks (0 = only at the end)
   --save PATH       write the whole world to PATH when the run ends
   --load PATH       carry on from a world written by --save
   --gradient        learn by actor-critic with traces instead of the Hebbian rule

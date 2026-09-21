@@ -67,6 +67,10 @@ fn main() {
     };
     std::fs::create_dir_all(&cfg.out_dir).expect("create out dir");
 
+    if cfg.forever {
+        run_forever(cfg);
+        return;
+    }
     if let Some((a, b)) = cfg.seeds {
         experiment(&cfg, a, b);
         return;
@@ -377,4 +381,149 @@ fn summarize(sim: &sim::Sim) {
     for e in sim.events.events.iter().filter(|e| !noisy.iter().any(|p| e.text.starts_with(p))) {
         println!("  tick {:>6}: {}", e.tick, e.text);
     }
+}
+
+/// A world with no chosen stopping point.
+///
+/// Every table in docs/THEORY.md was measured over a window someone picked, and section 15 showed
+/// the window decides the answer: the same world is thriving at twenty thousand ticks and boom and
+/// bust at sixty thousand. This mode picks no window. It runs until it is stopped, puts the world
+/// down at intervals so nothing is lost, and when a civilisation dies out it writes down what that
+/// one managed and begins another on fresh ground, counting the generations.
+///
+/// The chronicle is the record that survives the worlds: one line per civilisation, what it
+/// reached and how long it lasted. That is the only thing here meant to be read years from now.
+fn run_forever(cfg: Config) {
+    let chronicle_path = format!("{}/chronicle.txt", cfg.out_dir);
+    let mut generation = count_generations(&chronicle_path);
+    let save_path = cfg.save_path.clone().unwrap_or_else(|| format!("{}/world.bin", cfg.out_dir));
+    let mut sim = open_world(&cfg, &save_path, generation);
+    let mut csv = generation_csv(&cfg, generation);
+    let mut peak_pop = sim.agents.len();
+    let mut ticks_this_session = 0u64;
+    eprintln!("world=v{} forever: generation {generation} from tick {}", version::WORLD, sim.tick);
+    loop {
+        sim.step();
+        ticks_this_session += 1;
+        peak_pop = peak_pop.max(sim.agents.len());
+        let t = sim.tick;
+        if t % cfg.log_every == 0 || sim.agents.is_empty() {
+            let window = sim.take_window();
+            let m = stats::compute(
+                t, sim.world.season(t), sim.world.climate, &sim.agents, sim.world.total_food(), sim.world.soil_health(),
+                sim.regions.inhabited_soil(&sim.agents), sim.innovations.len(), sim.world.cultivated_cells(),
+                sim.settled_share(), sim.order_mix(), sim.custom_mix(), sim.stores.list.len(), sim.stores.total_food(),
+                sim.world.building_count(), window,
+            );
+            if !cfg.quiet {
+                stats::print_row(&m);
+            }
+            stats::csv_row(&mut csv, &m).unwrap();
+            let _ = csv.flush();
+            sim.events.check_window(&m, &sim.agents, &sim.innovations, cfg.log_every, &sim.defected);
+            sim.defected.clear();
+        }
+        if cfg.save_every > 0 && t % cfg.save_every == 0 {
+            put_down(&sim, &save_path);
+        }
+        if sim.agents.is_empty() {
+            // Read the age back off its own record rather than off this shift, because a
+            // civilisation usually outlives the shift that happened to be watching when it died.
+            let (peak, best_known) = high_water(&cfg, generation);
+            let line = format!(
+                "generation {generation}\tseed {}\tlived {t} ticks\tpeak {} people\t{} things\t{:.1} known per head at its best\tended: everyone died",
+                seed_for(&cfg, generation), peak.max(peak_pop), sim.innovations.iter().filter(|i| !i.name.is_empty()).count(),
+                best_known,
+            );
+            append_line(&chronicle_path, &line);
+            eprintln!("{line}");
+            generation += 1;
+            sim = open_world(&cfg, "", generation);
+            csv = generation_csv(&cfg, generation);
+            peak_pop = sim.agents.len();
+            put_down(&sim, &save_path);
+            continue;
+        }
+        if cfg.ticks > 0 && ticks_this_session >= cfg.ticks {
+            put_down(&sim, &save_path);
+            eprintln!("stopping this shift at tick {t}, generation {generation}");
+            return;
+        }
+    }
+}
+
+fn seed_for(cfg: &Config, generation: u32) -> u64 {
+    cfg.seed.wrapping_add(generation as u64 * 7919)
+}
+
+/// Pick the world up if there is one to pick up, otherwise make one.
+fn open_world(cfg: &Config, save_path: &str, generation: u32) -> sim::Sim {
+    let mut c = cfg.clone();
+    c.seed = seed_for(cfg, generation);
+    let events_path = format!("{}/events_gen{generation}.txt", cfg.out_dir);
+    let log = events::EventLog::new(Some(&events_path), !cfg.quiet);
+    if !save_path.is_empty() && std::path::Path::new(save_path).exists() {
+        match persist::load(&c, save_path, log) {
+            Ok(s) => return s,
+            Err(e) => {
+                eprintln!("could not pick up {save_path}: {e}\nstarting a fresh world instead");
+                return sim::Sim::new(c.clone(), events::EventLog::new(Some(&events_path), !cfg.quiet));
+            }
+        }
+    }
+    sim::Sim::new(c, log)
+}
+
+fn generation_csv(cfg: &Config, generation: u32) -> BufWriter<std::fs::File> {
+    let path = format!("{}/stats_gen{generation}.csv", cfg.out_dir);
+    let fresh = !std::path::Path::new(&path).exists();
+    let file = std::fs::OpenOptions::new().create(true).append(true).open(&path).expect("open stats");
+    let mut w = BufWriter::new(file);
+    if fresh {
+        stats::csv_header(&mut w).unwrap();
+    }
+    w
+}
+
+fn put_down(sim: &sim::Sim, path: &str) {
+    // Write beside the real file and move it into place, so a stop half way through a save
+    // leaves the previous world intact rather than half of two.
+    let tmp = format!("{path}.part");
+    if persist::save(sim, &tmp).is_ok() {
+        let _ = std::fs::rename(&tmp, path);
+    }
+}
+
+fn append_line(path: &str, line: &str) {
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
+/// The most people and the most known per head a generation ever reached, from its own record.
+fn high_water(cfg: &Config, generation: u32) -> (usize, f32) {
+    let path = format!("{}/stats_gen{generation}.csv", cfg.out_dir);
+    let Ok(text) = std::fs::read_to_string(&path) else { return (0, 0.0) };
+    let mut lines = text.lines();
+    let Some(header) = lines.next() else { return (0, 0.0) };
+    let cols: Vec<&str> = header.split(',').collect();
+    let (Some(pi), Some(ki)) = (cols.iter().position(|c| *c == "pop"), cols.iter().position(|c| *c == "mean_known")) else {
+        return (0, 0.0);
+    };
+    let mut peak = 0usize;
+    let mut known = 0.0f32;
+    for line in lines {
+        let f: Vec<&str> = line.split(',').collect();
+        if let Some(v) = f.get(pi).and_then(|v| v.parse::<f32>().ok()) {
+            peak = peak.max(v as usize);
+        }
+        if let Some(v) = f.get(ki).and_then(|v| v.parse::<f32>().ok()) {
+            known = known.max(v);
+        }
+    }
+    (peak, known)
+}
+
+fn count_generations(path: &str) -> u32 {
+    std::fs::read_to_string(path).map(|s| s.lines().filter(|l| l.starts_with("generation")).count() as u32).unwrap_or(0)
 }
