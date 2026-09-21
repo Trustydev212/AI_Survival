@@ -23,6 +23,8 @@ cd sim && ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out 
 python3 ../viewer/serve.py            # rồi mở http://127.0.0.1:8765/index.html?seed=3
 # thêm &live=1 để xem trong lúc sim đang chạy
 # Dữ liệu cho trình xem KHÔNG nằm trong git: vừa clone về thì phải chạy dòng trên trước.
+# Sim tất định: cùng seed cùng cờ thì ra đúng một thế giới, chạy lại bao nhiêu lần cũng thế.
+# Muốn thế giới khác thì đổi --seed, hoặc dùng --seed random (seed được in ra để chạy lại).
 # Số seed trên URL phải trùng số seed đã chạy, nếu không trang sẽ báo không có dữ liệu.
 ```
 
@@ -116,6 +118,7 @@ bộ nhớ JS 115 MB). Tôi chưa chạy trên máy của bạn, nên hai điề
 cd sim
 cargo build --release
 ./target/release/sim --seed 3 --ticks 30000 --image-every 5000   # một thế giới, xem trực tiếp
+./target/release/sim --seed random --ticks 20000                  # một thế giới bất kỳ; seed được in ra để chạy lại
 ./target/release/sim --seeds 1-16 --ticks 30000                  # 16 thế giới song song, bảng kết cục
 ./target/release/sim --help
 ```

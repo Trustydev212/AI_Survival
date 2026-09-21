@@ -1522,7 +1522,7 @@ impl Sim {
                 }
             }
         }
-        let inn = Innovation::crafted(id, process, &parts, &props, made, depth, cost, self.tick, lineage);
+        let inn = Innovation::crafted(id, self.cfg.seed, process, &parts, &props, made, depth, cost, self.tick, lineage);
         let slot = inn.craft.as_ref().unwrap().slot;
         let text = format!("crafted: {} by lineage {} at ({:.0}, {:.0})", inn.describe(&self.innovations), lineage, x, y);
         let first_key = format!("first_{}", craft::SLOT_NAMES[slot as usize]);
@@ -1618,7 +1618,7 @@ impl Sim {
             let a = &self.agents[i];
             ((1 + a.known_count() / 4).min(6) as u8, a.still >= self.cfg.settle_ticks, a.sick > 0, a.lineage, a.x, a.y)
         };
-        let Some(inn) = Innovation::practice(&mut self.rng, id, tier, doing, settled, sick, self.tick, lineage) else { return };
+        let Some(inn) = Innovation::practice(&mut self.rng, id, self.cfg.seed, tier, doing, settled, sick, self.tick, lineage) else { return };
         let text = format!("innovation: {} by lineage {} at ({:.0}, {:.0})", inn.describe(&self.innovations), lineage, x, y);
         if id < self.innovations.len() {
             self.innovations[id] = inn;

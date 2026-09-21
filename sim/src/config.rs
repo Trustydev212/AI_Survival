@@ -389,7 +389,15 @@ impl Config {
                 };
             }
             match key {
-                "--seed" => set!(seed),
+                "--seed" => {
+                    // `--seed random` picks one from the clock and prints it in the header, so a
+                    // world you stumble on can always be walked back into.
+                    c.seed = if val == "random" {
+                        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64 % 1_000_000).unwrap_or(1)
+                    } else {
+                        val.parse().map_err(|_| format!("bad value for {key}: {val}"))?
+                    };
+                }
                 "--seeds" => {
                     let (a, b) = val.split_once('-').ok_or_else(|| format!("--seeds wants A-B, got {val}"))?;
                     let a: u64 = a.parse().map_err(|_| format!("bad seeds range {val}"))?;
@@ -529,6 +537,7 @@ USAGE: sim [--flag value ...]
   --p-infect F      plague spread per contact-tick (0.02)
   --p-windfall F --p-accident F   per agent-tick personal luck
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
+  --seed random     pick a world at random; the seed chosen is printed, so it can be replayed
   --gradient        learn by actor-critic with traces instead of the Hebbian rule
   --gamma F         how far ahead a gradient mind counts the future (0.95)
   --trace-lambda F  how long a choice stays creditable (0.9)

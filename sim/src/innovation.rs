@@ -48,7 +48,7 @@ impl Innovation {
     /// A practice: an idea about farming, health, teaching, sharing or invention.
     /// `doing` biases which benefit appears; `tier` scales it. Tools and weapons are
     /// not ideas; they have to be made (see `crafted`).
-    pub fn practice(rng: &mut Rng, id: usize, tier: u8, doing: Action, settled: bool, sick: bool, tick: u64, lineage: u32) -> Option<Innovation> {
+    pub fn practice(rng: &mut Rng, id: usize, salt: u64, tier: u8, doing: Action, settled: bool, sick: bool, tick: u64, lineage: u32) -> Option<Innovation> {
         let mut effects = [0.0f32; N_EFFECT];
         let scale = 0.15 * (tier as f32).powf(0.8);
         let magnitude = |rng: &mut Rng| scale * (0.7 + 0.6 * rng.f32());
@@ -78,20 +78,31 @@ impl Innovation {
         } else {
             effects[E_METABOLISM] += price;
         }
-        Some(Innovation { name: name_of(1_000_000 + id as u32), tier, effects, born_tick: tick, lineage, craft: None })
+        Some(Innovation { name: Self::coined(id, salt), tier, effects, born_tick: tick, lineage, craft: None })
     }
 
     /// A made thing, from a process applied to parts whose properties are given.
     #[allow(clippy::too_many_arguments)]
-    pub fn crafted(id: usize, process: Process, parts: &[Ing], part_props: &[[f32; N_PROP]], props: [f32; N_PROP], depth: u8, cost: [u8; N_MAT], tick: u64, lineage: u32) -> Innovation {
+    pub fn crafted(id: usize, salt: u64, process: Process, parts: &[Ing], part_props: &[[f32; N_PROP]], props: [f32; N_PROP], depth: u8, cost: [u8; N_MAT], tick: u64, lineage: u32) -> Innovation {
         let (effects, slot, _) = craft::effects_of(&props, parts.len(), craft::bodies_in(part_props));
         let mut ps = [craft::NO_ING; 3];
         ps[..parts.len()].copy_from_slice(parts);
         let c = Craft { process, parts: ps, n_parts: parts.len() as u8, props, slot, life: craft::life_of(&props, slot), cost, depth };
-        Innovation { name: name_of(1_000_000 + id as u32), tier: craft::tier_of(&props, depth), effects, born_tick: tick, lineage, craft: Some(c) }
+        Innovation { name: Self::coined(id, salt), tier: craft::tier_of(&props, depth), effects, born_tick: tick, lineage, craft: Some(c) }
     }
 
-    /// Effects as text: "+farm 0.21, +soil 0.12".
+    /// A name for a new thing. Each world coins its own: the same slot in two worlds gets two
+/// different words, because the world's seed goes into the name. Without this every world's
+/// first invention carried the same name and the whole thing read like a script it was not.
+fn coined(id: usize, salt: u64) -> String {
+    let mut z = (id as u64).wrapping_add(1).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ salt.wrapping_mul(0xD6E8_FEB8_6659_FD93);
+    z ^= z >> 29;
+    z = z.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z ^= z >> 32;
+    name_of(1_000_000 + (z % 900_000_000) as u32)
+}
+
+/// Effects as text: "+farm 0.21, +soil 0.12".
     pub fn effects_text(&self) -> String {
         let mut parts = Vec::new();
         for d in 0..N_EFFECT {
