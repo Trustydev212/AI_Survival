@@ -412,6 +412,53 @@ không đủ để bác điều đó, và nói nó đã bị bác là sai phươ
 **Độ tin.** Chưa kết luận. Đây là giả thuyết đầu tiên phải giao cho thế giới chạy liên tục hàng triệu tick
 chứ không phải cho một lần sàng lọc, và đó cũng là lý do đáng chạy VPS.
 
+### 19. Ark đóng cửa, và việc mở nó ra làm mọi thứ tệ đi
+
+Ark là thứ duy nhất sống sót qua cái chết của một nền văn minh: vài chục bộ não làm tốt nhất, và một
+nửa số bộ lạc của thế giới kế tiếp sinh ra từ đó. Nếu có chỗ nào trong dự án này tích luỹ được qua
+hàng triệu tick thì phải là chỗ đó.
+
+Nó không tích luỹ. Cùng một seed, tiến hoá 16.000 tick và 32.000 tick cho ra hai file ark **giống hệt
+nhau từng byte**, và bộ não mới nhất trong cả hai được ghi ở tick 15.500. Chấm trên thế giới lạ, điểm
+cũng đứng yên ở đúng chỗ đó:
+
+| huấn luyện | dòng họ sống được | trung vị | đối đầu với não ngẫu nhiên |
+|---|---|---|---|
+| 4.000 tick | 40% | 0 | 64% |
+| 8.000 tick | 77% | 44 | 84% |
+| 16.000 tick | 76% | 40 | **84%** |
+| 32.000 tick | 76% | 40 | **84%** |
+
+Nguyên nhân là một **kỷ lục không bao giờ hạ**: một bộ não vào ark nếu nó để lại nhiều con hơn bộ đang
+giữ chỗ. Dòng họ nào đã sống qua một thời sung túc và đạt 46 con thì mọi kẻ đến sau phải vượt 46, kể cả
+bộ não giỏi nhất của một thời đói kém. Sửa bằng cách đo số con **so với những người đang sinh đẻ cùng
+lúc** (v9) — tức là đúng định nghĩa của relative fitness — thì trần nhích lên: 89% thay vì 84%, trung vị
+54 thay vì 40. Nhưng ark vẫn gần như đóng: chỉ 2 bộ não lọt vào trong 16.000 tick cuối.
+
+**Giả thuyết: ark là viện bảo tàng.** Một bộ não ghi ở tick 4.000 vẫn giữ chỗ ở tick 32.000, trong một
+thế giới mà khí hậu, đất đai và đồ nghề đã khác hẳn. Nếu cho kỷ lục cũ phai dần theo tuổi — hạ chuẩn cho
+người đang sống mà không đuổi ai ra — thì ark sẽ nhận người mới và điểm phải lên.
+
+**Bác bỏ, và bác bỏ dứt khoát.** Cho kỷ lục phai với chu kỳ bán rã 20.000 tick thì cánh cửa mở thật: 16
+bộ não lọt vào sau tick 16.000 thay vì 2, bộ mới nhất ghi ở đúng tick 32.000 thay vì 18.500. Cơ chế chạy
+đúng như thiết kế. Điểm thì **tụt**:
+
+| ở 32.000 tick | dòng họ sống được | trung vị | đối đầu |
+|---|---|---|---|
+| kỷ lục không phai (v9) | 85% | 54 | **89%** |
+| kỷ lục phai dần | 62% | 18 | **76%** |
+
+Cửa mở ra và những bộ não **kém hơn** đi vào. Nghĩa là các bộ não cũ trong ark không phải đồ cổ hết
+thời: chúng thật sự giỏi hơn, và lý do không ai thay được chúng là **không có ai giỏi hơn xuất hiện**.
+
+Điều này đổi hẳn cách đọc cái trần 89%. Nó không phải lỗi sổ sách, không phải cái cửa kẹt. Ark ngừng
+nhận người vì tiến hoá ngừng sinh ra người đáng nhận. **89% là trần thật của bộ não này trong thế giới
+này**, và muốn vượt thì phải đổi bộ não hoặc đổi thế giới, không phải đổi cách ghi chép.
+
+Thay đổi đã được bỏ đi chứ không giữ lại. Một seed, nên độ lớn 89 so với 76 chưa chắc; nhưng chiều thì
+có cơ chế xác nhận đi kèm, và giả thuyết đưa ra trước khi đo.
+
+
 ## Những câu hỏi mở
 
 1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
