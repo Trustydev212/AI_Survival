@@ -155,6 +155,8 @@
     <div id="events"></div>
     <h3 id="lifeHead" style="display:none"><span data-t="life">Một cuộc đời</span><label><button id="unfollow" style="padding:1px 8px">×</button></label></h3>
     <div id="life"></div>
+    <h3><span data-t="records">Kỷ lục thế giới</span></h3>
+    <div id="records"></div>
     <h3><span data-t="leading">Thủ lĩnh đang dẫn dắt</span></h3>
     <div id="leaders"></div>
   </aside>
@@ -188,6 +190,8 @@ const T = {
     drop: 'Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.',
     loading: 'Đang tải', notfound: 'Chưa có dữ liệu cho seed này. Dữ liệu không nằm trong git, phải chạy sim để sinh ra:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Rồi mở lại trang này. Mở thế giới khác bằng <code>?seed=N</code>, đúng số seed bạn đã chạy. Hoặc kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
     tlPop: 'dân số', tlKnown: 'kiến thức', tlSoil: 'đất', chronicleTab: 'Sử ký',
+    records: 'Kỷ lục thế giới', recPop: 'đông nhất', recKnown: 'biết nhiều nhất', recThings: 'đã làm ra',
+    recDeep: 'thứ phức tạp nhất', recTick: 'tick', recNothing: 'chưa có gì', recLayers: 'tầng',
     followers: 'người theo', unnamed: '(chưa có tên)', fps: 'khung/giây', order: 'lệnh', custom: 'tập quán', none: 'không',
     normal: 'bình thường', winter: 'mùa đông', drought: 'hạn hán', droughtWinter: 'hạn + đông', plenty: 'được mùa', harsh: 'năm khắc nghiệt',
     lineage: 'dòng họ', eras: ['hoang dã','nhóm lửa','bén rễ','đan kết','nhiều tầng','vút cao','rực rỡ','vượt xa'],
@@ -200,6 +204,8 @@ const T = {
     drop: 'Or drop the three files snap_seedN.bin, meta_seedN.json, events_seedN.txt here.',
     loading: 'Loading', notfound: 'No data for this seed yet. The data is not in git; run the sim to make it:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Then reload. Open another world with <code>?seed=N</code>, the seed you actually ran. Or drop the files here.', badfile: 'Not a snapshot file.',
     tlPop: 'people', tlKnown: 'knowledge', tlSoil: 'soil', chronicleTab: 'History',
+    records: 'What this world has reached', recPop: 'most people', recKnown: 'most known', recThings: 'things made',
+    recDeep: 'most involved thing', recTick: 'tick', recNothing: 'nothing yet', recLayers: 'layers deep',
     followers: 'followers', unnamed: '(unnamed)', fps: 'frames/s', order: 'order', custom: 'custom', none: 'none',
     normal: 'normal', winter: 'winter', drought: 'drought', droughtWinter: 'drought + winter', plenty: 'year of plenty', harsh: 'harsh year',
     lineage: 'lineage', eras: ['wild','kindled','rooted','woven','layered','soaring','radiant','beyond'],
@@ -348,7 +354,7 @@ async function boot(bytes, meta, evText) {
   state.meta = meta || { names: {}, eras: T.en.eras };
   state.frames = []; indexFrames();
   parseEvents(evText);
-  state.frame = 0; state.sub = 0; state.layerCache.idx = -1; state.agentCache.clear(); state.lastType = null; state.seenMajor.clear(); state.propsBuilt = false;
+  state.frame = 0; state.sub = 0; state.layerCache.idx = -1; state.agentCache.clear(); state.lastType = null; state.crafts = null; state.seenMajor.clear(); state.propsBuilt = false;
   $('loadmsg').textContent = t('loading') + ' art …';
   try { await loadArt(); } catch (e) { $('loadmsg').textContent = 'assets missing: ' + e.message; return; }
   initPixi();
@@ -887,7 +893,7 @@ function draw(force) {
   if (!state.pixi) return;
   const idx = state.frame; const f = state.frames[idx]; const A = agentsOf(idx); const B = idx + 1 < state.frames.length ? agentsOf(idx + 1) : null;
   const s = state.sub; const sunny = ART.kind === 'sunny';
-  if (force || state.lastFrameDrawn !== idx) { drawTerrain(idx); updateHud(f, A); renderLeaders(A); renderFactions(A); markEvents(f.tick); drawTimeline(); drawMinimap(idx, A); }
+  if (force || state.lastFrameDrawn !== idx) { drawTerrain(idx); updateHud(f, A); renderRecords(f.tick); renderLeaders(A); renderFactions(A); markEvents(f.tick); drawTimeline(); drawMinimap(idx, A); }
   if (force || state.lastFrameDrawn !== idx) renderLife(idx, A);
   const stepped = state.lastFrameDrawn === idx - 1 && !force;
   state.lastFrameDrawn = idx;
@@ -1106,6 +1112,45 @@ function renderFactions(A) {
     box.appendChild(d);
   }
 }
+// What this world has reached, up to the moment being watched. Someone dipping into a world sees
+// people milling about; the records are how you tell in one glance whether anything is happening
+// and what the strangest thing they have built so far is.
+function renderRecords(tick) {
+  const box = $('records');
+  if (!state.frames.length) { box.innerHTML = ''; return; }
+  let peakPop = 0, peakPopTick = 0, peakKnown = 0, peakKnownTick = 0;
+  for (const f of state.frames) {
+    if (f.tick > tick) break;
+    if (f.pop > peakPop) { peakPop = f.pop; peakPopTick = f.tick; }
+    if ((f.known || 0) > peakKnown) { peakKnown = f.known; peakKnownTick = f.tick; }
+  }
+  // The deepest recipe so far: how many times something already made was worked again.
+  if (!state.crafts) {
+    state.crafts = [];
+    for (const e of state.events) {
+      const m = /crafted: (\w+) = (.+?) -> /.exec(e.text || '');
+      if (m) state.crafts.push({ tick: e.tick, name: m[1], recipe: m[2], depth: (m[2].match(/\(/g) || []).length });
+    }
+  }
+  let made = 0, deep = null;
+  for (const c of state.crafts) {
+    if (c.tick > tick) break;
+    made++;
+    if (!deep || c.depth > deep.depth) deep = c;
+  }
+  const row = (label, value, when) =>
+    `<div class="ld"><span class="n">${label}${when != null ? `<span style="color:var(--muted)"> · ${t('recTick')} ${when.toLocaleString()}</span>` : ''}</span><span class="f">${value}</span></div>`;
+  let html = row(t('recPop'), peakPop.toLocaleString(), peakPopTick)
+    + row(t('recKnown'), peakKnown.toFixed(1), peakKnownTick)
+    + row(t('recThings'), made.toLocaleString(), null);
+  html += deep
+    ? `<div class="ld" style="display:block"><span class="n">${t('recDeep')} · ${deep.depth} ${t('recLayers')}<span style="color:var(--muted)"> · ${t('recTick')} ${deep.tick.toLocaleString()}</span></span>`
+      + `<div style="color:var(--accent);word-break:break-all;margin-top:2px">${deep.name}</div>`
+      + `<div style="color:var(--muted);word-break:break-all;font-size:11px">${deep.recipe}</div></div>`
+    : `<div class="ld"><span class="n">${t('recDeep')}</span><span class="f">${t('recNothing')}</span></div>`;
+  box.innerHTML = html;
+}
+
 function renderLeaders(A) {
   const ls = []; for (let i = 0; i < A.n; i++) if (A.flags[i] & 2) ls.push(i); ls.sort((a, b) => A.followers[b] - A.followers[a]);
   const box = $('leaders'); box.innerHTML = '';
