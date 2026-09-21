@@ -135,6 +135,14 @@ pub struct Config {
     // minds
     /// Multiplier on within-life learning rates; 0 turns learning off (a control).
     pub learn_scale: f32,
+    /// Take away every ready-made way to coordinate: no leaders, no orders, no customs.
+    /// What is left is position, the six things a body can do, and a call anyone may make.
+    /// The repo hands societies a leader mechanism, an order mechanism and a custom mechanism,
+    /// so coordination has never had to be invented. A call cannot come to mean anything while
+    /// something else already does the coordinating, so the language question and the scaffolding
+    /// question are one question. The lab found turning orders off gave better outcomes, not
+    /// worse, which is the reason to take the rest away and look.
+    pub bare: bool,
     /// Learn by actor-critic with eligibility traces instead of the Hebbian rule. The Hebbian
     /// brain ties what it is doing to the reward arriving at that instant; this one keeps a
     /// fading record of recent choices, prices the present with a critic it grows itself, and
@@ -304,6 +312,7 @@ impl Default for Config {
             wear: 1.0,
             shelter_warmth: 0.35,
             learn_scale: 1.0,
+            bare: false,
             grad_rule: false,
             gamma: 0.95,
             trace_lambda: 0.9,
@@ -374,6 +383,13 @@ impl Config {
             }
             if key == "--no-crafting" {
                 c.no_crafting = true;
+                i += 1;
+                continue;
+            }
+            if key == "--bare" {
+                c.bare = true;
+                c.no_orders = true;
+                c.no_customs = true;
                 i += 1;
                 continue;
             }
@@ -538,6 +554,7 @@ USAGE: sim [--flag value ...]
   --p-windfall F --p-accident F   per agent-tick personal luck
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
   --seed random     pick a world at random; the seed chosen is printed, so it can be replayed
+  --bare            no leaders, no orders, no customs: only bodies, actions and calls
   --gradient        learn by actor-critic with traces instead of the Hebbian rule
   --gamma F         how far ahead a gradient mind counts the future (0.95)
   --trace-lambda F  how long a choice stays creditable (0.9)

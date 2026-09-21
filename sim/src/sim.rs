@@ -1726,9 +1726,11 @@ fn decide(
         let mut sick_near = 0.0f32;
         let mut kin_sig = [0.0f32; N_SIG];
         let mut foe_sig = [0.0f32; N_SIG];
-        let own_score = a.prestige * (0.5 + a.charisma);
+        // In a bare world nobody is anybody's leader: prestige buys no obedience, and whatever
+        // coordination happens has to be built out of calls and what people can see.
+        let own_score = if cfg.bare { 0.0 } else { a.prestige * (0.5 + a.charisma) };
         let mut leader = NO_LEADER;
-        let mut leader_score = own_score.max(cfg.leader_min_prestige);
+        let mut leader_score = if cfg.bare { f32::INFINITY } else { own_score.max(cfg.leader_min_prestige) };
         let prev_leader = a.leader;
         let mut prev_score = 0.0f32;
         let mut seen = 0u32;

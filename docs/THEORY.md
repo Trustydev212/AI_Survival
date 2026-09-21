@@ -283,6 +283,18 @@ là chỗ chứa của tôi?
    giới có **bầy thú** chỉ ngã khi ít nhất hai người đánh gần cùng lúc (mục 12): chưa đủ, và còn có hại. Giả
    thuyết tiếp theo: việc phối hợp phải rẻ khi thử và chỉ đắt khi bỏ dở, ví dụ dựng một công trình lớn cần
    nhiều người góp vật liệu, không ai mất gì nếu góp một mình.
+   **Giả thuyết cái nạng, và lần nhìn đầu tiên bác nó.** Lập luận: chừng nào mệnh lệnh còn điều phối
+   giúp, tiếng gọi không có việc gì để làm, nên phải lấy hết khung xã hội đi thì ngôn ngữ mới có lý do
+   tồn tại. Cờ `--bare` bỏ hẳn thủ lĩnh, mệnh lệnh và tập quán, chỉ để lại thân thể, sáu hành động và
+   tiếng gọi. Sàng lọc 8 thế giới, 8.000 tick: nghĩa trung vị 0,012 so với 0,015 của mặc định, hiểu
+   0,007 so với 0,019, tức là **không khá hơn, phần hiểu còn tệ đi**; kiến thức mỗi người 3,6 so với
+   11,9. Thế giới cao nhất ở nhánh trần có nghĩa 0,125 so với 0,065, nên vẫn còn một chút đáng nhìn ở
+   đuôi phân phối, nhưng trung vị nói không.
+   Cách đọc: bỏ cái nạng đi không đủ. Một tiếng gọi chỉ đáng phát khi có việc mà biết thêm một điều từ
+   người khác thì làm được còn không biết thì không, và thế giới này chưa có việc nào như thế. Điều
+   cần thử tiếp không phải nhiều seed hơn mà là **chạy dài hơn nhiều**, vì trong mọi đợt trước, những
+   lần tiếng gọi loé lên có nghĩa đều xảy ra muộn.
+
    Từ giờ ngôn ngữ được đo ở **hai đầu kênh**: `signal_meaning` là thông tin tương hỗ giữa điều một người
    nói và tình trạng của chính người đó (đói hay no, sợ hay không: sáu lớp), tức là tiếng gọi *có nội dung*;
    `signal_mi` là giữa điều nghe được và việc làm ngay sau, tức là tiếng gọi *được hiểu*. Một tiếng gọi có

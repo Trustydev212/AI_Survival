@@ -25,7 +25,9 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SIM = os.path.join(ROOT, "sim", "target", "release", "sim")
+# AISV_SIM lets a freshly built binary be tried while another experiment is still running on
+# the installed one, which is otherwise a good way to mix two builds into one experiment.
+SIM = os.environ.get("AISV_SIM") or os.path.join(ROOT, "sim", "target", "release", "sim")
 LAB = os.path.join(ROOT, "docs", "lab")
 DEFS = os.path.join(ROOT, "tools", "experiments.json")
 METRICS = ["peak_pop", "final_pop", "innovations", "mean_known", "soil_health", "lived_soil", "settled_share",

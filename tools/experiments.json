@@ -166,5 +166,16 @@
         "0.01"
       ]
     }
+  },
+  "bare": {
+    "title": "Bỏ hết khung xã hội thì có gì tự mọc lên không?",
+    "question": "Mặc định có sẵn thủ lĩnh, mệnh lệnh và tập quán, nên phối hợp chưa bao giờ phải được phát minh ra. Nhánh bare lấy hết đi, chỉ còn thân thể, sáu hành động và tiếng gọi. Câu hỏi thật: tiếng gọi có bắt đầu mang nghĩa khi không còn gì khác điều phối hộ không.",
+    "control": "default",
+    "arms": {
+      "default": [],
+      "bare": [
+        "--bare"
+      ]
+    }
   }
 }
