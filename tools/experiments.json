@@ -194,7 +194,7 @@
   },
   "pace": {
     "title": "Đất có phải là cái tạo nhịp dao động không?",
-    "question": "Mục 15: xã hội không tìm được cân bằng mà lắc, càng già càng mạnh. Nghi can là vòng phản hồi âm có độ trễ qua đất: hái nhiều thì đất mòn, mòn thì đói, đói thì chết bớt, chết bớt thì đất hồi. Nếu đúng thì làm đất mòn nhanh hơn phải lắc mạnh hơn, và làm đất bền hơn phải lắc êm hơn. 60.000 tick vì dao động chỉ lộ ra ở đường dài. Nhánh đối chứng ghi rõ giá trị mặc định để có thư mục riêng.",
+    "question": "Mục 15: xã hội không tìm được cân bằng mà lắc, càng già càng mạnh. Nghi can là vòng phản hồi âm có độ trễ qua đất: hái nhiều thì đất mòn, mòn thì đói, đói thì chết bớt, chết bớt thì đất hồi. Nếu đúng thì làm đất mòn nhanh hơn phải lắc mạnh hơn, và làm đất bền hơn phải lắc êm hơn. 60.000 tick vì dao động chỉ lộ ra ở đường dài. Nhánh đối chứng ghi rõ giá trị mặc định để có thư mục riêng. KẾT QUẢ: đất không phải nhịp. Cả hai chiều đều không làm dao động êm đi.",
     "control": "default",
     "arms": {
       "default": [
@@ -208,6 +208,25 @@
       "tough": [
         "--soil-drain",
         "0.0001"
+      ]
+    }
+  },
+  "food": {
+    "title": "Thức ăn có phải là cái tạo nhịp không?",
+    "question": "Mục 15 và thí nghiệm pace: xã hội dao động, và đất không phải thủ phạm. Tương quan trễ trên bốn thế giới dài chỉ ra thức ăn: dân số đông thì 500 tick sau thức ăn cạn, r = -0,79. Đó là vòng tiêu thụ - tài nguyên cổ điển có độ trễ. Nếu đúng thì tốc độ mọc lại của thức ăn phải đổi được nhịp: mọc nhanh thì đuổi kịp và êm, mọc chậm thì vọt và sập. Mọc lại mặc định 0,08 mỗi tick; hai nhánh kia gấp đôi và một nửa. 60.000 tick.",
+    "control": "default",
+    "arms": {
+      "default": [
+        "--hear-strangers",
+        "1"
+      ],
+      "fast-regrow": [
+        "--regrow",
+        "0.16"
+      ],
+      "slow-regrow": [
+        "--regrow",
+        "0.04"
       ]
     }
   }

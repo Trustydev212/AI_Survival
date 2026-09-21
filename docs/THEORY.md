@@ -322,6 +322,29 @@ thang thời gian mà nó đáng lẽ có cơ hội nhất. Khung xã hội vi�
 **Độ tin.** Bốn thế giới mỗi nhánh, nên đây là dấu hiệu mạnh chứ chưa phải bằng chứng theo chuẩn của sổ
 này. Nhưng hướng thì nhất quán ở cả bốn, và phần tách cửa sổ ở trên loại được lời giải thích tầm thường.
 
+### 16. Đất không phải cái tạo nhịp; thức ăn thì có vẻ là
+
+**Phát biểu.** Mục 15 cho thấy xã hội dao động và càng già càng lắc mạnh. Nghi can đầu tiên là đất, vì
+hái nhiều thì đất mòn, mòn thì đói, đói thì chết bớt, chết bớt thì đất hồi. **Sai.** Vòng qua đất không
+điều khiển nhịp. Nghi can đúng hơn là vòng tiêu thụ tài nguyên qua chính thức ăn.
+
+**Bằng chứng, phần bác bỏ.** `tools/lab.py run pace --seeds 1-4 --ticks 60000` (docs/lab/pace.md): đất
+mòn nhanh gấp ba cho biên độ 3,55, mặc định 9,54, đất bền gấp mười 6,89. Nếu đất tạo nhịp thì đất bền phải
+làm êm hẳn; nó không. Còn nhánh đất mỏng manh "êm" chỉ vì thế giới ở đó nhỏ và chết sớm: 2 tuyệt chủng, 1
+suy tàn, kiến thức 17,8 so với 43,8. Chỉ số khác 0 đều là những thứ hiển nhiên phải đổi khi vặn đất.
+
+**Bằng chứng, phần chỉ điểm.** Tương quan trễ giữa thức ăn và dân số trên các thế giới dài: **dân số dẫn
+trước thức ăn 500 tick với r = −0,79** ở hai trên ba thế giới đo được. Đọc bằng lời: đông người thì nửa
+nghìn tick sau thức ăn cạn. Đó là dấu vân tay của một vòng tiêu thụ tài nguyên có độ trễ, thứ luôn sinh
+dao động. Tương quan giữa đất và dân số thì lung tung, từ −0,73 đến 0,00.
+
+**Dự đoán ghi trước.** Nếu thức ăn tạo nhịp thì vặn tốc độ mọc lại phải đổi được dao động: mọc nhanh thì
+tài nguyên đuổi kịp miệng ăn và biên độ giảm; mọc chậm thì vọt lên rồi sập mạnh hơn. Đang chạy
+`tools/lab.py run food --seeds 1-4 --ticks 60000`.
+
+**Độ tin.** Phần bác bỏ đất: bốn thế giới mỗi nhánh, hướng nhất quán, coi là dấu hiệu mạnh. Phần chỉ điểm
+thức ăn: mới là tương quan, chưa phải nhân quả; thí nghiệm đang chạy mới là phép thử.
+
 ## Những câu hỏi mở
 
 1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
