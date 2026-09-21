@@ -107,6 +107,9 @@ pub struct Metrics {
     pub sig_mi: f32,
     /// How much what one says reflects one's own state (bits): meaning on the speaker's side.
     pub sig_meaning: f32,
+    /// Division of labour, 0..1: how much of the population's activity mix is explained by who
+    /// does it (mutual information between person and action, over the entropy of actions).
+    pub dol: f32,
     /// Things per head, and the share of people holding at least one made thing.
     pub things: f32,
     pub equipped: f32,
@@ -140,6 +143,7 @@ pub fn compute(
     let mean_known = agents.iter().map(|a| a.known_count() as f32).sum::<f32>() / n;
     let plastic = agents.iter().map(|a| a.plastic.iter().map(|p| p.abs()).sum::<f32>() / a.plastic.len().max(1) as f32).sum::<f32>() / n;
     let (sig_ent, sig_mi, sig_meaning) = signal_stats(agents);
+    let dol = division_of_labour(agents);
     let things = agents.iter().map(|a| a.gear.iter().filter(|g| g.is_some()).count() as f32).sum::<f32>() / n;
     let equipped = agents.iter().filter(|a| a.gear.iter().any(|g| g.is_some())).count() as f32 / n;
     let learn_rate = agents.iter().map(|a| a.genome.learn_rate() * 1000.0).sum::<f32>() / n;
@@ -257,6 +261,7 @@ pub fn compute(
         sig_ent,
         sig_mi,
         sig_meaning,
+        dol,
         things,
         equipped,
         learn_rate,
@@ -318,7 +323,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
         "breed_rate", "stores", "stored", "deposits", "withdrawals", "winter_withdrawals", "looted",
         "plastic", "signal_entropy", "signal_mi", "things_per_head", "equipped_share", "craft_tries", "crafts", "made", "built",
-        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning",
+        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning", "division_of_labour",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -399,6 +404,7 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     n(w.hunts as f32);
     n(w.hunt_fails as f32);
     n(m.sig_meaning);
+    n(m.dol);
     for v in m.emotion {
         n(v);
     }
@@ -477,4 +483,42 @@ pub fn signal_stats(agents: &[Agent]) -> (f32, f32, f32) {
     let n = agents.len() as f32;
     let ent = -said.iter().filter(|c| **c > 0.0).map(|c| (c / n) * (c / n).log2()).sum::<f32>();
     (ent, mutual_information(&heard_act, n), mutual_information(&said_state, n))
+}
+
+/// Division of labour in the sense of Gorelick and others: the mutual information between
+/// *who* and *what is done*, over the entropy of what is done. 0 when everyone lives the same
+/// mix of actions; 1 when each person does one thing and different people do different things.
+/// Uses each agent's decayed action profile, so it reads roles, not single moments.
+pub fn division_of_labour(agents: &[Agent]) -> f32 {
+    if agents.len() < 20 {
+        return 0.0;
+    }
+    let entropy = |p: &[f32; N_ACT]| -> f32 { -p.iter().filter(|x| **x > 0.0).map(|x| x * x.log2()).sum::<f32>() };
+    let mut pooled = [0f32; N_ACT];
+    let mut inner = 0.0;
+    let mut counted = 0.0;
+    for a in agents {
+        let total: f32 = a.profile[..N_ACT].iter().sum();
+        if total <= 0.0 {
+            continue;
+        }
+        let mut p = [0f32; N_ACT];
+        for k in 0..N_ACT {
+            p[k] = a.profile[k] / total;
+            pooled[k] += p[k];
+        }
+        inner += entropy(&p);
+        counted += 1.0;
+    }
+    if counted == 0.0 {
+        return 0.0;
+    }
+    for x in pooled.iter_mut() {
+        *x /= counted;
+    }
+    let h = entropy(&pooled);
+    if h <= 0.0 {
+        return 0.0;
+    }
+    ((h - inner / counted) / h).clamp(0.0, 1.0)
 }

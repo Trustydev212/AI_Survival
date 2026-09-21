@@ -201,8 +201,12 @@ lại như một cờ thí nghiệm.
 2. **Học trong đời học được gì?** Đã biết nó làm ra người dùng đồ vật (mục 8). Chưa biết tiến hoá đẩy tốc độ
    học đi đâu: `plastic` trung vị 0,01 với học mặc định, tức là đa số não học chậm. Câu hỏi: có dòng họ nào
    tiến hoá ra não mềm hẳn không, và họ sống ra sao?
-3. **Phân công lao động có nổi lên không?** Có người chỉ chế tác, người chỉ hái không? Chỉ số: entropy của
-   ngăn đồ vật theo dòng họ, và số vật liệu cho nhau (`material_gifts`).
+3. **Phân công lao động có nổi lên không?** Có người chỉ chế tác, người chỉ hái không? Từ giờ có chỉ số
+   `division_of_labour` (0 đến 1): thông tin tương hỗ giữa *ai* và *làm gì*, chia cho entropy của việc làm,
+   tính trên hồ sơ hành động có quên dần của từng người (Gorelick và cộng sự). 0 là mọi người sống cùng một
+   kiểu pha trộn; 1 là mỗi người một việc và người này khác người kia. Thế giới thử (seed 3, 3.000 tick) đứng
+   ở 0,55 đến 0,70 ngay từ đầu: các cá thể đã chuyên môn hoá mạnh, nhưng chưa biết đó là chuyên môn theo
+   dòng họ, theo tuổi hay theo hoàn cảnh. Chỉ số phụ: số vật liệu cho nhau (`material_gifts`).
 4. **Tập quán có tự bảo vệ đất không khi tắt hẳn thủ lĩnh?** Đã trả lời một phần ở mục 10: tập quán giữ người
    ở lại; đất thì cả hai nhánh đều 100% trong 20.000 tick, chưa phân biệt được.
 5. **Có "đêm trường" không?** Sự kiện *lãng quên* ghi lúc kiến thức tụt quá nửa. Bao nhiêu thế giới quên rồi

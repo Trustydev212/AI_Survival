@@ -585,7 +585,7 @@ python3 tools/lab.py run orders --seeds 1-16  # chạy mọi nhánh trên cùng 
 `tools/experiments.json` định nghĩa mỗi câu hỏi là vài nhánh chỉ khác nhau đúng một cờ (mệnh lệnh, độ
 khó phát minh, giá của biển, độ mòn đất, số người xuất phát). Báo cáo có kết cục từng nhánh, trung vị mọi
 chỉ số, và hiệu số so với đối chứng kèm khoảng tin cậy 95% bootstrap. CSV thống kê của mỗi run có thêm các
-chỉ số nghiên cứu: độ dẻo não trong đời, entropy tín hiệu, thông tin tương hỗ tín hiệu với tình trạng người nói và với hành động người nghe, đồ vật
+chỉ số nghiên cứu: độ dẻo não trong đời, entropy tín hiệu, thông tin tương hỗ tín hiệu với tình trạng người nói và với hành động người nghe, phân công lao động, đồ vật
 mỗi đầu người, số lần thử chế tác, công thức bị quên, vật liệu cho nhau, chuyến ra khơi.
 
 Những quy luật đã quan sát được, bằng chứng và độ tin của từng cái, cùng các câu hỏi còn mở, nằm trong

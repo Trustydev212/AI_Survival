@@ -10,6 +10,7 @@ Nothing here needs more than the standard library.
     python3 tools/lab.py report orders             # report again from the files on disk
     python3 tools/lab.py run all --seeds 1-8 --ticks 20000
     python3 tools/lab.py run all --seeds 1-16 --reuse   # skip arms already run on these seeds
+    python3 tools/lab.py index                     # docs/lab/README.md: every experiment at a glance
 
 Reports land in docs/lab/<name>.md: per-arm outcome counts, medians of every metric, and
 for each treatment arm the difference of means against the control with a bootstrap 95%
@@ -27,7 +28,7 @@ SIM = os.path.join(ROOT, "sim", "target", "release", "sim")
 LAB = os.path.join(ROOT, "docs", "lab")
 DEFS = os.path.join(ROOT, "tools", "experiments.json")
 METRICS = ["peak_pop", "final_pop", "innovations", "mean_known", "soil_health", "lived_soil", "settled_share",
-           "obedience", "breed_rate", "swing", "final_level", "plastic", "signal_mi", "signal_meaning", "things_per_head", "equipped_share", "crafts", "learn_rate", "loudness", "hunts"]
+           "obedience", "breed_rate", "swing", "final_level", "plastic", "signal_mi", "signal_meaning", "things_per_head", "equipped_share", "crafts", "learn_rate", "loudness", "hunts", "division_of_labour"]
 GOOD = {"flourishing", "surviving"}
 
 
@@ -110,7 +111,7 @@ def fmt(v):
     return f"{v:.0f}" if abs(v) >= 100 else f"{v:.2f}"
 
 
-TRAJ = ["pop", "mean_known", "plastic", "signal_mi", "signal_meaning", "things_per_head", "soil_health", "settled_share", "learn_rate", "loudness"]
+TRAJ = ["pop", "mean_known", "plastic", "signal_mi", "signal_meaning", "things_per_head", "soil_health", "settled_share", "learn_rate", "loudness", "division_of_labour"]
 
 
 def read_trajectories(name, arm, flags=None, ticks=(2500, 5000, 10000, 15000, 20000)):
@@ -211,14 +212,50 @@ def report(name, exp):
     return path
 
 
+def index(defs):
+    """One page over every experiment that has a report: arms, good outcomes, and which
+    differences against the control came out clearly different from zero."""
+    lines = ["# Phòng thí nghiệm: mọi thí nghiệm ở một trang", "",
+             "Mỗi dòng là một câu hỏi; mỗi nhánh chỉ khác đối chứng đúng một cờ và chạy trên cùng dãy seed.",
+             "\"Tốt\" là số thế giới flourishing hoặc surviving. \"Khác 0\" là các chỉ số mà hiệu số so với đối",
+             "chứng có khoảng tin cậy 95% không chứa 0 (dấu là chiều của nhánh so với đối chứng).", "",
+             "| thí nghiệm | câu hỏi | nhánh: tốt | khác 0 |", "|---|---|---|---|"]
+    for name, exp in defs.items():
+        if not os.path.exists(os.path.join(LAB, f"{name}.md")):
+            continue
+        arms = list(exp["arms"].keys())
+        data = {arm: read_arm(name, arm, exp["arms"][arm]) for arm in arms}
+        control = exp.get("control", arms[0])
+        good = "; ".join(f"{arm} {sum(1 for r in data[arm] if r['outcome'] in GOOD)}/{len(data[arm])}" for arm in arms)
+        clear = []
+        for arm in arms:
+            if arm == control:
+                continue
+            for m in METRICS:
+                a = [r.get(m, float("nan")) for r in data[control]]
+                b = [r.get(m, float("nan")) for r in data[arm]]
+                d, lo, hi = bootstrap_diff(a, b)
+                if d == d and (lo > 0 or hi < 0):
+                    clear.append(f"{arm}: {m} {'+' if d > 0 else '−'}{fmt(abs(d))}")
+        lines.append(f"| [{name}]({name}.md) | {exp['title']} | {good} | {'; '.join(clear) or '–'} |")
+    lines += ["", "_Sinh bởi `python3 tools/lab.py index`. Báo cáo đầy đủ của từng thí nghiệm nằm trong file cùng tên._"]
+    path = os.path.join(LAB, "README.md")
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print("index ->", os.path.relpath(path, ROOT))
+
+
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("list", "run", "report"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("list", "run", "report", "index"):
         sys.exit(__doc__)
     defs = load_defs()
     cmd = sys.argv[1]
     if cmd == "list":
         for name, exp in defs.items():
             print(f"{name:<14} {exp['title']}  [{', '.join(exp['arms'])}]")
+        return
+    if cmd == "index":
+        index(defs)
         return
     names = list(defs) if sys.argv[2] == "all" else [sys.argv[2]]
     seeds = "1-8"
