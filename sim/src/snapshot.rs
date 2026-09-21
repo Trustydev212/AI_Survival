@@ -2,12 +2,12 @@
 //! Little endian throughout. The file is flushed after every frame so a viewer can
 //! follow a run while it is still being computed.
 //!
-//! header: "AISV" u32 version(9) u16 width u16 height f32 max_food
+//! header: "AISV" u32 version(10) u16 width u16 height f32 max_food
 //!         u32 len, then the sea as a bitmask (cell y*width+x is bit x%8 of byte (y*width+x)/8)
 //! frame:  u32 frame_len (bytes that follow this field)
 //!         u32 tick u8 era u8 keyframe u32 pop u32 stores
 //!         f32 soil f32 climate f32 obedience f32 mean_known f32 season
-//!         4 layers (food q0..31, cultivation q0..31, fertility q0..63, buildings: 0 none, else look 1..3 + 3 if strong), each: u32 len, then RLE pairs
+//!         4 layers (food q0..31, cultivation q0..31, fertility q0..63, buildings: 0 none, else look 1..4 | storeys<<3 | span<<5), each: u32 len, then RLE pairs
 //!           (value u8, run u8). A keyframe holds the layer itself; other frames hold layer XOR previous.
 //!         pop agents of 28 bytes: u32 id u16 x*64 u16 y*64 u16 lineage u32 name u16 followers
 //!           u8 flags u8 energy i8 mdx*100 i8 mdy*100 u8 under(0 none, 1..5 order) u8 action
@@ -52,7 +52,7 @@ impl Snapshot {
     pub fn create(path: &str, world: &World) -> std::io::Result<Snapshot> {
         let mut out = BufWriter::new(std::fs::File::create(path)?);
         out.write_all(b"AISV")?;
-        out.write_all(&9u32.to_le_bytes())?;
+        out.write_all(&10u32.to_le_bytes())?;
         out.write_all(&(world.width as u16).to_le_bytes())?;
         out.write_all(&(world.height as u16).to_le_bytes())?;
         out.write_all(&world.max_food.to_le_bytes())?;
@@ -93,11 +93,17 @@ impl Snapshot {
                     0 => (world.food[i] * food_scale).clamp(0.0, 31.0) as u8,
                     1 => (world.cultivation[i] * 31.0).clamp(0.0, 31.0) as u8,
                     2 => (world.fertility[i] * 63.0).clamp(0.0, 63.0) as u8,
+                    // What is built here: three bits for what it is made of, two for how high it
+                    // stands, two for how far it reaches. All three come from the recipe, so the
+                    // skyline of a settlement is a picture of what its people worked out.
                     _ => match world.buildings[i] {
-                        Some(b) => {
-                            let look = registry.get(b.item as usize).and_then(|inn| inn.craft.as_ref()).map_or(2, |c| craft::look_of(&c.props));
-                            look + if b.shelter >= 0.7 { 3 } else { 0 }
-                        }
+                        Some(b) => match registry.get(b.item as usize).and_then(|inn| inn.craft.as_ref()) {
+                            Some(c) => {
+                                let (span, storeys) = craft::shape_of(&c.props, c.n_parts as usize);
+                                craft::look_of(&c.props) | (storeys << 3) | (span << 5)
+                            }
+                            None => 2 | (1 << 3),
+                        },
                         None => 0,
                     },
                 };

@@ -337,12 +337,34 @@ pub fn bodies_in(parts: &[[f32; N_PROP]]) -> usize {
 }
 
 /// What a shelter looks like: 1 wood-like, 2 stone, clay or bone, 3 fired.
+/// What a shelter looks like, decided by nothing but what it is made of. Five steps now, so that
+/// a settlement seen from above tells you what its people have worked out: branches, then earth
+/// and stone, then something fired, then something hard and heavy enough to carry its own weight
+/// upward. Nobody writes an age of stone or an age of metal anywhere; the materials do it.
 pub fn look_of(p: &[f32; N_PROP]) -> u8 {
-    if p[P_HEAT] >= 0.9 && p[P_FIRE] == 0.0 {
-        3
+    if p[P_HEAT] >= 0.9 && p[P_HARD] >= 0.8 && p[P_MASS] >= 0.7 && p[P_FIRE] == 0.0 {
+        4 // worked metal: hard, heavy and unburnable
+    } else if p[P_HEAT] >= 0.9 && p[P_FIRE] == 0.0 {
+        3 // fired: brick and tile
     } else if p[P_BUOY] >= 0.4 {
-        1
+        1 // branches and hide
     } else {
-        2
+        2 // earth and stone
     }
+}
+
+/// How far a shelter reaches and how far up it goes, from its own weight and its own making.
+/// A heavy thing built out of many heavy things holds a bigger floor and stacks higher; a lean-to
+/// of branches does neither. Returns (half-width in cells, storeys).
+pub fn shape_of(p: &[f32; N_PROP], bodies: usize) -> (u8, u8) {
+    let heft = p[P_MASS] * (1.0 + p[P_HARD]) * (bodies as f32).sqrt();
+    let span = if heft >= 3.4 { 2 } else if heft >= 1.7 { 1 } else { 0 };
+    let storeys = if p[P_HARD] >= 0.8 && p[P_MASS] >= 0.7 && heft >= 3.0 {
+        3
+    } else if p[P_HARD] >= 0.6 && heft >= 2.0 {
+        2
+    } else {
+        1
+    };
+    (span, storeys)
 }

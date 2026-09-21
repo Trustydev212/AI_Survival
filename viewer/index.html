@@ -153,7 +153,7 @@
     </div>
   </div>
   <aside>
-    <h3><span data-t="history">Sử ký</span><label><input type="checkbox" id="pauseMajor"> <span data-t="pauseMajor">dừng ở sự kiện lớn</span></label></h3>
+    <h3><span data-t="history">Sử ký</span><label><input type="checkbox" id="majorOnly"> <span data-t="majorOnly">chỉ mốc lớn</span></label><label><input type="checkbox" id="pauseMajor"> <span data-t="pauseMajor">dừng ở sự kiện lớn</span></label></h3>
     <div id="events"></div>
     <button id="backToNow" style="display:none" data-t="backToNow">↓ theo kịp sử ký</button>
     <h3 id="lifeHead" style="display:none"><span data-t="life">Một cuộc đời</span><label><button id="unfollow" style="padding:1px 8px">×</button></label></h3>
@@ -193,7 +193,7 @@ const T = {
     drop: 'Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.',
     loading: 'Đang tải', notfound: 'Chưa có dữ liệu cho seed này. Dữ liệu không nằm trong git, phải chạy sim để sinh ra:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Rồi mở lại trang này. Mở thế giới khác bằng <code>?seed=N</code>, đúng số seed bạn đã chạy. Hoặc kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
     tlPop: 'dân số', tlKnown: 'kiến thức', tlSoil: 'đất', chronicleTab: 'Sử ký',
-    backToNow: '↓ theo kịp sử ký', records: 'Kỷ lục thế giới', recPop: 'đông nhất', recKnown: 'biết nhiều nhất', recThings: 'đã làm ra',
+    majorOnly: 'chỉ mốc lớn', backToNow: '↓ theo kịp sử ký', records: 'Kỷ lục thế giới', recPop: 'đông nhất', recKnown: 'biết nhiều nhất', recThings: 'đã làm ra',
     recDeep: 'thứ phức tạp nhất', recTick: 'tick', recNothing: 'chưa có gì', recLayers: 'tầng',
     followers: 'người theo', unnamed: '(chưa có tên)', fps: 'khung/giây', order: 'lệnh', custom: 'tập quán', none: 'không',
     normal: 'bình thường', winter: 'mùa đông', drought: 'hạn hán', droughtWinter: 'hạn + đông', plenty: 'được mùa', harsh: 'năm khắc nghiệt',
@@ -207,7 +207,7 @@ const T = {
     drop: 'Or drop the three files snap_seedN.bin, meta_seedN.json, events_seedN.txt here.',
     loading: 'Loading', notfound: 'No data for this seed yet. The data is not in git; run the sim to make it:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Then reload. Open another world with <code>?seed=N</code>, the seed you actually ran. Or drop the files here.', badfile: 'Not a snapshot file.',
     tlPop: 'people', tlKnown: 'knowledge', tlSoil: 'soil', chronicleTab: 'History',
-    backToNow: '↓ catch up', records: 'What this world has reached', recPop: 'most people', recKnown: 'most known', recThings: 'things made',
+    majorOnly: 'milestones only', backToNow: '↓ catch up', records: 'What this world has reached', recPop: 'most people', recKnown: 'most known', recThings: 'things made',
     recDeep: 'most involved thing', recTick: 'tick', recNothing: 'nothing yet', recLayers: 'layers deep',
     followers: 'followers', unnamed: '(unnamed)', fps: 'frames/s', order: 'order', custom: 'custom', none: 'none',
     normal: 'normal', winter: 'winter', drought: 'drought', droughtWinter: 'drought + winter', plenty: 'year of plenty', harsh: 'harsh year',
@@ -290,7 +290,7 @@ function describeEvent(e) {
 // ---------- state
 const state = {
   bytes: null, W: 0, H: 0, maxFood: 10, frames: [], meta: null, events: [], live: false, liveOffset: 0,
-  nowEvent: -1, markedUpto: 0, markedTick: -1, handScrolled: 0, lastScroll: 0, autoScrolling: 0,
+  majorOnly: false, nowEvent: -1, markedUpto: 0, markedTick: -1, handScrolled: 0, lastScroll: 0, autoScrolling: 0,
   frame: 0, sub: 0, playing: false, fps: 4, follow: null, drag: null, pauseMajor: false, shownBanner: -1,
   layerCache: { idx: -1, layers: null }, agentCache: new Map(), lastType: null,
   tileTypes: null, pixi: null, sprites: new Map(), lastFrameDrawn: -1, seenMajor: new Set(), selected: null, life: null, dragMoved: false,
@@ -963,16 +963,30 @@ function draw(force) {
       const W = state.W, H = state.H; let n = 0;
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const v = built[y * W + x]; if (!v || n > 6000) continue; n++;
-        const look = ((v - 1) % 3) + 1, strong = v > 3;
+        // Three bits of material, two of height, two of reach: a shelter of branches is small and
+        // flat, one of worked metal is wide and stands three storeys. Nothing here is a style
+        // anybody chose; it is the recipe its builders found, drawn.
+        const look = state.version >= 10 ? (v & 7) : (((v - 1) % 3) + 1);
+        const storeys = state.version >= 10 ? Math.max(1, (v >> 3) & 3) : (v > 3 ? 2 : 1);
+        const span = state.version >= 10 ? ((v >> 5) & 3) : (v > 3 ? 1 : 0);
         let tex, sc;
         if (sunny) {
           const pick = hash(x, y, 21);
-          tex = look === 1 ? houseTex[pick < 0.5 ? 0 : 2] : look === 2 ? houseTex[pick < 0.5 ? 1 : 3] : houseTex[pick < 0.5 ? 4 : 5];
-          sc = strong ? 0.75 : 0.5;
-        } else { tex = propTex.house; sc = strong ? 0.5 : 0.35; }
+          tex = look >= 4 ? houseTex[pick < 0.5 ? 4 : 5] : look === 3 ? houseTex[pick < 0.5 ? 1 : 3] : look === 2 ? houseTex[pick < 0.5 ? 3 : 1] : houseTex[pick < 0.5 ? 0 : 2];
+          sc = 0.42 + 0.16 * span + 0.1 * storeys;
+        } else { tex = propTex.house; sc = 0.3 + 0.1 * span + 0.07 * storeys; }
         if (!tex) continue;
-        const h = new PIXI.Sprite(tex); h.anchor.set(0.5, 1); h.scale.set(sc); h.position.set(x * TILE + TILE / 2, y * TILE + TILE + 4); storeLayer.addChild(h);
-        if (sunny && strong && look === 3 && fireTex.length && hash(x, y, 22) < 0.3) addAnim(fireTex, x * TILE + TILE / 2 + 18, y * TILE + TILE + 2, 1, x + y);
+        const bx = x * TILE + TILE / 2, by = y * TILE + TILE + 4;
+        // Storeys are drawn as the same house stacked, each a little smaller: with the art we have
+        // that is the honest way to show a thing that stands higher than one floor.
+        for (let s = storeys - 1; s >= 0; s--) {
+          const h = new PIXI.Sprite(tex); h.anchor.set(0.5, 1);
+          h.scale.set(sc * (1 - 0.13 * s));
+          h.position.set(bx, by - s * TILE * sc * 1.55);
+          if (s) h.tint = 0xd8dce6;
+          storeLayer.addChild(h);
+        }
+        if (sunny && look >= 3 && fireTex.length && hash(x, y, 22) < 0.3) addAnim(fireTex, bx + 18, by - 2, 1, x + y);
       }
     }
     // villages where people have settled (older streams without a buildings layer): one house per 7x7 block
@@ -1169,7 +1183,11 @@ function renderEventList() {
   const box = $('events'); box.innerHTML = '';
   state.nowEvent = -1; state.markedUpto = 0; state.markedTick = -1;
   for (const [i, e] of state.events.entries()) {
-    const d = describeEvent(e); const el = document.createElement('div');
+    const d = describeEvent(e);
+    // A world makes hundreds of things, and every one of them was filling the chronicle. With
+    // this on, only the moments that changed something stay: firsts, eras, crises, leaders.
+    if (state.majorOnly && !d.major) continue;
+    const el = document.createElement('div');
     el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','first_house_burned','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience','first_sail','craft','first_tool','first_weapon','first_armour','first_boat','first_vessel','first_fire','first_shelter','first_hunt'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
     el.dataset.i = i; el.innerHTML = `<span class="ic">${d.icon}</span><span><span class="t">${e.tick}</span>${d.text.replace(/</g, '&lt;')}${d.sub ? ' <span style="color:var(--muted)">· ' + d.sub + '</span>' : ''}</span>`;
     if (e.x != null) el.onclick = () => { flyTo(e.x, e.y); state.follow = null; state.frame = frameAt(e.tick); state.sub = 0; syncButtons(); draw(true); };
@@ -1392,6 +1410,12 @@ $('backToNow').onclick = () => {
   $('backToNow').style.display = 'none';
   const el = $('events').children[state.nowEvent];
   if (el) { state.autoScrolling = Date.now(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+};
+
+$('majorOnly').onchange = e => {
+  state.majorOnly = e.target.checked;
+  renderEventList();
+  markEvents(state.frames.length ? state.frames[state.frame].tick : 0);
 };
 
 $('sheetTab').onclick = () => {
