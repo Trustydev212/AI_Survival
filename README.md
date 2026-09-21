@@ -553,6 +553,7 @@ Trên mặc định cuối cùng (nghe cả người lạ, không bầy thú), h
 
 | Thí nghiệm | Kết quả | Báo cáo |
 |---|---|---|
+| chạy dài 60.000 tick | xã hội **không** tìm được cân bằng: kết cục tốt 1/4 so với 9/16 ở 20.000 tick, và đo trên cùng độ dài cửa sổ thì biên độ dao động 5,5 so với 3,4, tức thế giới già lắc mạnh hơn thật. Thế giới trần trụi thua hẳn: 0/4, tín hiệu bằng 0 | docs/lab/long.md |
 | cách não học (5 nhánh) | bước học dài giết 10/16 thế giới; cùng cách học với bước ngắn hơn mười lần thì ngang luật cũ (9/16) và biết gần gấp đôi. Nhánh chọn việc ngẫu nhiên mà không học cho kiến thức cao nhất, 74,1 so với 36,4, KTC không chứa 0 | docs/lab/brains.md |
 | trần phát minh (128 so với 512) | thế giới cũ chạm trần 128 ở tick 6.500 rồi ngừng phát minh vĩnh viễn dù vẫn sống. Gỡ trần: 243 phát minh ở tick 20.000 và vẫn lên, kiến thức mỗi người 118 lên 135, đất tốt hơn | docs/THEORY.md mục 14 |
 | mệnh lệnh và tập quán, lặp lại | **đảo chiều**: không mệnh lệnh cho 12/16 kết cục tốt so với 9/16, kiến thức 54,7 so với 36,7, bùng-vỡ 2,94 so với 3,39. Phát biểu "thủ lĩnh là cái phanh" phải rút lại | docs/lab/customs.md |
