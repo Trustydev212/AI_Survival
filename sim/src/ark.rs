@@ -5,7 +5,8 @@
 //! spent learning the same first lessons over and over. Nothing accumulated.
 //!
 //! The ark is the one thing carried across. It holds a few of the brains that did best, judged by
-//! the only measure the world itself keeps, how many children they left, and the founders of the
+//! the only measure the world itself keeps -- how many children they left, against what everyone
+//! else alive at the time managed -- and the founders of the
 //! next world are drawn from it with mutation rather than from noise. Selection then reaches
 //! across the deaths of whole civilisations instead of stopping at each one.
 //!
@@ -28,6 +29,9 @@ pub struct Saved {
     pub genome: Genome,
     /// How many children this brain left, which is the world's own measure of doing well.
     pub children: u16,
+    /// That count against what its contemporaries managed. This, not the count, decides who is
+    /// kept: see `consider`.
+    pub edge: f32,
     /// Which civilisation it belonged to, and how old the world was when it was noticed.
     pub generation: u32,
     pub tick: u64,
@@ -43,28 +47,50 @@ impl Ark {
     /// then, not every tick: the point is to notice the good ones before the world ends, because
     /// at the end there is nobody left to ask.
     pub fn consider(&mut self, agents: &[Agent], generation: u32, tick: u64) {
+        // A brain is judged against the people it actually lived among, not against a number.
+        // Judged by the raw count of children, a place in the ark is a high-water mark that never
+        // falls: once a lineage has had a fat era and left forty-six children, every later brain
+        // must beat forty-six, however good it is for the leaner world it was born into. The
+        // records saturate and the ark shuts. Measured that way a thirty-two thousand tick run
+        // kept nothing it had not already found by tick fifteen thousand -- the file was identical,
+        // byte for byte, to the one written sixteen thousand ticks earlier.
+        //
+        // Dividing by what the reproducing people of the moment managed makes the measure mean the
+        // same thing in a fat era and a lean one, which is what relative fitness has always meant.
+        let mut breeders = 0u32;
+        let mut born = 0u32;
+        for a in agents {
+            if a.children > 0 {
+                breeders += 1;
+                born += a.children as u32;
+            }
+        }
+        if breeders == 0 {
+            return;
+        }
+        let par = (born as f32 / breeders as f32).max(1.0);
         for a in agents {
             if a.children == 0 {
                 continue;
             }
+            let edge = a.children as f32 / par;
             // One brain per lineage, so the ark does not fill up with one successful family.
             if let Some(slot) = self.kept.iter_mut().find(|s| s.genome.marker == a.genome.marker) {
-                if a.children > slot.children {
-                    *slot = Saved { genome: a.genome.clone(), children: a.children, generation, tick };
+                if edge > slot.edge {
+                    *slot = Saved { genome: a.genome.clone(), children: a.children, edge, generation, tick };
                 }
                 continue;
             }
             if self.kept.len() < CAPACITY {
-                self.kept.push(Saved { genome: a.genome.clone(), children: a.children, generation, tick });
-            } else if let Some(worst) = self.kept.iter_mut().min_by_key(|s| s.children) {
-                if a.children > worst.children {
-                    *worst = Saved { genome: a.genome.clone(), children: a.children, generation, tick };
+                self.kept.push(Saved { genome: a.genome.clone(), children: a.children, edge, generation, tick });
+            } else if let Some(worst) = self.kept.iter_mut().min_by(|x, y| x.edge.total_cmp(&y.edge)) {
+                if edge > worst.edge {
+                    *worst = Saved { genome: a.genome.clone(), children: a.children, edge, generation, tick };
                 }
             }
         }
     }
 
-    /// A brain to found a tribe with, or nothing if the ark is empty. Picked with a bias towards
     /// the ones that left most children, but never only the best: a world founded by one mind is
     /// not a world.
     pub fn draw(&self, rng: &mut Rng) -> Option<Genome> {
@@ -89,10 +115,11 @@ impl Ark {
 
     pub fn save(&self, path: &str) -> std::io::Result<()> {
         let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
-        f.write_all(b"AISA")?;
+        f.write_all(b"AISB")?;
         f.write_all(&(self.kept.len() as u32).to_le_bytes())?;
         for s in &self.kept {
             f.write_all(&s.children.to_le_bytes())?;
+            f.write_all(&s.edge.to_le_bytes())?;
             f.write_all(&s.generation.to_le_bytes())?;
             f.write_all(&s.tick.to_le_bytes())?;
             f.write_all(&(s.genome.weights.len() as u32).to_le_bytes())?;
@@ -116,7 +143,7 @@ impl Ark {
     /// up and mean something else. They are dropped rather than loaded.
     pub fn load(path: &str) -> Ark {
         let mut bytes = Vec::new();
-        if std::fs::File::open(path).and_then(|mut f| f.read_to_end(&mut bytes)).is_err() || bytes.len() < 8 || &bytes[..4] != b"AISA" {
+        if std::fs::File::open(path).and_then(|mut f| f.read_to_end(&mut bytes)).is_err() || bytes.len() < 8 || &bytes[..4] != b"AISB" {
             return Ark::default();
         }
         let mut at = 4usize;
@@ -128,11 +155,13 @@ impl Ark {
         let n = take4(&mut at) as usize;
         let mut kept = Vec::with_capacity(n);
         for _ in 0..n {
-            if at + 14 > bytes.len() {
+            if at + 18 > bytes.len() {
                 break;
             }
             let children = u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap());
             at += 2;
+            let edge = f32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+            at += 4;
             let generation = take4(&mut at);
             let tick = u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
             at += 8;
@@ -156,7 +185,7 @@ impl Ark {
             temper.copy_from_slice(&t);
             let mut learn = [0.0; N_LEARN];
             learn.copy_from_slice(&l);
-            kept.push(Saved { genome: Genome { weights, marker, temper, learn }, children, generation, tick });
+            kept.push(Saved { genome: Genome { weights, marker, temper, learn }, children, edge, generation, tick });
         }
         let want = crate::brain::N_WEIGHTS;
         let before = kept.len();
