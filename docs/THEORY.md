@@ -191,13 +191,20 @@ lại như một cờ thí nghiệm.
    giới có **bầy thú** chỉ ngã khi ít nhất hai người đánh gần cùng lúc (mục 12): chưa đủ, và còn có hại. Giả
    thuyết tiếp theo: việc phối hợp phải rẻ khi thử và chỉ đắt khi bỏ dở, ví dụ dựng một công trình lớn cần
    nhiều người góp vật liệu, không ai mất gì nếu góp một mình.
-4. **Tập quán có tự bảo vệ đất không khi tắt hẳn thủ lĩnh?** Đã trả lời một phần ở mục 10: tập quán giữ người
-   ở lại; đất thì cả hai nhánh đều 100% trong 20.000 tick, chưa phân biệt được.
+   Từ giờ ngôn ngữ được đo ở **hai đầu kênh**: `signal_meaning` là thông tin tương hỗ giữa điều một người
+   nói và tình trạng của chính người đó (đói hay no, sợ hay không: sáu lớp), tức là tiếng gọi *có nội dung*;
+   `signal_mi` là giữa điều nghe được và việc làm ngay sau, tức là tiếng gọi *được hiểu*. Một tiếng gọi có
+   thể có nội dung mà không ai hiểu, hoặc "được hiểu" mà không có nội dung khi hàng xóm chỉ cùng cảnh ngộ.
+   Sự kiện "tiếng gọi bắt đầu có nghĩa" nay đòi cả hai từ 0,2 bit. Trong một thế giới thử (seed 3, 3.000
+   tick), nội dung tăng dần từ 0 lên 0,09 bit khi dân số lên 2.000, trong khi hiểu đứng ở 0,08: tiếng gọi
+   bắt đầu phản ánh người nói trước khi ai đó dùng được nó.
 2. **Học trong đời học được gì?** Đã biết nó làm ra người dùng đồ vật (mục 8). Chưa biết tiến hoá đẩy tốc độ
    học đi đâu: `plastic` trung vị 0,01 với học mặc định, tức là đa số não học chậm. Câu hỏi: có dòng họ nào
    tiến hoá ra não mềm hẳn không, và họ sống ra sao?
 3. **Phân công lao động có nổi lên không?** Có người chỉ chế tác, người chỉ hái không? Chỉ số: entropy của
    ngăn đồ vật theo dòng họ, và số vật liệu cho nhau (`material_gifts`).
+4. **Tập quán có tự bảo vệ đất không khi tắt hẳn thủ lĩnh?** Đã trả lời một phần ở mục 10: tập quán giữ người
+   ở lại; đất thì cả hai nhánh đều 100% trong 20.000 tick, chưa phân biệt được.
 5. **Có "đêm trường" không?** Sự kiện *lãng quên* ghi lúc kiến thức tụt quá nửa. Bao nhiêu thế giới quên rồi
    tìm lại được, và tìm lại bằng cùng công thức hay công thức khác?
 

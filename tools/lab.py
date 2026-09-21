@@ -27,7 +27,7 @@ SIM = os.path.join(ROOT, "sim", "target", "release", "sim")
 LAB = os.path.join(ROOT, "docs", "lab")
 DEFS = os.path.join(ROOT, "tools", "experiments.json")
 METRICS = ["peak_pop", "final_pop", "innovations", "mean_known", "soil_health", "lived_soil", "settled_share",
-           "obedience", "breed_rate", "swing", "final_level", "plastic", "signal_mi", "things_per_head", "equipped_share", "crafts", "learn_rate", "loudness", "hunts"]
+           "obedience", "breed_rate", "swing", "final_level", "plastic", "signal_mi", "signal_meaning", "things_per_head", "equipped_share", "crafts", "learn_rate", "loudness", "hunts"]
 GOOD = {"flourishing", "surviving"}
 
 
@@ -110,7 +110,7 @@ def fmt(v):
     return f"{v:.0f}" if abs(v) >= 100 else f"{v:.2f}"
 
 
-TRAJ = ["pop", "mean_known", "plastic", "signal_mi", "things_per_head", "soil_health", "settled_share", "learn_rate", "loudness"]
+TRAJ = ["pop", "mean_known", "plastic", "signal_mi", "signal_meaning", "things_per_head", "soil_health", "settled_share", "learn_rate", "loudness"]
 
 
 def read_trajectories(name, arm, flags=None, ticks=(2500, 5000, 10000, 15000, 20000)):
@@ -196,11 +196,11 @@ def report(name, exp):
         lines.append("")
     lines.append("## Từng thế giới")
     lines.append("")
-    lines.append("| nhánh | seed | kết cục | đỉnh | cuối | biết | đất | ở yên | đồ/người | MI tín hiệu |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    lines.append("| nhánh | seed | kết cục | đỉnh | cuối | biết | đất | ở yên | đồ/người | hiểu (bit) | nghĩa (bit) |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
     for arm in arms:
         for r in sorted(data[arm], key=lambda r: int(r["seed"])):
-            lines.append(f"| {arm} | {r['seed']} | {r['outcome']} | {fmt(r['peak_pop'])} | {fmt(r['final_pop'])} | {fmt(r['mean_known'])} | {fmt(r['soil_health'])} | {fmt(r['settled_share'])} | {fmt(r.get('things_per_head', float('nan')))} | {fmt(r.get('signal_mi', float('nan')))} |")
+            lines.append(f"| {arm} | {r['seed']} | {r['outcome']} | {fmt(r['peak_pop'])} | {fmt(r['final_pop'])} | {fmt(r['mean_known'])} | {fmt(r['soil_health'])} | {fmt(r['settled_share'])} | {fmt(r.get('things_per_head', float('nan')))} | {fmt(r.get('signal_mi', float('nan')))} | {fmt(r.get('signal_meaning', float('nan')))} |")
     lines.append("")
     lines.append("_Sinh bởi tools/lab.py. Kết cục: flourishing, surviving là tốt; boom and bust, collapsed, extinct là xấu._")
     os.makedirs(LAB, exist_ok=True)

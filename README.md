@@ -206,10 +206,12 @@ Não còn **nói**: mỗi tick phát ra một tín hiệu hai chiều trong [-1,
 hiệu (mặc định 0,02 mỗi đơn vị, so với tiêu hao nền 0,15), nên nói dối hay nói suông đều có giá. Đầu vào
 là trung bình tín hiệu của họ hàng trong tầm nhìn, của người lạ, và tín hiệu của người gần nhất; người lạ
 nghe được theo `--hear-strangers` (mặc định 1; đặt 0 là chỉ họ hàng nghe rõ, phòng thí nghiệm cho thấy
-thế giới nghèo đi hẳn). Tín hiệu không có nghĩa định sẵn. Sim đo entropy của những gì được nói và **thông tin tương hỗ** giữa tín hiệu nghe
-được từ người gần nhất và hành động ngay sau đó (đã hiệu chỉnh thiên lệch mẫu nhỏ). Khi con số này vượt
-0,2 bit ở một xã hội từ 300 người, sử ký ghi "tiếng gọi bắt đầu có nghĩa". Đó là dấu hiệu sớm nhất của
-ngôn ngữ, và là một câu hỏi nghiên cứu mở của repo này.
+thế giới nghèo đi hẳn). Tín hiệu không có nghĩa định sẵn. Sim đo entropy của những gì được nói và hai
+**thông tin tương hỗ** (đã hiệu chỉnh thiên lệch mẫu nhỏ): `signal_meaning`, giữa điều một người nói và
+tình trạng của chính họ (tiếng gọi có nội dung), và `signal_mi`, giữa tín hiệu nghe được từ người gần nhất
+và hành động ngay sau đó (tiếng gọi được hiểu). Khi cả hai vượt 0,2 bit ở một xã hội từ 300 người, sử ký
+ghi "tiếng gọi bắt đầu có nghĩa". Đó là dấu hiệu sớm nhất của ngôn ngữ, và là một câu hỏi nghiên cứu mở của
+repo này.
 
 Phần viết tay là **luật thế giới**: thức ăn mọc thế nào, đánh nhau tính thắng thua ra sao, công nghệ
 có tác dụng gì, thiên tai xảy ra thế nào, cảm xúc tăng giảm theo sự kiện nào. Đó là "harness". Não phải
@@ -583,7 +585,7 @@ python3 tools/lab.py run orders --seeds 1-16  # chạy mọi nhánh trên cùng 
 `tools/experiments.json` định nghĩa mỗi câu hỏi là vài nhánh chỉ khác nhau đúng một cờ (mệnh lệnh, độ
 khó phát minh, giá của biển, độ mòn đất, số người xuất phát). Báo cáo có kết cục từng nhánh, trung vị mọi
 chỉ số, và hiệu số so với đối chứng kèm khoảng tin cậy 95% bootstrap. CSV thống kê của mỗi run có thêm các
-chỉ số nghiên cứu: độ dẻo não trong đời, entropy tín hiệu, thông tin tương hỗ tín hiệu và hành động, đồ vật
+chỉ số nghiên cứu: độ dẻo não trong đời, entropy tín hiệu, thông tin tương hỗ tín hiệu với tình trạng người nói và với hành động người nghe, đồ vật
 mỗi đầu người, số lần thử chế tác, công thức bị quên, vật liệu cho nhau, chuyến ra khơi.
 
 Những quy luật đã quan sát được, bằng chứng và độ tin của từng cái, cùng các câu hỏi còn mở, nằm trong

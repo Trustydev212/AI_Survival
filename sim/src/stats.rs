@@ -105,6 +105,8 @@ pub struct Metrics {
     /// Signals: entropy of what is said (bits), and how much what one hears predicts what one does (bits).
     pub sig_ent: f32,
     pub sig_mi: f32,
+    /// How much what one says reflects one's own state (bits): meaning on the speaker's side.
+    pub sig_meaning: f32,
     /// Things per head, and the share of people holding at least one made thing.
     pub things: f32,
     pub equipped: f32,
@@ -137,7 +139,7 @@ pub fn compute(
     let n = pop.max(1) as f32;
     let mean_known = agents.iter().map(|a| a.known_count() as f32).sum::<f32>() / n;
     let plastic = agents.iter().map(|a| a.plastic.iter().map(|p| p.abs()).sum::<f32>() / a.plastic.len().max(1) as f32).sum::<f32>() / n;
-    let (sig_ent, sig_mi) = signal_stats(agents);
+    let (sig_ent, sig_mi, sig_meaning) = signal_stats(agents);
     let things = agents.iter().map(|a| a.gear.iter().filter(|g| g.is_some()).count() as f32).sum::<f32>() / n;
     let equipped = agents.iter().filter(|a| a.gear.iter().any(|g| g.is_some())).count() as f32 / n;
     let learn_rate = agents.iter().map(|a| a.genome.learn_rate() * 1000.0).sum::<f32>() / n;
@@ -254,6 +256,7 @@ pub fn compute(
         plastic,
         sig_ent,
         sig_mi,
+        sig_meaning,
         things,
         equipped,
         learn_rate,
@@ -315,7 +318,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
         "breed_rate", "stores", "stored", "deposits", "withdrawals", "winter_withdrawals", "looted",
         "plastic", "signal_entropy", "signal_mi", "things_per_head", "equipped_share", "craft_tries", "crafts", "made", "built",
-        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails",
+        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -395,6 +398,7 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     n(m.loudness);
     n(w.hunts as f32);
     n(w.hunt_fails as f32);
+    n(m.sig_meaning);
     for v in m.emotion {
         n(v);
     }
@@ -419,40 +423,58 @@ fn symbol(sig: &[f32; crate::brain::N_SIG]) -> usize {
     b(sig[0]) * 4 + b(sig[1])
 }
 
-/// Entropy of the population's signals, and the mutual information between the signal an
-/// agent last heard from its nearest neighbour and the action it then took. Both in bits.
-/// The second is the closest cheap thing to "do calls mean anything": if it rises above
-/// zero, hearing a neighbour changes what one does.
-pub fn signal_stats(agents: &[Agent]) -> (f32, f32) {
-    if agents.len() < 20 {
-        return (0.0, 0.0);
+/// The speaker's situation, in six classes: hungry, middling or full, and afraid or not.
+/// This is what a call could be *about* before anyone has agreed on what it means.
+fn state_class(a: &Agent) -> usize {
+    let e = if a.energy < 35.0 { 0 } else if a.energy < 70.0 { 1 } else { 2 };
+    e + if a.emotion[0] > 0.3 { 3 } else { 0 }
+}
+
+/// Mutual information between two symbol streams from their joint counts, in bits, with the
+/// Miller-Madow correction (small samples inflate the plug-in estimate).
+fn mutual_information<const X: usize, const Y: usize>(joint: &[[f32; Y]; X], n: f32) -> f32 {
+    let mut px = [0f32; X];
+    let mut py = [0f32; Y];
+    for (x, row) in joint.iter().enumerate() {
+        for (y, c) in row.iter().enumerate() {
+            px[x] += c;
+            py[y] += c;
+        }
     }
-    let mut said = [0f32; 16];
-    let mut joint = [[0f32; N_ACT]; 16];
-    let mut heard = [0f32; 16];
-    let mut acts = [0f32; N_ACT];
-    for a in agents {
-        said[symbol(&a.signal)] += 1.0;
-        let h = symbol(&a.heard);
-        let k = a.last_action as usize;
-        joint[h][k] += 1.0;
-        heard[h] += 1.0;
-        acts[k] += 1.0;
-    }
-    let n = agents.len() as f32;
-    let ent = -said.iter().filter(|c| **c > 0.0).map(|c| (c / n) * (c / n).log2()).sum::<f32>();
     let mut mi = 0.0;
-    for h in 0..16 {
-        for k in 0..N_ACT {
-            let pxy = joint[h][k] / n;
+    for (x, row) in joint.iter().enumerate() {
+        for (y, c) in row.iter().enumerate() {
+            let pxy = c / n;
             if pxy > 0.0 {
-                mi += pxy * (pxy / ((heard[h] / n) * (acts[k] / n))).log2();
+                mi += pxy * (pxy / ((px[x] / n) * (py[y] / n))).log2();
             }
         }
     }
-    // Small samples inflate mutual information; the Miller-Madow correction takes most of that back.
-    let kx = heard.iter().filter(|c| **c > 0.0).count() as f32;
-    let ky = acts.iter().filter(|c| **c > 0.0).count() as f32;
+    let kx = px.iter().filter(|c| **c > 0.0).count() as f32;
+    let ky = py.iter().filter(|c| **c > 0.0).count() as f32;
     let bias = (kx * ky - kx - ky + 1.0).max(0.0) / (2.0 * n * std::f32::consts::LN_2);
-    (ent, (mi - bias).max(0.0))
+    (mi - bias).max(0.0)
+}
+
+/// Signals, measured from both ends of the channel:
+/// entropy of what is said; how much what one *hears* predicts what one does next
+/// (comprehension); and how much what one *says* reflects one's own state (meaning).
+/// A call can be meaningful without being understood, and "understood" without meaning
+/// anything, when neighbours merely share a situation; language needs both.
+pub fn signal_stats(agents: &[Agent]) -> (f32, f32, f32) {
+    if agents.len() < 20 {
+        return (0.0, 0.0, 0.0);
+    }
+    let mut said = [0f32; 16];
+    let mut heard_act = [[0f32; N_ACT]; 16];
+    let mut said_state = [[0f32; 6]; 16];
+    for a in agents {
+        let s = symbol(&a.signal);
+        said[s] += 1.0;
+        said_state[s][state_class(a)] += 1.0;
+        heard_act[symbol(&a.heard)][a.last_action as usize] += 1.0;
+    }
+    let n = agents.len() as f32;
+    let ent = -said.iter().filter(|c| **c > 0.0).map(|c| (c / n) * (c / n).log2()).sum::<f32>();
+    (ent, mutual_information(&heard_act, n), mutual_information(&said_state, n))
 }

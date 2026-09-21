@@ -174,8 +174,8 @@ impl EventLog {
             self.fire(tick, "obedience", format!("the word of leaders now carries: {:.0}% of orders are obeyed", m.obedience * 100.0));
         }
         // Calls that carry meaning: when what one hears from a neighbour predicts what one does next.
-        if pop >= 300 && m.sig_mi >= 0.2 {
-            self.fire(tick, "language", format!("calls begin to mean something: hearing a neighbour predicts what one does next ({:.2} bits)", m.sig_mi));
+        if pop >= 300 && m.sig_mi >= 0.2 && m.sig_meaning >= 0.2 {
+            self.fire(tick, "language", format!("calls begin to mean something: what one says reflects one's state ({:.2} bits) and hearing a neighbour predicts what one does next ({:.2} bits)", m.sig_meaning, m.sig_mi));
         }
         if pop >= 200 && m.plastic >= 0.05 {
             self.fire(tick, "learners", format!("minds that change within a life: synapses have drifted {:.3} on average since birth", m.plastic));
