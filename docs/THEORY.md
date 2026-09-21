@@ -11,7 +11,7 @@ sau khi thêm biển).
 
 ## Những gì đã đo được
 
-### 1. Thủ lĩnh là cái phanh, không phải động cơ
+### 1. Thủ lĩnh là cái phanh, không phải động cơ (đã rút lại)
 
 **Phát biểu.** Mệnh lệnh của thủ lĩnh làm xã hội bền hơn chủ yếu bằng cách kìm lại: đất được giữ tốt hơn,
 ít bùng-vỡ hơn, chứ không phải đông hơn hay biết nhiều hơn.
@@ -20,8 +20,18 @@ sau khi thêm biển).
 66% không lệnh; kết cục xấu 3/12 so với 5/12. Lệnh được tuân nhiều nhất là *kiềm chế* (ngừng hái) và *góp
 kho*. Xem README, mục "Đối chứng: có mệnh lệnh và không có mệnh lệnh".
 
-**Độ tin.** Có bằng chứng về đất; gợi ý về kết cục. **Đã lặp lại** với biển, chế tác và não mới (mục 10): không
-mệnh lệnh thì biên độ bùng-vỡ 7,9 so với 3,9 và 6/16 thế giới tuyệt chủng so với 3/16.
+**Lặp lại lần ba, trên mặc định cuối** (nghe cả người lạ, không bầy thú), 16 seed, docs/lab/customs.md bản
+mới: **kết quả đảo chiều**. Không mệnh lệnh cho 12/16 kết cục tốt so với 9/16 có mệnh lệnh; biên độ bùng-vỡ
+2,94 so với 3,39; kiến thức mỗi người 54,7 so với 36,7; đồ vật mỗi người 0,56 so với 0,47. Chỉ số duy nhất
+có khoảng tin cậy không chứa 0 là chính mức tuân lệnh, tức là thứ bị tắt.
+
+**Độ tin.** **Không lặp lại được.** Hai đợt đầu (12 và 16 thế giới, mặc định cũ) thấy mệnh lệnh giữ đất và
+giảm bùng-vỡ; đợt ba trên mặc định cuối thấy ngược lại, và không đợt nào có khoảng tin cậy loại được 0 cho
+các chỉ số ngoài tuân lệnh. Kết luận trung thực: **chưa có bằng chứng nào cho thấy mệnh lệnh giúp hay hại**,
+và phát biểu "thủ lĩnh là cái phanh" phải rút lại. Cách đọc khả dĩ: khi thế giới còn nghèo cơ hội, cái phanh
+có ích; khi đã có biển, vật liệu và người lạ nghe được nhau, cùng cái phanh ấy chặn mất đường đi. Nếu đúng
+thì tác dụng của quyền lực phụ thuộc vào thế giới chứ không phải vào quyền lực, và đó là câu hỏi đáng theo
+đuổi hơn câu hỏi ban đầu.
 
 ### 2. Mệnh lệnh sống lâu hơn người ra lệnh
 
@@ -157,7 +167,7 @@ không phải do nghe. Trung vị 0,00 bit điếc so với 0,02 nghe: phần "d
 quả này, mặc định của sim là nghe cả người lạ. Ngôn ngữ (tín hiệu mang nghĩa bền vững) vẫn chưa xuất hiện;
 cái đã xuất hiện là **đọc trạng thái người khác qua tiếng gọi**, một bước trước ngôn ngữ.
 
-### 10. Tập quán giữ người ở lại, và ở lại là sống
+### 10. Tập quán giữ người ở lại (đã rút lại), nhưng vẫn làm ra đồ vật
 
 **Phát biểu.** Tắt tập quán (chúng vẫn hình thành và lan nhưng không bao giờ lên tiếng) làm tỉ lệ định cư
 tụt từ 92% xuống 38%, số thế giới tuyệt chủng tăng từ 3 lên 5, kết cục tốt giảm từ 8/16 xuống 4/16. Tắt cả
@@ -167,10 +177,15 @@ phụ của thủ lĩnh: nó là cơ chế chính giữ một xã hội ở yên
 **Bằng chứng.** `tools/lab.py run customs --seeds 1-16` (docs/lab/customs.md). Định cư −0,25 với KTC 95%
 [−0,53, +0,04] khi tắt tập quán; tuân lệnh −0,19 [−0,39, −0,01]. Không mệnh lệnh: 5/16 tốt, biên độ 7,95.
 
-**Độ tin.** Có bằng chứng cho tuân lệnh; gợi ý mạnh cho định cư và kết cục (16 seed, khoảng tin cậy chạm 0).
-Mục 1 (thủ lĩnh là cái phanh) được **lặp lại** lần thứ hai ở đây: không mệnh lệnh thì bùng-vỡ mạnh gấp đôi.
+**Lặp lại trên mặc định cuối**, 16 seed (docs/lab/customs.md bản mới): **không lặp lại được**. Tắt tập quán
+cho 7/16 kết cục tốt so với 9/16, nhưng định cư 75% so với 68%, tức là nhỉnh hơn chứ không tụt. Cái tụt rõ
+là đồ vật mỗi người, 0,26 so với 0,47. Lại chỉ có mức tuân lệnh là khác 0.
 
-### 11. Chế tác làm thế giới biết nhiều hơn, chưa chắc sống lâu hơn
+**Độ tin.** Phát biểu cũ về định cư **phải rút lại**: tỉ lệ 92% xuống 38% ở đợt trước không xuất hiện lại. Cái
+còn sống sót qua hai đợt là một quan sát hẹp hơn: tắt tập quán thì người ta cầm ít đồ vật hơn, có lẽ vì đồ
+vật cần ở yên một chỗ đủ lâu mới làm và giữ được. Mục 1 mất luôn chỗ dựa thứ hai của nó ở đây.
+
+### 11. Chế tác mua tri thức bằng dân số và bằng đất
 
 **Phát biểu.** Tắt chế tác (hành động chế tác thành nghỉ) làm số phát minh giảm 37 và kiến thức mỗi đầu
 người giảm 27, đúng như phải thế; nhưng kết cục chỉ đổi từ 8/16 xuống 6/16 tốt, và dân số đỉnh trung vị
@@ -180,8 +195,15 @@ lượng thử) nhiều hơn là lợi ích cho sự sống còn; lợi ích c�
 **Bằng chứng.** `tools/lab.py run crafting --seeds 1-16` (docs/lab/crafting.md): phát minh −36,9 với KTC 95%
 [−62,8, −12,8]; kiến thức −27,1 [−46,5, −8,8]; dân số đỉnh +1.337 [−720, +3.495]; thời đại cuối −1,4 [−3,1, +0,1].
 
-**Độ tin.** Có bằng chứng cho tri thức; gợi ý cho dân số. Câu hỏi tiếp: chạy 60.000 tick để xem chi phí
-sớm có đổi thành lợi ích muộn không.
+**Lặp lại trên mặc định cuối**, 16 seed (docs/lab/crafting.md bản mới): **lặp lại, và mạnh hơn**. Phát minh
+−62,8 với KTC 95% [−87,1, −37,8]; kiến thức −35,2 [−54,3, −17,4]; đồ vật mỗi người −0,81 [−1,25, −0,42];
+thời đại cuối −2,19 [−3,62, −0,62]. Và cái giá hiện ra rõ hơn: không chế tác thì dân số đỉnh 4.516 so với
+3.624, đất khoẻ hơn (+0,08, KTC [0,00, +0,17]) và định cư 93% so với 68%. Sáu chỉ số có khoảng tin cậy
+không chứa 0, nhiều nhất trong mọi thí nghiệm của repo này.
+
+**Độ tin.** **Có bằng chứng, đã lặp lại hai đợt.** Đây là kết quả chắc nhất của repo: chế tác mua tri thức
+bằng dân số và bằng đất. Một xã hội không biết làm đồ vật thì đông hơn, ở yên hơn, đất tốt hơn, và dốt hơn.
+Câu hỏi tiếp: chạy 60.000 tick để xem chi phí sớm có đổi thành lợi ích muộn không.
 
 ### 12. Một việc cần nhiều tay không đủ để sinh ra lời nói
 
