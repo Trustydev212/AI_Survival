@@ -252,5 +252,26 @@
         "384"
       ]
     }
+  },
+  "finds": {
+    "title": "Có thứ đáng nói thì tiếng gọi có mang nghĩa không?",
+    "question": "Giả thuyết ngôn ngữ thứ tư, và là cái đầu tiên có cơ sở. Ba cái trước đã chết: chỉ họ hàng nghe, việc cần nhiều tay, bỏ khung xã hội. Lý do chung là chưa bao giờ có gì đáng nói. Nhánh finds đặt 40 nguồn lợi giàu, không nhìn thấy từ xa, tìm thì tốn mà kể lại chỉ mất một hơi thở; não cũng có thêm một ô nhớ vị trí để giữ được chỗ ấy. Đo signal_meaning và signal_mi.",
+    "control": "default",
+    "arms": {
+      "default": [
+        "--hear-strangers",
+        "1"
+      ],
+      "finds": [
+        "--finds",
+        "40"
+      ],
+      "finds-deaf": [
+        "--finds",
+        "40",
+        "--hear-scale",
+        "0"
+      ]
+    }
   }
 }

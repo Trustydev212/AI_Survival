@@ -4,6 +4,16 @@
 use crate::craft::{M_BONE, M_CLAY, M_FIBRE, M_ORE, M_STONE, M_WOOD, N_MAT};
 use crate::rng::Rng;
 
+/// A rich find: far more food than a patch of ground holds, but it cannot be seen from any
+/// distance. Finding one is expensive and telling someone where it is costs a breath, which is
+/// the first thing in this world that makes knowing *where* worth more than knowing how.
+#[derive(Clone, Copy)]
+pub struct Find {
+    pub x: f32,
+    pub y: f32,
+    pub food: f32,
+}
+
 /// A made thing standing on a cell: the innovation index of the shelter and its remaining life.
 #[derive(Clone, Copy)]
 pub struct Building {
@@ -32,6 +42,8 @@ pub struct World {
     pub mats_cap: Vec<[f32; N_MAT]>,
     /// Shelters built on cells, if any.
     pub buildings: Vec<Option<Building>>,
+    /// Rich spots, invisible until stumbled upon. Empty unless the world was made with them.
+    pub finds: Vec<Find>,
     /// Weather multiplier on regrowth: 1 normal, below 1 drought, above 1 a good year.
     pub climate: f32,
     pub farm_boost: f32,
@@ -103,7 +115,7 @@ impl World {
         }
         let mats = mats_cap.clone();
         let buildings = vec![None; width * height];
-        World { width, height, base_fertility, water, fertility, mats, mats_cap, buildings, food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
+        World { width, height, base_fertility, water, fertility, mats, mats_cap, buildings, finds: Vec::new(), food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
     }
 
     #[inline]
@@ -298,6 +310,52 @@ impl World {
     }
 
     /// Shelters wear; a wildfire or raid may burn wooden ones (handled by callers via `burn_building`).
+    /// Scatter rich finds on dry land. Called once, after the map exists.
+    pub fn scatter_finds(&mut self, n: usize, food: f32, rng: &mut Rng) {
+        self.finds.clear();
+        for _ in 0..n {
+            for _ in 0..200 {
+                let x = rng.range(self.width) as f32 + 0.5;
+                let y = rng.range(self.height) as f32 + 0.5;
+                if !self.is_water(x, y) {
+                    self.finds.push(Find { x, y, food });
+                    break;
+                }
+            }
+        }
+    }
+
+    /// The richest find within reach of a point, if any is close enough to notice.
+    pub fn find_at(&self, x: f32, y: f32, radius: f32) -> Option<usize> {
+        let r2 = radius * radius;
+        self.finds
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.food > 0.0 && (f.x - x).powi(2) + (f.y - y).powi(2) <= r2)
+            .max_by(|a, b| a.1.food.total_cmp(&b.1.food))
+            .map(|(i, _)| i)
+    }
+
+    /// Finds refill slowly and a spent one moves somewhere else, so the map never runs out of
+    /// places worth knowing about but knowing yesterday's place is not enough.
+    pub fn tend_finds(&mut self, regrow: f32, cap: f32, rng: &mut Rng) {
+        let (w, h) = (self.width, self.height);
+        for i in 0..self.finds.len() {
+            if self.finds[i].food <= 0.0 {
+                for _ in 0..200 {
+                    let x = rng.range(w) as f32 + 0.5;
+                    let y = rng.range(h) as f32 + 0.5;
+                    if !self.is_water(x, y) {
+                        self.finds[i] = Find { x, y, food: cap * 0.1 };
+                        break;
+                    }
+                }
+            } else {
+                self.finds[i].food = (self.finds[i].food + regrow).min(cap);
+            }
+        }
+    }
+
     pub fn age_buildings(&mut self) {
         for b in self.buildings.iter_mut() {
             if let Some(bd) = b {

@@ -111,6 +111,7 @@ impl Sim {
             next_id: 0,
             cfg,
         };
+        sim.scatter_world_finds();
         sim.spawn_tribes();
         let n_herds = (sim.cfg.herd_density * (sim.cfg.width * sim.cfg.height) as f32 / 10_000.0).round() as usize;
         sim.herds = Herds::spawn(n_herds, &sim.world, &mut sim.rng);
@@ -119,6 +120,15 @@ impl Sim {
 
     /// Founding tribes: each has a home spot on fertile land, a shared marker
     /// colour and a shared ancestral brain with individual variation.
+    fn scatter_world_finds(&mut self) {
+        if self.cfg.finds > 0 {
+            let (n, food) = (self.cfg.finds, self.cfg.find_food);
+            let mut rng = std::mem::replace(&mut self.rng, Rng::new(1));
+            self.world.scatter_finds(n, food, &mut rng);
+            self.rng = rng;
+        }
+    }
+
     fn spawn_tribes(&mut self) {
         let from_ark = (self.cfg.tribes as f32 * crate::ark::FOUNDED_FROM_ARK) as usize;
         let mut founded = 0usize;
@@ -230,6 +240,7 @@ impl Sim {
             reward: 0.0,
             prev_wealth: 0.0,
             prev_mood: 0.0,
+            mark: None,
             has_home: false,
             home_x: 0.0,
             home_y: 0.0,
@@ -264,6 +275,12 @@ impl Sim {
         let season = self.world.season(self.tick);
         self.world.regrow(season);
         self.world.regrow_mats();
+        if !self.world.finds.is_empty() {
+            let (regrow, cap) = (self.cfg.find_food * 0.0004, self.cfg.find_food);
+            let mut rng = std::mem::replace(&mut self.rng, Rng::new(1));
+            self.world.tend_finds(regrow, cap, &mut rng);
+            self.rng = rng;
+        }
         self.world.age_buildings();
         if self.tick % self.cfg.region_refresh == 0 {
             self.regions.refresh(&self.world, &self.agents, self.cfg.wrap);
@@ -577,6 +594,9 @@ impl Sim {
                 a.last_action = d.action;
                 a.memory = d.memory;
                 a.signal = d.sig;
+                if d.mark {
+                    a.mark = Some((a.x, a.y));
+                }
                 a.heard = d.heard;
                 a.last_hidden = d.hidden;
                 a.last_out = d.out;
@@ -705,6 +725,14 @@ impl Sim {
                     let afloat = self.agents[i].afloat;
                     let take = if afloat {
                         cfg.fish_yield * rate * (1.0 + self.agents[i].caps[E_SEA]).max(0.0)
+                    } else if let Some(k) = self.world.find_at(ax, ay, cfg.find_radius) {
+                        // Standing on a rich find: far more than the ground gives, while it lasts.
+                        let got = (rate * 6.0).min(self.world.finds[k].food);
+                        self.world.finds[k].food -= got;
+                        if self.world.finds[k].food <= 0.0 {
+                            self.window.finds_spent += 1;
+                        }
+                        got
                     } else {
                         self.world.harvest(ax, ay, rate, drain, cfg.wrap)
                     };
@@ -1974,6 +2002,16 @@ fn decide(
             input[99] = (dy / cfg.vision).clamp(-2.0, 2.0);
             input[100] = herds.list[h].size;
         }
+        // The place this mind decided was worth coming back to, and whether something rich is
+        // under its feet right now.
+        if let Some((mx, my)) = a.mark {
+            input[101] = 1.0;
+            input[102] = (geo.delta(a.x, mx, cfg.width) / cfg.vision).clamp(-4.0, 4.0);
+            input[103] = (geo.delta(a.y, my, cfg.height) / cfg.vision).clamp(-4.0, 4.0);
+        }
+        if world.find_at(a.x, a.y, cfg.find_radius).is_some() {
+            input[104] = 1.0;
+        }
     }
 
         let mut t = a.genome.think(&input, &a.plastic, &a.critic);
@@ -2015,6 +2053,7 @@ fn decide(
         under_dy,
         from_leader,
         sig: t.sig,
+        mark: t.mark,
         heard,
         hidden: t.hidden,
         out: t.out,

@@ -112,6 +112,8 @@ impl Ark {
         Ok(())
     }
 
+    /// Brains from an older shape of mind cannot be used by a newer one: the weights would line
+    /// up and mean something else. They are dropped rather than loaded.
     pub fn load(path: &str) -> Ark {
         let mut bytes = Vec::new();
         if std::fs::File::open(path).and_then(|mut f| f.read_to_end(&mut bytes)).is_err() || bytes.len() < 8 || &bytes[..4] != b"AISA" {
@@ -155,6 +157,12 @@ impl Ark {
             let mut learn = [0.0; N_LEARN];
             learn.copy_from_slice(&l);
             kept.push(Saved { genome: Genome { weights, marker, temper, learn }, children, generation, tick });
+        }
+        let want = crate::brain::N_WEIGHTS;
+        let before = kept.len();
+        kept.retain(|s| s.genome.weights.len() == want);
+        if kept.len() < before {
+            eprintln!("dropped {} brains from an older shape of mind", before - kept.len());
         }
         Ark { kept }
     }

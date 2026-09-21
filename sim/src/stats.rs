@@ -25,6 +25,8 @@ pub struct Window {
     pub hunt_fails: u32,
     /// Times someone took a step towards what another had *learned*, not inherited.
     pub know_gifts: u32,
+    /// Rich finds emptied this window: how often somebody struck it lucky.
+    pub finds_spent: u32,
     pub craft_tries: u32,
     /// New things registered, things made, shelters raised, recipes found again independently.
     pub crafts: u32,
@@ -339,7 +341,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
         "breed_rate", "stores", "stored", "deposits", "withdrawals", "winter_withdrawals", "looted",
         "plastic", "signal_entropy", "signal_mi", "things_per_head", "equipped_share", "craft_tries", "crafts", "made", "built",
-        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning", "division_of_labour", "td_error", "mean_value", "know_gifts", "buildings",
+        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning", "division_of_labour", "td_error", "mean_value", "know_gifts", "buildings", "finds_spent",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -425,6 +427,7 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     n(m.value);
     n(w.know_gifts as f32);
     n(m.buildings as f32);
+    n(w.finds_spent as f32);
     for v in m.emotion {
         n(v);
     }

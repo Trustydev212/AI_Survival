@@ -121,6 +121,8 @@ pub struct Agent {
     pub prev_wealth: f32,
     /// Mood (joy minus fear) at the start of the tick: feeling better is rewarding too.
     pub prev_mood: f32,
+    /// A place this mind decided was worth coming back to, if it ever decided that.
+    pub mark: Option<(f32, f32)>,
     pub has_home: bool,
     pub home_x: f32,
     pub home_y: f32,
@@ -223,6 +225,7 @@ pub struct Decision {
     /// Whether that order came from a living leader (true) or from custom (false).
     pub from_leader: bool,
     pub sig: [f32; N_SIG],
+    pub mark: bool,
     pub heard: [f32; N_SIG],
     pub hidden: [f32; N_HID],
     pub out: [f32; N_OUT],
@@ -249,6 +252,7 @@ impl Default for Decision {
             under_dy: 0.0,
             from_leader: false,
             sig: [0.0; N_SIG],
+            mark: false,
             heard: [0.0; N_SIG],
             hidden: [0.0; N_HID],
             out: [0.0; N_OUT],

@@ -8,15 +8,21 @@ pub const N_MEM: usize = 4;
 /// Signals: a small vector every agent broadcasts each tick and neighbours can hear.
 /// What it means, if anything, is up to evolution.
 pub const N_SIG: usize = 2;
-pub const N_IN: usize = 101;
+/// 101 senses, plus four about a place worth remembering: whether this mind holds one, which way
+/// it lies, and whether something rich is within arm's reach right now. Nothing in this world has
+/// ever needed a memory of *where*, which is most likely why calls never came to mean anything:
+/// a call cannot carry what the speaker cannot hold.
+pub const N_IN: usize = 105;
 pub const N_HID: usize = 20;
 pub const N_ACT: usize = 6;
 // move_x, move_y, go/stay, action scores, memory, order scores, order direction, signal
-pub const N_OUT: usize = 3 + N_ACT + N_MEM + N_ORDER + 2 + N_SIG;
+pub const N_OUT: usize = 3 + N_ACT + N_MEM + N_ORDER + 2 + N_SIG + 1;
 const O_MEM: usize = 3 + N_ACT;
 const O_ORDER: usize = O_MEM + N_MEM;
 const O_ORDER_DIR: usize = O_ORDER + N_ORDER;
 const O_SIG: usize = O_ORDER_DIR + 2;
+/// One gate: mark this spot as the place worth coming back to.
+const O_MARK: usize = O_SIG + N_SIG;
 pub const N_WEIGHTS: usize = N_IN * N_HID + N_HID + N_HID * N_OUT + N_OUT;
 /// The plastic part: the hidden-to-output layer, which changes within one life.
 pub const N_PLASTIC: usize = N_HID * N_OUT;
@@ -192,12 +198,13 @@ impl Genome {
         };
         let order = Order::ALL[best_order];
         let sig = [fast_tanh(out[O_SIG]), fast_tanh(out[O_SIG + 1])];
+        let mark = out[O_MARK] > 0.0;
         let (mx, my) = if out[2] <= 0.0 { (0.0, 0.0) } else { (fast_tanh(out[0]), fast_tanh(out[1])) };
         let mut value = critic[N_HID];
         for h in 0..N_HID {
             value += critic[h] * hidden[h];
         }
-        Thought { mx, my, action: Action::ALL[best], memory: mem, order, odx, ody, sig, hidden, out, value: value.clamp(-25.0, 25.0) }
+        Thought { mx, my, action: Action::ALL[best], memory: mem, order, odx, ody, sig, mark, hidden, out, value: value.clamp(-25.0, 25.0) }
     }
 
     /// The heritable learning rate this genome encodes (before the config scale).
@@ -249,6 +256,8 @@ pub struct Thought {
     pub odx: f32,
     pub ody: f32,
     pub sig: [f32; N_SIG],
+    /// Whether this mind chose to remember where it is standing.
+    pub mark: bool,
     pub hidden: [f32; N_HID],
     pub out: [f32; N_OUT],
     /// The critic's estimate of how good this moment is, in units of future reward.

@@ -149,6 +149,14 @@ pub struct Config {
     pub save_every: u64,
     pub save_path: Option<String>,
     pub load_path: Option<String>,
+    /// Rich finds: how many, how much each holds, and how close a body must be to notice one.
+    /// Zero leaves the world exactly as it was. The point of them is not the food: it is that
+    /// knowing where one is becomes worth more than anything else a mind can hold, and worth a
+    /// breath to pass on. Every hypothesis about language tried so far failed on the same thing,
+    /// that there was never anything worth saying.
+    pub finds: usize,
+    pub find_food: f32,
+    pub find_radius: f32,
     /// Take away every ready-made way to coordinate: no leaders, no orders, no customs.
     /// What is left is position, the six things a body can do, and a call anyone may make.
     /// The repo hands societies a leader mechanism, an order mechanism and a custom mechanism,
@@ -326,6 +334,9 @@ impl Default for Config {
             wear: 1.0,
             shelter_warmth: 0.35,
             learn_scale: 1.0,
+            finds: 0,
+            find_food: 900.0,
+            find_radius: 2.5,
             forever: false,
             snapshot_window: 20_000,
             save_every: 0,
@@ -489,6 +500,9 @@ impl Config {
                 "--out" => c.out_dir = val.clone(),
                 "--save" => c.save_path = Some(val.clone()),
                 "--save-every" => set!(save_every),
+                "--finds" => set!(finds),
+                "--find-food" => set!(find_food),
+                "--find-radius" => set!(find_radius),
                 "--snapshot-window" => set!(snapshot_window),
                 "--load" => c.load_path = Some(val.clone()),
                 "--wrap" => c.wrap = val == "1" || val == "true",
@@ -583,6 +597,9 @@ USAGE: sim [--flag value ...]
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
   --seed random     pick a world at random; the seed chosen is printed, so it can be replayed
   --bare            no leaders, no orders, no customs: only bodies, actions and calls
+  --finds N         N rich spots that cannot be seen from afar (0 = none)
+  --find-food F     how much each holds (900)
+  --find-radius F   how close a body must be to notice one (2.5)
   --forever         no stopping point: save as it goes, start a new age when everyone dies
   --save-every N    put the world down every N ticks (0 = only at the end)
   --snapshot-window N  how many ticks of live picture to keep before starting over (20000)
