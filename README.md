@@ -599,6 +599,8 @@ nghe lời đã đủ tạo khác biệt. Mẫu 12 còn nhỏ, chưa phải kế
 Repo này là nơi quan sát một xã hội thu nhỏ, nên có sẵn cách đặt câu hỏi và trả lời bằng đối chứng:
 
 ```bash
+./tools/programme.sh                          # chạy cả một chương trình dài, không cần trông
+python3 tools/things.py                       # danh mục mọi thứ mọi thế giới từng làm ra
 python3 tools/check.py                        # 15 giây: chạy bài kiểm tra, báo thế giới nào đổi hành vi
 python3 tools/check.py --bless                # chấp nhận hành vi hiện tại làm mốc mới
 python3 tools/lab.py list                     # các câu hỏi có sẵn
