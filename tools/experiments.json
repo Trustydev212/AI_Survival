@@ -141,7 +141,7 @@
   },
   "brains": {
     "title": "Học từ hậu quả có làm xã hội khá hơn không?",
-    "question": "Luật Hebb như cũ (mặc định), so với actor-critic có vết đủ điều kiện, so với actor-critic cộng truyền lại cái đã học cho người khác, và so với nhánh đối chứng quan trọng nhất: vẫn chọn việc theo xác suất nhưng không học gì cả.",
+    "question": "Luật Hebb như cũ (mặc định), so với actor-critic có vết đủ điều kiện, so với actor-critic cộng truyền lại cái đã học cho người khác, và so với nhánh đối chứng quan trọng nhất: vẫn chọn việc theo xác suất nhưng không học gì cả. Nhánh gradient-slow hạ bước học của bộ chọn việc xuống một phần mười, để tách xem cái giết thế giới là việc học hay là bước học quá dài.",
     "control": "default",
     "arms": {
       "default": [],
@@ -159,6 +159,11 @@
         "--gradient",
         "--know-rate",
         "0.3"
+      ],
+      "gradient-slow": [
+        "--gradient",
+        "--actor-rate",
+        "0.01"
       ]
     }
   }
