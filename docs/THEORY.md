@@ -275,6 +275,30 @@ Một giới hạn kỹ thuật đọc y hệt một quy luật xã hội: "xã 
 nghe rất hợp lý, và hoàn toàn sai. Mọi phát biểu trong sổ này cần được hỏi lại một lần: đây là thế giới, hay
 là chỗ chứa của tôi?
 
+### 15. Kết cục của một thế giới phụ thuộc vào lúc ta ngừng nhìn
+
+**Phát biểu.** Nhãn kết cục mà repo này gán cho một thế giới không phải tính chất của thế giới, mà là
+tính chất của **khoảng thời gian ta chọn để nhìn**. Cùng một thế giới, dừng ở 20.000 tick thì "thịnh
+vượng", chạy tiếp tới 60.000 thì "bùng và vỡ".
+
+**Bằng chứng.** Seed 3, cùng seed cùng mọi thứ: ở 20.000 tick là *flourishing*, dân cuối 992, biên độ
+dao động 2,5. Chạy tới 60.000 tick: *boom and bust*, dân cuối 708, biên độ **7,8**. Dân số không đi lên
+rồi dừng, nó lên xuống theo chu kỳ dài hơn cả cửa sổ quan sát cũ: 1.368 ở tick 10.500, 1.811 ở 20.500,
+1.284 ở 30.500, 1.764 ở 40.500, 2.545 ở 50.500.
+
+**Hệ quả cho mọi số trong sổ này.** Gần như toàn bộ đo ở 20.000 tick, tức là đo trên một cửa sổ ngắn hơn
+một chu kỳ của chính hệ. Số thế giới "tốt" trong mọi bảng vì thế là số thế giới **đang ở pha lên** lúc ta
+bấm dừng, không phải số thế giới bền. Đây có thể là lời giải thích cho việc bảy trên mười bốn mục đã phải
+rút lại: không phải mỗi lần luật đổi, mà còn vì chính thước đo kết cục vốn đã ồn.
+
+**Hai câu trả lời phụ, từ cùng lần chạy.** Trần 512 phát minh **chưa bị chạm** ở 60.000 tick: 246 phát
+minh ở 20.000, 330 ở 60.000, vẫn đang lên nhưng chậm dần, nên lần này thế giới tự bão hoà chứ không phải
+chỗ chứa. Và tiếng gọi vẫn **không** thành ngôn ngữ khi có thêm thời gian: nghĩa lên cao nhất 0,062 ở
+tick 10.500 rồi **đi xuống** còn 0,04, chứ không tích luỹ.
+
+**Độ tin.** Mới một thế giới; đang chạy bốn thế giới mỗi nhánh để xem có phải chuyện chung không. Nhưng
+riêng việc một thế giới đổi nhãn khi kéo dài cửa sổ đã đủ để phải nghi ngờ mọi nhãn còn lại.
+
 ## Những câu hỏi mở
 
 1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
