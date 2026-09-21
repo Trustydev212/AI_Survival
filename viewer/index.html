@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>AI Survival</title>
 <link rel="icon" href="data:,">
 <style>
@@ -87,12 +87,36 @@
   #loader.hidden { display: none; }
   #loader .big { font-size: 18px; font-weight: 600; }
   #loader .small { color: var(--muted); max-width: 520px; }
+  /* Nút kéo sử ký lên, chỉ có trên điện thoại. */
+  #sheetTab { display: none; position: fixed; right: 10px; bottom: 74px; z-index: 31; align-items: center;
+    gap: 6px; padding: 10px 14px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--text); font: inherit; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
   @media (max-width: 900px) {
     #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 200px 80px; }
     header { grid-column: 1; } footer { grid-column: 1; }
     aside { border-left: none; border-top: 1px solid var(--line); }
     #legend { display: none; }
   }
+  /* Điện thoại: bản đồ chiếm phần lớn màn hình, sử ký trượt lên từ đáy khi cần.
+     Ngón tay to hơn con trỏ, nên mọi nút phải đủ rộng để bấm trúng. */
+  @media (max-width: 640px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr 64px; height: 100dvh; }
+    header { flex-wrap: wrap; white-space: normal; gap: 8px 12px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); font-size: 13px; }
+    header .title { width: 100%; }
+    aside { position: fixed; left: 0; right: 0; bottom: 0; top: 42%; padding-bottom: 72px; z-index: 30; border-top: 1px solid var(--line);
+      transform: translateY(100%); transition: transform .22s ease; overflow-y: auto; background: var(--panel); }
+    #app.sheet aside { transform: translateY(0); }
+    #sheetTab { display: flex; }
+    /* Thanh điều khiển luôn nằm trên tấm trượt, nên kéo sử ký lên vẫn tua được. */
+    footer { gap: 8px; padding: 0 10px calc(0px + env(safe-area-inset-bottom, 0px)); position: relative; z-index: 32; }
+    footer button { padding: 10px 12px; min-width: 44px; }
+    #speed, #followLeader, #followEvent { display: none; }
+    #timeline { height: 48px; min-width: 0; }
+    header .stat.hide-sm { display: none; }
+    #mm { width: 92px !important; height: 92px !important; }
+    #hint { display: none; }
+  }
+
 </style>
 </head>
 <body>
@@ -103,15 +127,16 @@
     <span class="stat"><span data-t="tick">tick</span><b id="s-tick">0</b></span>
     <span class="stat"><span data-t="pop">dân</span><b id="s-pop">0</b></span>
     <span class="stat"><span data-t="soil">đất</span><b id="s-soil">–</b></span>
-    <span class="stat"><span data-t="weather">thời tiết</span><b id="s-clim">–</b></span>
-    <span class="stat"><span data-t="obey">tuân lệnh</span><b id="s-obey">–</b></span>
+    <span class="stat hide-sm"><span data-t="weather">thời tiết</span><b id="s-clim">–</b></span>
+    <span class="stat hide-sm"><span data-t="obey">tuân lệnh</span><b id="s-obey">–</b></span>
     <span class="stat"><span data-t="known">kiến thức</span><b id="s-known">–</b></span>
-    <span class="stat"><span data-t="stores">kho</span><b id="s-stores">0</b></span>
-    <span class="stat"><span data-t="leaders">thủ lĩnh</span><b id="s-leaders">0</b></span>
+    <span class="stat hide-sm"><span data-t="stores">kho</span><b id="s-stores">0</b></span>
+    <span class="stat hide-sm"><span data-t="leaders">thủ lĩnh</span><b id="s-leaders">0</b></span>
     <span class="spacer"></span>
     <span class="stat" id="live" style="display:none;color:var(--ok)">● LIVE</span>
     <button id="lang">EN</button>
   </header>
+  <button id="sheetTab" aria-label="history"><span>≡</span><span data-t="chronicleTab">Sử ký</span></button>
   <div id="stage">
     <canvas id="gl"></canvas>
     <div id="legend"><h4 data-t="factions">Phe phái</h4><div id="factions"></div></div>
@@ -162,7 +187,7 @@ const T = {
     hint: 'kéo để di chuyển · lăn chuột để phóng · bấm vào người để theo cả đời · space phát/dừng · F bám thủ lĩnh · E bám sự kiện · L đổi ngôn ngữ · ← → từng khung',
     drop: 'Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.',
     loading: 'Đang tải', notfound: 'Chưa có dữ liệu cho seed này. Dữ liệu không nằm trong git, phải chạy sim để sinh ra:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Rồi mở lại trang này. Mở thế giới khác bằng <code>?seed=N</code>, đúng số seed bạn đã chạy. Hoặc kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
-    tlPop: 'dân số', tlKnown: 'kiến thức', tlSoil: 'đất',
+    tlPop: 'dân số', tlKnown: 'kiến thức', tlSoil: 'đất', chronicleTab: 'Sử ký',
     followers: 'người theo', unnamed: '(chưa có tên)', fps: 'khung/giây', order: 'lệnh', custom: 'tập quán', none: 'không',
     normal: 'bình thường', winter: 'mùa đông', drought: 'hạn hán', droughtWinter: 'hạn + đông', plenty: 'được mùa', harsh: 'năm khắc nghiệt',
     lineage: 'dòng họ', eras: ['hoang dã','nhóm lửa','bén rễ','đan kết','nhiều tầng','vút cao','rực rỡ','vượt xa'],
@@ -174,7 +199,7 @@ const T = {
     hint: 'drag to pan · wheel to zoom · click a person to follow a life · space play/pause · F follow leader · E follow events · L language · ← → step',
     drop: 'Or drop the three files snap_seedN.bin, meta_seedN.json, events_seedN.txt here.',
     loading: 'Loading', notfound: 'No data for this seed yet. The data is not in git; run the sim to make it:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Then reload. Open another world with <code>?seed=N</code>, the seed you actually ran. Or drop the files here.', badfile: 'Not a snapshot file.',
-    tlPop: 'people', tlKnown: 'knowledge', tlSoil: 'soil',
+    tlPop: 'people', tlKnown: 'knowledge', tlSoil: 'soil', chronicleTab: 'History',
     followers: 'followers', unnamed: '(unnamed)', fps: 'frames/s', order: 'order', custom: 'custom', none: 'none',
     normal: 'normal', winter: 'winter', drought: 'drought', droughtWinter: 'drought + winter', plenty: 'year of plenty', harsh: 'harsh year',
     lineage: 'lineage', eras: ['wild','kindled','rooted','woven','layered','soaring','radiant','beyond'],
@@ -1231,8 +1256,41 @@ gl.addEventListener('click', e => { if (state.dragMoved) { state.dragMoved = fal
 window.addEventListener('mousemove', e => { if (!state.drag) return; if (Math.abs(e.clientX - state.drag.x) + Math.abs(e.clientY - state.drag.y) > 4) state.dragMoved = true; state.follow = null; state.cam.tx = null; syncButtons(); state.cam.x = state.drag.cx - (e.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (e.clientY - state.drag.y) / state.cam.zoom; });
 window.addEventListener('mouseup', () => state.drag = null);
 gl.addEventListener('wheel', e => { e.preventDefault(); const k = e.deltaY < 0 ? 1.15 : 1 / 1.15; state.cam.zoom = Math.max(1, Math.min(48, state.cam.zoom * k)); }, { passive: false });
-gl.addEventListener('touchstart', e => { const p = e.touches[0]; state.drag = { x: p.clientX, y: p.clientY, cx: state.cam.x, cy: state.cam.y }; }, { passive: true });
-gl.addEventListener('touchmove', e => { if (!state.drag) return; const p = e.touches[0]; state.cam.x = state.drag.cx - (p.clientX - state.drag.x) / state.cam.zoom; state.cam.y = state.drag.cy - (p.clientY - state.drag.y) / state.cam.zoom; }, { passive: true });
+// Touch: one finger drags the world, two fingers pinch to zoom around the point between them.
+// A phone has no wheel and no hover, so without this the map can only be looked at, never moved.
+const pinchGap = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+gl.addEventListener('touchstart', e => {
+  if (e.touches.length >= 2) { state.pinch = { gap: pinchGap(e.touches), zoom: state.cam.zoom }; state.drag = null; return; }
+  const p = e.touches[0];
+  state.pinch = null;
+  state.drag = { x: p.clientX, y: p.clientY, cx: state.cam.x, cy: state.cam.y, moved: false, t: Date.now() };
+}, { passive: true });
+gl.addEventListener('touchmove', e => {
+  if (state.pinch && e.touches.length >= 2) {
+    const k = pinchGap(e.touches) / Math.max(1, state.pinch.gap);
+    state.cam.zoom = Math.max(1, Math.min(48, state.pinch.zoom * k));
+    return;
+  }
+  if (!state.drag) return;
+  const p = e.touches[0];
+  if (Math.abs(p.clientX - state.drag.x) + Math.abs(p.clientY - state.drag.y) > 8) { state.drag.moved = true; state.follow = null; state.cam.tx = null; syncButtons(); }
+  state.cam.x = state.drag.cx - (p.clientX - state.drag.x) / state.cam.zoom;
+  state.cam.y = state.drag.cy - (p.clientY - state.drag.y) / state.cam.zoom;
+}, { passive: true });
+gl.addEventListener('touchend', e => {
+  // A quick tap that did not drag means "tell me about this one", the same as a click.
+  if (state.drag && !state.drag.moved && Date.now() - state.drag.t < 400 && e.changedTouches.length) {
+    const p = e.changedTouches[0];
+    pickAgent(p.clientX, p.clientY);
+  }
+  state.drag = null;
+  state.pinch = null;
+}, { passive: true });
+$('sheetTab').onclick = () => {
+  const app = document.getElementById('app');
+  app.classList.toggle('sheet');
+  $('sheetTab').firstElementChild.textContent = app.classList.contains('sheet') ? '×' : '≡';
+};
 
 // ---------- controls
 function syncButtons() { $('play').textContent = state.playing ? '❚❚' : '▶'; $('lifeHead').style.display = state.selected != null ? '' : 'none'; $('followLeader').classList.toggle('on', state.follow === 'leader'); $('followEvent').classList.toggle('on', state.follow === 'event'); $('speed').textContent = `${state.fps} ${t('fps')}`; }
