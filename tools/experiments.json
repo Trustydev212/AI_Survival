@@ -229,5 +229,28 @@
         "0.04"
       ]
     }
+  },
+  "room": {
+    "title": "Rộng hơn thì họ khám phá nhiều hơn hay chỉ loãng ra?",
+    "question": "Cùng số người xuất phát, bản đồ 192x192 mặc định so với 288x288 (rộng gấp 2,25) và 384x384 (gấp 4). Mục 16 cho thấy nhịp dao động do vòng thức ăn điều khiển, nên đất rộng hơn tức là mỗi miệng ăn có nhiều tài nguyên hơn và đi xa hơn mới gặp nhau. Câu hỏi: thêm chỗ thì thành khám phá và phát minh, hay chỉ thành dân cư thưa và ít gặp nhau.",
+    "control": "default",
+    "arms": {
+      "default": [
+        "--hear-strangers",
+        "1"
+      ],
+      "wide": [
+        "--width",
+        "288",
+        "--height",
+        "288"
+      ],
+      "huge": [
+        "--width",
+        "384",
+        "--height",
+        "384"
+      ]
+    }
   }
 }
