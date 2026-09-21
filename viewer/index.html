@@ -13,7 +13,7 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font: 13px/1.4 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
-  #app { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: 48px 1fr 60px; height: 100vh; }
+  #app { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: 48px 1fr 80px; height: 100vh; }
   header { grid-column: 1 / 3; display: flex; align-items: center; gap: 14px; padding: 0 14px;
     background: var(--panel); border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
   header .title { font-weight: 800; letter-spacing: .06em; color: var(--accent); }
@@ -79,7 +79,7 @@
   button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
     padding: 5px 10px; cursor: pointer; font: inherit; }
   button.on { border-color: var(--accent); color: var(--accent); }
-  #timeline { flex: 1; height: 34px; position: relative; cursor: pointer; }
+  #timeline { flex: 1; height: 58px; position: relative; cursor: pointer; }
   #timeline canvas { width: 100%; height: 100%; }
   #speed { color: var(--muted); min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
   #loader { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -88,7 +88,7 @@
   #loader .big { font-size: 18px; font-weight: 600; }
   #loader .small { color: var(--muted); max-width: 520px; }
   @media (max-width: 900px) {
-    #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 200px 60px; }
+    #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 200px 80px; }
     header { grid-column: 1; } footer { grid-column: 1; }
     aside { border-left: none; border-top: 1px solid var(--line); }
     #legend { display: none; }
@@ -162,6 +162,7 @@ const T = {
     hint: 'kéo để di chuyển · lăn chuột để phóng · bấm vào người để theo cả đời · space phát/dừng · F bám thủ lĩnh · E bám sự kiện · L đổi ngôn ngữ · ← → từng khung',
     drop: 'Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.',
     loading: 'Đang tải', notfound: 'Chưa có dữ liệu cho seed này. Dữ liệu không nằm trong git, phải chạy sim để sinh ra:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Rồi mở lại trang này. Mở thế giới khác bằng <code>?seed=N</code>, đúng số seed bạn đã chạy. Hoặc kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
+    tlPop: 'dân số', tlKnown: 'kiến thức', tlSoil: 'đất',
     followers: 'người theo', unnamed: '(chưa có tên)', fps: 'khung/giây', order: 'lệnh', custom: 'tập quán', none: 'không',
     normal: 'bình thường', winter: 'mùa đông', drought: 'hạn hán', droughtWinter: 'hạn + đông', plenty: 'được mùa', harsh: 'năm khắc nghiệt',
     lineage: 'dòng họ', eras: ['hoang dã','nhóm lửa','bén rễ','đan kết','nhiều tầng','vút cao','rực rỡ','vượt xa'],
@@ -173,6 +174,7 @@ const T = {
     hint: 'drag to pan · wheel to zoom · click a person to follow a life · space play/pause · F follow leader · E follow events · L language · ← → step',
     drop: 'Or drop the three files snap_seedN.bin, meta_seedN.json, events_seedN.txt here.',
     loading: 'Loading', notfound: 'No data for this seed yet. The data is not in git; run the sim to make it:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Then reload. Open another world with <code>?seed=N</code>, the seed you actually ran. Or drop the files here.', badfile: 'Not a snapshot file.',
+    tlPop: 'people', tlKnown: 'knowledge', tlSoil: 'soil',
     followers: 'followers', unnamed: '(unnamed)', fps: 'frames/s', order: 'order', custom: 'custom', none: 'none',
     normal: 'normal', winter: 'winter', drought: 'drought', droughtWinter: 'drought + winter', plenty: 'year of plenty', harsh: 'harsh year',
     lineage: 'lineage', eras: ['wild','kindled','rooted','woven','layered','soaring','radiant','beyond'],
@@ -1085,7 +1087,27 @@ function drawTimeline() {
   const r = $('timeline').getBoundingClientRect(); tl.width = r.width * devicePixelRatio; tl.height = r.height * devicePixelRatio;
   tctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   const w = r.width, h = r.height, n = state.frames.length; const maxPop = Math.max(1, ...state.frames.map(f => f.pop));
-  for (let i = 0; i < n; i++) { const f = state.frames[i]; const x = i / n * w; tctx.globalAlpha = .35; tctx.fillStyle = ERA_COLORS[f.era] || '#444'; tctx.fillRect(x, 0, w / n + 1, h); tctx.globalAlpha = 1; tctx.fillStyle = '#e6ebf5'; const ph = f.pop / maxPop * (h - 12); tctx.fillRect(x, h - ph, Math.max(1, w / n), ph); }
+  // The bar is the population; the lines are what the society has built up and what it has spent.
+  // Without these a viewer sees people milling about and concludes nothing is happening, while the
+  // numbers say a thousand houses stand. Knowledge climbs, soil falls, and the price is visible.
+  const maxKnown = Math.max(1, ...state.frames.map(f => f.known || 0));
+  for (let i = 0; i < n; i++) { const f = state.frames[i]; const x = i / n * w; tctx.globalAlpha = .35; tctx.fillStyle = ERA_COLORS[f.era] || '#444'; tctx.fillRect(x, 0, w / n + 1, h); tctx.globalAlpha = 1; tctx.fillStyle = '#e6ebf5'; const ph = f.pop / maxPop * (h - 17); tctx.fillRect(x, h - ph, Math.max(1, w / n), ph); }
+  tctx.fillStyle = 'rgba(12,16,24,0.72)'; tctx.fillRect(0, 0, w, 15);
+  const line = (get, colour, width) => {
+    tctx.beginPath();
+    for (let i = 0; i < n; i++) { const v = get(state.frames[i]); if (!(v >= 0)) continue; const x = i / n * w, y = h - 2 - v * (h - 19); i ? tctx.lineTo(x, y) : tctx.moveTo(x, y); }
+    tctx.strokeStyle = colour; tctx.lineWidth = width; tctx.stroke();
+  };
+  line(f => (f.known || 0) / maxKnown, '#f2c14e', 1.6);
+  line(f => f.soil, '#6bbf73', 1.2);
+  const cur = state.frames[Math.min(state.frame, n - 1)];
+  tctx.font = '10px ui-monospace, monospace'; tctx.textBaseline = 'top';
+  const parts = [[t('tlPop'), '#e6ebf5', Math.round(cur.pop)], [t('tlKnown'), '#f2c14e', (cur.known || 0).toFixed(1)], [t('tlSoil'), '#6bbf73', Math.round(cur.soil * 100) + '%']];
+  let lx = 6;
+  for (const [name, colour, val] of parts) {
+    tctx.fillStyle = colour; tctx.fillRect(lx, 4, 7, 7); lx += 11;
+    const text = `${name} ${val}`; tctx.fillStyle = '#c9d4e6'; tctx.fillText(text, lx, 3); lx += tctx.measureText(text).width + 14;
+  }
   const lastTick = state.frames[n - 1].tick || 1;
   for (const e of state.events) { const d = describeEvent(e); if (!d.major) continue; const x = e.tick / lastTick * w; tctx.fillStyle = '#f2c14e'; tctx.beginPath(); tctx.moveTo(x - 4, 0); tctx.lineTo(x + 4, 0); tctx.lineTo(x, 7); tctx.fill(); }
   tctx.fillStyle = '#ffffff'; tctx.fillRect((state.frame + state.sub) / n * w - 1, 0, 2, h);
