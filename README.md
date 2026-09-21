@@ -565,6 +565,7 @@ Trên mặc định cuối cùng (nghe cả người lạ, không bầy thú), h
 | bầy thú (không, có) | có bầy thú: định cư 15% so với 68%, kết cục tốt 5/16 so với 9/16, 12/16 thế giới không săn chung được lần nào, tín hiệu không có nghĩa hơn. Bầy thú tắt mặc định | docs/lab/herds.md |
 
 Cách đọc từng kết quả và độ tin nằm trong docs/THEORY.md, mục 8 đến 12.
+Nếu bạn học máy và muốn biết repo này dạy được gì: **docs/HOC-GI.md**.
 
 ## Thế giới không có mốc dừng
 
@@ -630,6 +631,7 @@ Repo này là nơi quan sát một xã hội thu nhỏ, nên có sẵn cách đ�
 ./target/release/sim --load world.bin --ticks 20000 --save world.bin  # nhặt lên chạy tiếp
 ./tools/programme.sh                          # chạy cả một chương trình dài, không cần trông
 python3 tools/things.py                       # danh mục mọi thứ mọi thế giới từng làm ra
+python3 tools/learning.py                     # quét siêu tham số, vẽ đường học
 python3 tools/check.py                        # 15 giây: chạy bài kiểm tra, báo thế giới nào đổi hành vi
 python3 tools/check.py --bless                # chấp nhận hành vi hiện tại làm mốc mới
 python3 tools/lab.py list                     # các câu hỏi có sẵn
