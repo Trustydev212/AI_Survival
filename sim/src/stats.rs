@@ -116,6 +116,8 @@ pub struct Metrics {
     /// Division of labour, 0..1: how much of the population's activity mix is explained by who
     /// does it (mutual information between person and action, over the entropy of actions).
     pub dol: f32,
+    /// Shelters standing right now: what a viewer would actually see on the map.
+    pub buildings: usize,
     /// Things per head, and the share of people holding at least one made thing.
     pub things: f32,
     pub equipped: f32,
@@ -142,7 +144,7 @@ pub fn level_of(mean_known: f32, settled: f32) -> usize {
 pub fn compute(
     tick: u64, season: f32, climate: f32, agents: &[Agent], food: f32, soil: f32, lived_soil: f32,
     innovations: usize, cultivated: usize, settled: f32, order_mix: [f32; N_ORDER], custom_mix: [f32; N_ORDER],
-    stores: usize, stored: f32, w: Window,
+    stores: usize, stored: f32, buildings: usize, w: Window,
 ) -> Metrics {
     let pop = agents.len();
     let n = pop.max(1) as f32;
@@ -272,6 +274,7 @@ pub fn compute(
         td,
         value,
         dol,
+        buildings,
         things,
         equipped,
         learn_rate,
@@ -333,7 +336,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
         "breed_rate", "stores", "stored", "deposits", "withdrawals", "winter_withdrawals", "looted",
         "plastic", "signal_entropy", "signal_mi", "things_per_head", "equipped_share", "craft_tries", "crafts", "made", "built",
-        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning", "division_of_labour", "td_error", "mean_value", "know_gifts",
+        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning", "division_of_labour", "td_error", "mean_value", "know_gifts", "buildings",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -418,6 +421,7 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     n(m.td);
     n(m.value);
     n(w.know_gifts as f32);
+    n(m.buildings as f32);
     for v in m.emotion {
         n(v);
     }

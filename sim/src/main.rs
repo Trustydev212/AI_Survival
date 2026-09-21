@@ -140,7 +140,7 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
             let m = stats::compute(
                 t, sim.world.season(t), sim.world.climate, &sim.agents, sim.world.total_food(), sim.world.soil_health(),
                 sim.regions.inhabited_soil(&sim.agents), sim.innovations.len(), sim.world.cultivated_cells(),
-                sim.settled_share(), sim.order_mix(), sim.custom_mix(), sim.stores.list.len(), sim.stores.total_food(), window,
+                sim.settled_share(), sim.order_mix(), sim.custom_mix(), sim.stores.list.len(), sim.stores.total_food(), sim.world.building_count(), window,
             );
             if !cfg.quiet {
                 stats::print_row(&m);
