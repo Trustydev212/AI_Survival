@@ -235,3 +235,84 @@ pub fn capabilities(known: &Known, registry: &[Innovation]) -> [f32; N_EFFECT] {
     }
     caps
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn known_holds_every_slot_it_should() {
+        let mut k = Known::EMPTY;
+        assert_eq!(k.count(), 0);
+        assert!(!k.any());
+        for i in [0, 1, 63, 64, 65, 127, 128, 300, MAX_INNOVATIONS - 1] {
+            k.set(i);
+            assert!(k.has(i), "slot {i} should be set");
+        }
+        assert_eq!(k.count(), 9);
+        assert_eq!(k.iter().count(), 9);
+        assert_eq!(k.iter().next(), Some(0));
+        assert_eq!(k.iter().last(), Some(MAX_INNOVATIONS - 1));
+    }
+
+    #[test]
+    fn known_ignores_slots_past_the_end() {
+        // Out of range must be dropped, never wrap round onto slot 0 and hand someone
+        // knowledge they never had.
+        let mut k = Known::EMPTY;
+        k.set(MAX_INNOVATIONS);
+        k.set(MAX_INNOVATIONS + 64);
+        assert_eq!(k.count(), 0);
+        assert!(!k.has(MAX_INNOVATIONS));
+        assert!(!k.has(0));
+    }
+
+    #[test]
+    fn known_unset_and_union() {
+        let mut a = Known::EMPTY;
+        a.set(5);
+        a.set(200);
+        let mut b = Known::EMPTY;
+        b.set(200);
+        b.set(400);
+        a.union_with(&b);
+        assert_eq!(a.count(), 3);
+        a.unset(200);
+        assert!(!a.has(200));
+        assert_eq!(a.count(), 2);
+    }
+
+    #[test]
+    fn beyond_is_what_only_the_teacher_knows() {
+        let mut teacher = Known::EMPTY;
+        for i in [1, 70, 300] {
+            teacher.set(i);
+        }
+        let mut learner = Known::EMPTY;
+        learner.set(1);
+        let mut already = Known::EMPTY;
+        already.set(70);
+        let left = teacher.beyond(&learner, &already);
+        assert_eq!(left.iter().collect::<Vec<_>>(), vec![300]);
+    }
+
+    #[test]
+    fn all_upto_is_exactly_that_many() {
+        assert_eq!(Known::all_upto(0).count(), 0);
+        assert_eq!(Known::all_upto(130).count(), 130);
+        assert!(Known::all_upto(130).has(129));
+        assert!(!Known::all_upto(130).has(130));
+        assert_eq!(Known::all_upto(MAX_INNOVATIONS + 50).count(), MAX_INNOVATIONS as u32);
+    }
+
+    #[test]
+    fn each_world_coins_its_own_words() {
+        // The same slot in two worlds must not produce the same name, or identical-looking
+        // histories make the thing read as a script.
+        let a: Vec<String> = (0..8).map(|i| Innovation::coined(i, 3)).collect();
+        let b: Vec<String> = (0..8).map(|i| Innovation::coined(i, 5)).collect();
+        assert_ne!(a, b);
+        assert_eq!(a, (0..8).map(|i| Innovation::coined(i, 3)).collect::<Vec<_>>());
+        assert!(a.iter().all(|n| !n.is_empty()));
+    }
+}

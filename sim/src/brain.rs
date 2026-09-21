@@ -327,3 +327,63 @@ pub fn trace_step(trace: &mut [f32], vtrace: &mut [f32], hidden: &[f32; N_HID], 
     }
     vtrace[N_HID] = (vtrace[N_HID] * decay + 1.0).clamp(-6.0, 6.0);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn out_with(scores: [f32; N_ACT]) -> [f32; N_OUT] {
+        let mut out = [0.0; N_OUT];
+        out[O_ACT..O_ACT + N_ACT].copy_from_slice(&scores);
+        out
+    }
+
+    #[test]
+    fn a_policy_is_a_distribution() {
+        let p = act_probs(&out_with([0.2, -1.0, 3.0, 0.0, 0.5, -0.3]), 1.0);
+        let sum: f32 = p.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-4, "probabilities summed to {sum}");
+        assert!(p.iter().all(|v| *v > 0.0), "every action keeps a chance of being tried");
+    }
+
+    #[test]
+    fn cold_policies_commit_and_warm_ones_hesitate() {
+        let scores = [0.0, 0.0, 2.0, 0.0, 0.0, 0.0];
+        let cold = act_probs(&out_with(scores), 0.05);
+        let warm = act_probs(&out_with(scores), 2.0);
+        assert!(cold[2] > 0.99, "a cold policy all but always takes the best");
+        assert!(warm[2] < cold[2], "a warm policy spreads its bets");
+    }
+
+    #[test]
+    fn one_lesson_never_moves_a_weight_further_than_its_step() {
+        // The bug that killed every world: the update grew with the length of the trace, the
+        // critic overshot, and the noise it fed back locked every agent onto one action. Both
+        // steps are normalised now, so a single lesson is bounded however loud the moment was.
+        let mut plastic = vec![0.0; N_HID * N_OUT];
+        let mut critic = vec![0.0; N_CRITIC];
+        let trace = vec![5.0; N_TRACE];
+        let vtrace = vec![5.0; N_CRITIC];
+        let (actor, crit) = (0.1, 0.1);
+        learn_td(&mut plastic, &mut critic, &trace, &vtrace, 5.0, actor, crit);
+        let biggest = plastic.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(biggest <= actor + 1e-6, "one lesson moved a weight by {biggest}");
+        assert!(critic.iter().all(|v| v.abs() <= 8.0), "the critic stays inside its bounds");
+    }
+
+    #[test]
+    fn traces_fade_and_favour_what_was_done() {
+        let mut trace = vec![0.0; N_TRACE];
+        let mut vtrace = vec![0.0; N_CRITIC];
+        let hidden = [1.0f32; N_HID];
+        let probs = [1.0 / 6.0; N_ACT];
+        trace_step(&mut trace, &mut vtrace, &hidden, &probs, 2, 0.855);
+        assert!(trace[2 * N_HID] > 0.0, "the chosen action is argued for");
+        assert!(trace[0] < 0.0, "the ones passed over are argued against");
+        let chosen_before = trace[2 * N_HID];
+        for _ in 0..40 {
+            trace_step(&mut trace, &mut vtrace, &hidden, &probs, 0, 0.855);
+        }
+        assert!(trace[2 * N_HID] < chosen_before, "an old choice fades out of credit");
+    }
+}

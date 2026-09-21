@@ -452,8 +452,12 @@ fn symbol(sig: &[f32; crate::brain::N_SIG]) -> usize {
 /// The speaker's situation, in six classes: hungry, middling or full, and afraid or not.
 /// This is what a call could be *about* before anyone has agreed on what it means.
 fn state_class(a: &Agent) -> usize {
-    let e = if a.energy < 35.0 { 0 } else if a.energy < 70.0 { 1 } else { 2 };
-    e + if a.emotion[0] > 0.3 { 3 } else { 0 }
+    state_class_of(a.energy, a.emotion[0])
+}
+
+fn state_class_of(energy: f32, fear: f32) -> usize {
+    let e = if energy < 35.0 { 0 } else if energy < 70.0 { 1 } else { 2 };
+    e + if fear > 0.3 { 3 } else { 0 }
 }
 
 /// Mutual information between two symbol streams from their joint counts, in bits, with the
@@ -541,4 +545,37 @@ pub fn division_of_labour(agents: &[Agent]) -> f32 {
         return 0.0;
     }
     ((h - inner / counted) / h).clamp(0.0, 1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn independent_streams_carry_no_information() {
+        // Every symbol paired with every action equally often: hearing tells you nothing.
+        let joint = [[10.0f32; 4]; 4];
+        let mi = mutual_information(&joint, 160.0);
+        assert!(mi < 0.05, "independent streams reported {mi} bits");
+    }
+
+    #[test]
+    fn a_perfect_code_carries_its_bits() {
+        // Each symbol always followed by its own action: two bits, less the small-sample correction.
+        let mut joint = [[0.0f32; 4]; 4];
+        for k in 0..4 {
+            joint[k][k] = 100.0;
+        }
+        let mi = mutual_information(&joint, 400.0);
+        assert!(mi > 1.8, "a perfect four-way code reported only {mi} bits");
+    }
+
+    #[test]
+    fn hunger_and_fear_make_six_states() {
+        // The classes the speaker-side measure reads must not collapse or overflow.
+        assert!(state_class_of(10.0, 0.0) != state_class_of(50.0, 0.0));
+        assert!(state_class_of(10.0, 0.0) != state_class_of(10.0, 0.9));
+        assert_eq!(state_class_of(90.0, 0.9), 5);
+        assert_eq!(state_class_of(10.0, 0.0), 0);
+    }
 }

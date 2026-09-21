@@ -597,6 +597,8 @@ nghe lời đã đủ tạo khác biệt. Mẫu 12 còn nhỏ, chưa phải kế
 Repo này là nơi quan sát một xã hội thu nhỏ, nên có sẵn cách đặt câu hỏi và trả lời bằng đối chứng:
 
 ```bash
+python3 tools/check.py                        # 15 giây: chạy bài kiểm tra, báo thế giới nào đổi hành vi
+python3 tools/check.py --bless                # chấp nhận hành vi hiện tại làm mốc mới
 python3 tools/lab.py list                     # các câu hỏi có sẵn
 python3 tools/lab.py screen orders            # sàng lọc rẻ: 8 seed, 8.000 tick, vài phút
 python3 tools/lab.py run orders --seeds 1-16  # chạy mọi nhánh trên cùng seed, viết docs/lab/orders.md

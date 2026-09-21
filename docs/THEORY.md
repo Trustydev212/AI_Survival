@@ -309,6 +309,25 @@ là chỗ chứa của tôi?
 5. **Có "đêm trường" không?** Sự kiện *lãng quên* ghi lúc kiến thức tụt quá nửa. Bao nhiêu thế giới quên rồi
    tìm lại được, và tìm lại bằng cùng công thức hay công thức khác?
 
+## Biết mình làm hỏng gì trong 15 giây
+
+Trước khi có mục này, cách duy nhất để biết một thay đổi làm hỏng thứ gì là chạy một thí nghiệm và
+chờ mười lăm phút. Mục 14 cho thấy cái giá của việc đó: sửa một trần trong mã xong là mọi con số đo
+trước đều phải đo lại, mà không có cách nào biết cái gì đã đổi ngoài chạy lại tất cả.
+
+`python3 tools/check.py` chạy trong khoảng mười lăm giây và trả lời đúng hai câu hỏi hay sai nhất:
+
+- **Có gì vỡ không.** Mười ba bài kiểm tra đơn vị cho phần logic thuần: bộ bit kiến thức (đặt, đếm,
+  duyệt, và quan trọng nhất là bỏ qua ô vượt giới hạn thay vì quay vòng về ô 0), softmax của chính
+  sách, giới hạn một bước học (đúng cái lỗi đã giết mọi thế giới), độ phai của vết, thông tin tương
+  hỗ, và việc mỗi thế giới tự đặt tên riêng.
+- **Thế giới nào đổi hành vi.** Bảy cấu hình chạy trên bản đồ nhỏ, toàn bộ bảng thống kê được băm
+  thành một vân tay. Vì sim tất định, vân tay không đổi chứng minh thế giới giống hệt tới chữ số
+  cuối; vân tay đổi thì nó gọi tên đúng cấu hình đã dịch chuyển.
+
+Đổi hành vi có chủ ý thì `--bless` ghi lại mốc mới, và commit khi đó mang theo bằng chứng chính xác
+những thế giới nào đã dịch chuyển. Đây là thứ đáng lẽ phải có từ đầu.
+
 ## Chạy nhanh hơn: sàng lọc trước, chạy đầy đủ sau
 
 Một nhánh đầy đủ là 16 thế giới nhân 20.000 tick, khoảng 19 phút trên một máy bốn lõi. Bốn nhánh là hơn một
