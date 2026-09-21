@@ -22,6 +22,10 @@ cd "$(dirname "$0")/.."
 
 WORLD_DIR="${WORLD_DIR:-$PWD/world}"
 SHIFT="${SHIFT:-200000}"
+# Section 17: the map was capping everything. Four times the land gave four times the people,
+# five times the knowledge and three times the inventions, at a third of the tick rate. For a
+# machine that runs anyway, that is a trade worth making.
+MAP="${MAP:-384}"
 PUBLISH="${PUBLISH:-900}"
 SIM="$PWD/sim/target/release/sim"
 
@@ -36,6 +40,7 @@ while true; do
       --snapshot-every 200 \
       --snapshot-window 20000 \
       --quiet \
+      --width "$MAP" --height "$MAP" \
       --out "$WORLD_DIR" \
       >> "$WORLD_DIR/run.log" 2>&1
   code=$?

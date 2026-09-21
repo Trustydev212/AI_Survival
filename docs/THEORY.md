@@ -366,6 +366,52 @@ nhích theo hướng tốt. Giả thuyết: dư dả thì nói được mà khô
 dân số nhỏ. Vòng tiêu thụ tài nguyên là lời giải thích tốt nhất hiện có cho việc xã hội ở đây không tìm
 được cân bằng.
 
+### 17. Bản đồ là cái trần của mọi thứ khác
+
+**Phát biểu.** Kích thước bản đồ, thứ tôi chưa bao giờ nghĩ là một biến, hoá ra ràng buộc gần như mọi con
+số trong sổ này. Cùng số người xuất phát, đất rộng gấp bốn cho dân số đỉnh gấp gần bốn, kiến thức mỗi người
+gấp gần năm và số phát minh gấp ba.
+
+**Bằng chứng.** `tools/lab.py screen room --seeds 1-8 --ticks 8000` (8 thế giới mỗi nhánh):
+
+| bản đồ | kết cục tốt | dân đỉnh | kiến thức | phát minh |
+|---|---|---|---|---|
+| 192×192 (mặc định) | 4/8 | 1.704 | 11,9 | 32,5 |
+| 288×288 | 6/8 | 3.643 | 19,4 | 55 |
+| 384×384 | 5/8 | 6.191 | 55,7 | 106 |
+
+Dân số đỉnh +4.576 với khoảng tin cậy không chứa 0; dân số cuối +1.744 cũng vậy. Nối với mục 4 (phát minh
+là hàm của số lần thử) và mục 16 (thức ăn tạo nhịp) thì mạch rất rõ: đất rộng nuôi nhiều người, nhiều
+người thử nhiều hơn, nên biết nhiều hơn.
+
+**Cái giá.** 280 tick mỗi giây trên bản đồ 384×384 so với 912 trên 192×192, tức chậm hơn ba lần rưỡi. Với
+một máy chạy liên tục, đổi ba tick lấy một xã hội giàu gấp năm là món hời.
+
+**Độ tin.** Mới sàng lọc 8 thế giới nhưng hai chỉ số dân số có khoảng tin cậy không chứa 0 và hướng nhất
+quán ở cả ba nhánh. Hệ quả thực tế: **mọi kết quả trong sổ này đo trên một thế giới chật**, và con số tuyệt
+đối của chúng thấp hơn thế giới rộng rãi rất nhiều. Các so sánh giữa hai nhánh vẫn đúng vì cùng bị chật
+như nhau.
+
+### 18. Giả thuyết ngôn ngữ thứ tư: chưa thấy, và có lý do chính đáng để chưa thấy
+
+**Phát biểu.** Cho não một ô nhớ vị trí và cho thế giới những nguồn lợi giàu không nhìn thấy từ xa, tức là
+lần đầu tiên có thứ **đáng nói**, vẫn chưa làm tiếng gọi mang nghĩa trong 8.000 tick.
+
+**Bằng chứng.** `tools/lab.py screen finds` (8 thế giới mỗi nhánh): nghĩa của tiếng gọi 0,027 ở nhánh
+thường, 0,014 khi có nguồn lợi, 0,044 khi có nguồn lợi mà điếc. So nghe với điếc trong thế giới có nguồn
+lợi: không chỉ số nào có khoảng tin cậy loại được 0.
+
+**Nhưng nguồn lợi làm thế giới giàu hẳn**: kiến thức mỗi người 43,4 so với 6,1, phát minh 87,5 so với 36.
+Cơ chế hoạt động; chỉ có phần ngôn ngữ là chưa.
+
+**Cách đọc, và chỗ khác với ba lần trước.** Ba giả thuyết trước bị bác vì cơ chế có sẵn mà tiến hoá không
+dùng. Lần này **cổng ghi nhớ vừa mới sinh ra**: tiến hoá mới có 8.000 tick để tìm ra rằng nên bật nó, rồi
+lại phải tìm ra rằng nên kêu lên khi bật. Hai bước, trên một hành vi chưa từng tồn tại. Sàng lọc 8.000 tick
+không đủ để bác điều đó, và nói nó đã bị bác là sai phương pháp.
+
+**Độ tin.** Chưa kết luận. Đây là giả thuyết đầu tiên phải giao cho thế giới chạy liên tục hàng triệu tick
+chứ không phải cho một lần sàng lọc, và đó cũng là lý do đáng chạy VPS.
+
 ## Những câu hỏi mở
 
 1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
