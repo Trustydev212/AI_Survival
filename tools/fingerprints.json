@@ -1,12 +1,12 @@
 {
   "fingerprints": {
-    "deaf": "6288e2ae91321c83",
-    "default": "1f4ab5f9af4edf36",
-    "gradient": "935737613fae1671",
-    "gradient-social": "92b4134b6e5c2c2d",
-    "herds": "150be9420b29d4b5",
-    "no-crafting": "e82e6a096a6dff5e",
-    "no-orders": "b8e86d86ebf2cd5c"
+    "deaf": "fda682ab11221a7f",
+    "default": "a594dc2b9ccd970c",
+    "gradient": "5468c4107d123fa0",
+    "gradient-social": "ea6697a7fe366e9f",
+    "herds": "3bc851eeb8b084b7",
+    "no-crafting": "3ca3e8172b4364d3",
+    "no-orders": "cc76a84c651a1630"
   },
-  "world": 7
+  "world": 8
 }

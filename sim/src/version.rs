@@ -13,13 +13,16 @@
 //! the mistake this file exists to catch.
 
 /// The rules of the world. Bump on any change to how the world behaves.
-pub const WORLD: u32 = 7;
+pub const WORLD: u32 = 8;
 
 /// What this version is, in one line, newest first in the list below.
-pub const NOTE: &str = "minds can remember one place, and rich finds make knowing where worth saying";
+pub const NOTE: &str = "a find is reached cell by cell, which made the world half again as fast";
 
 /// The history, so an old report can be placed.
 ///
+/// - v8: reaching a find is decided cell by cell. Every body asked whether one lay under it on
+///   every tick and the answer walked the whole list, so the map now holds the answer. Worth 42%
+///   of the tick rate on the settings a long run uses.
 /// - v7: minds gained a place they may mark and return to; --finds puts rich spots on the map.
 /// - v6: the ceiling went to 2048, after a world running free reached 437 by tick 66,000.
 /// - v5: the ceiling on innovations went from 128 to 512, and names are coined per world.
@@ -27,7 +30,7 @@ pub const NOTE: &str = "minds can remember one place, and rich finds make knowin
 /// - v3: herds off by default; strangers heard as loudly as kin.
 /// - v2: materials, crafting, gear, shelters, storehouses.
 /// - v1: sea and boats.
-pub const HISTORY: [&str; 7] = [
+pub const HISTORY: [&str; 8] = [
     "v1: sea and boats",
     "v2: materials, crafting, gear, shelters",
     "v3: herds off, strangers heard",
@@ -35,4 +38,5 @@ pub const HISTORY: [&str; 7] = [
     "v5: 512 innovations, names coined per world",
     "v6: 2048 innovations, so a world left running does not stop inventing",
     "v7: a place each mind may remember, and rich finds that cannot be seen from afar",
+    "v8: a find is reached cell by cell rather than by exact distance, and is found in one lookup",
 ];

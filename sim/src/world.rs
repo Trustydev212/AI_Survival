@@ -44,6 +44,11 @@ pub struct World {
     pub buildings: Vec<Option<Building>>,
     /// Rich spots, invisible until stumbled upon. Empty unless the world was made with them.
     pub finds: Vec<Find>,
+    /// Which find, if any, is within reach of each cell. Every body asked "is there one under me"
+    /// every tick, and answering by walking the whole list cost the map times the population in
+    /// distance checks for nothing. The reach is small and the finds are few, so the answer fits
+    /// in the map itself and is rebuilt only when one moves.
+    find_at_cell: Vec<u16>,
     /// Weather multiplier on regrowth: 1 normal, below 1 drought, above 1 a good year.
     pub climate: f32,
     pub farm_boost: f32,
@@ -115,7 +120,7 @@ impl World {
         }
         let mats = mats_cap.clone();
         let buildings = vec![None; width * height];
-        World { width, height, base_fertility, water, fertility, mats, mats_cap, buildings, finds: Vec::new(), food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
+        World { width, height, base_fertility, water, fertility, mats, mats_cap, buildings, finds: Vec::new(), find_at_cell: Vec::new(), food, cultivation, climate: 1.0, farm_boost, cult_decay, max_food, regrow, season_len, soil_drain, soil_recovery }
     }
 
     #[inline]
@@ -325,21 +330,49 @@ impl World {
         }
     }
 
-    /// The richest find within reach of a point, if any is close enough to notice.
-    pub fn find_at(&self, x: f32, y: f32, radius: f32) -> Option<usize> {
-        let r2 = radius * radius;
-        self.finds
-            .iter()
-            .enumerate()
-            .filter(|(_, f)| f.food > 0.0 && (f.x - x).powi(2) + (f.y - y).powi(2) <= r2)
-            .max_by(|a, b| a.1.food.total_cmp(&b.1.food))
-            .map(|(i, _)| i)
+    /// The find within reach of a point, if any. One lookup in the map.
+    pub fn find_at(&self, x: f32, y: f32, _radius: f32) -> Option<usize> {
+        if self.find_at_cell.is_empty() {
+            return None;
+        }
+        let k = self.find_at_cell[self.idx(x, y)];
+        if k == u16::MAX || self.finds[k as usize].food <= 0.0 {
+            None
+        } else {
+            Some(k as usize)
+        }
+    }
+
+    /// Paint each find onto the cells within reach of it. Cheap: a handful of cells each.
+    pub fn index_finds(&mut self, radius: f32) {
+        if self.finds.is_empty() {
+            self.find_at_cell.clear();
+            return;
+        }
+        self.find_at_cell = vec![u16::MAX; self.width * self.height];
+        let r = radius.ceil() as i32;
+        for (k, f) in self.finds.iter().enumerate() {
+            let (cx, cy) = (f.x as i32, f.y as i32);
+            for dy in -r..=r {
+                for dx in -r..=r {
+                    if (dx * dx + dy * dy) as f32 > radius * radius {
+                        continue;
+                    }
+                    let (x, y) = (cx + dx, cy + dy);
+                    if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
+                        continue;
+                    }
+                    self.find_at_cell[y as usize * self.width + x as usize] = k as u16;
+                }
+            }
+        }
     }
 
     /// Finds refill slowly and a spent one moves somewhere else, so the map never runs out of
     /// places worth knowing about but knowing yesterday's place is not enough.
-    pub fn tend_finds(&mut self, regrow: f32, cap: f32, rng: &mut Rng) {
+    pub fn tend_finds(&mut self, regrow: f32, cap: f32, radius: f32, rng: &mut Rng) {
         let (w, h) = (self.width, self.height);
+        let mut moved = false;
         for i in 0..self.finds.len() {
             if self.finds[i].food <= 0.0 {
                 for _ in 0..200 {
@@ -347,12 +380,16 @@ impl World {
                     let y = rng.range(h) as f32 + 0.5;
                     if !self.is_water(x, y) {
                         self.finds[i] = Find { x, y, food: cap * 0.1 };
+                        moved = true;
                         break;
                     }
                 }
             } else {
                 self.finds[i].food = (self.finds[i].food + regrow).min(cap);
             }
+        }
+        if moved {
+            self.index_finds(radius);
         }
     }
 

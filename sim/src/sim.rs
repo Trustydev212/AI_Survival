@@ -126,6 +126,8 @@ impl Sim {
             let mut rng = std::mem::replace(&mut self.rng, Rng::new(1));
             self.world.scatter_finds(n, food, &mut rng);
             self.rng = rng;
+            let r = self.cfg.find_radius;
+            self.world.index_finds(r);
         }
     }
 
@@ -278,7 +280,7 @@ impl Sim {
         if !self.world.finds.is_empty() {
             let (regrow, cap) = (self.cfg.find_food * 0.0004, self.cfg.find_food);
             let mut rng = std::mem::replace(&mut self.rng, Rng::new(1));
-            self.world.tend_finds(regrow, cap, &mut rng);
+            self.world.tend_finds(regrow, cap, self.cfg.find_radius, &mut rng);
             self.rng = rng;
         }
         self.world.age_buildings();

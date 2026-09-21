@@ -25,6 +25,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SIM = os.environ.get("AISV_SIM") or os.path.join(ROOT, "sim", "target", "release", "sim")
 REF = os.path.join(ROOT, "tools", "fingerprints.json")
 WORK = os.path.join(ROOT, "sim", "target", "check")
+# Hashing the whole statistics file confused two different things: adding a column changed the
+# fingerprint of every world although not one of them had behaved differently, and a run of false
+# alarms is how a real one gets ignored. These columns are behaviour; the rest is reporting.
+WATCHED = ["tick", "pop", "mean_energy", "food", "soil_health", "innovations", "mean_known",
+           "births", "starved", "killed", "plague_deaths", "cultivated_cells", "settled_share"]
 SMALL = ["--width", "96", "--height", "96", "--agents", "400", "--ticks", "4000", "--quiet"]
 
 CONFIGS = {
@@ -51,8 +56,10 @@ def fingerprint(name, flags):
         path = os.path.join(out, f"stats_seed{seed}.csv")
         if not os.path.exists(path):
             return "NO OUTPUT"
-        with open(path, "rb") as f:
-            h.update(f.read())
+        with open(path) as f:
+            rows = list(csv.DictReader(f))
+        for r in rows:
+            h.update("|".join(r.get(c, "") for c in WATCHED).encode())
     return h.hexdigest()[:16]
 
 
