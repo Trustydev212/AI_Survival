@@ -795,7 +795,35 @@ impl Sim {
                     let cfg = &self.cfg;
                     let room = cfg.max_agents == 0 || n + births.len() < cfg.max_agents;
                     if self.agents[i].energy >= cfg.repro_threshold && room && !self.agents[i].afloat {
-                        let child_genome = self.agents[i].genome.mutated(&mut self.rng, cfg.p_mut, cfg.sigma);
+                        // A partner, if this world has them and one is near enough and willing.
+                        // Whoever is nearest was already found while deciding, so nobody searches
+                        // twice; a partner pays a share of the cost, which is why they must be
+                        // fed enough to agree.
+                        let mate = if cfg.mates && d.target != u32::MAX {
+                            let j = d.target as usize;
+                            let near = {
+                                let (a, o) = (&self.agents[i], &self.agents[j]);
+                                let dx = self.delta(a.x, o.x, cfg.width);
+                                let dy = self.delta(a.y, o.y, cfg.height);
+                                dx * dx + dy * dy <= cfg.mate_range * cfg.mate_range
+                            };
+                            if near && self.agents[j].energy >= cfg.repro_threshold * 0.5 && !self.agents[j].afloat {
+                                Some(j)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        let child_genome = match mate {
+                            Some(j) => {
+                                let other = self.agents[j].genome.clone();
+                                self.agents[j].energy -= cfg.repro_cost * 0.5;
+                                self.window.pairings += 1;
+                                self.agents[i].genome.crossed(&other, &mut self.rng).mutated(&mut self.rng, cfg.p_mut, cfg.sigma)
+                            }
+                            None => self.agents[i].genome.mutated(&mut self.rng, cfg.p_mut, cfg.sigma),
+                        };
                         let (px, py) = (self.agents[i].x, self.agents[i].y);
                         let (nx, ny) = (self.rng.normal(), self.rng.normal());
                         let mut x = self.place(px + nx * 0.8, cfg.width);

@@ -273,5 +273,25 @@
         "0"
       ]
     }
+  },
+  "mates": {
+    "title": "Con của hai người có đi xa hơn con của một người không?",
+    "question": "Sinh sản ở đây vốn vô tính: con là bản sao đột biến của một cha mẹ, nên hai dòng họ mỗi bên giải được một nửa bài toán không bao giờ ghép được hai nửa, và không dòng họ nào hoà vào dòng họ khác. Nhánh mates cho con có hai cha mẹ, trộn não theo từng đoạn, dấu họ hàng là trung bình của hai bên nên đứa con thuộc về cả hai mà không hẳn bên nào. Bản đồ 288 vì mục 17 cho thấy bản đồ chật bóp mọi thứ.",
+    "control": "default",
+    "arms": {
+      "default": [
+        "--width",
+        "288",
+        "--height",
+        "288"
+      ],
+      "mates": [
+        "--width",
+        "288",
+        "--height",
+        "288",
+        "--mates"
+      ]
+    }
   }
 }

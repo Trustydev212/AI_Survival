@@ -149,6 +149,13 @@ pub struct Config {
     pub save_every: u64,
     pub save_path: Option<String>,
     pub load_path: Option<String>,
+    /// Children of two parents instead of one. Reproduction here was asexual: a child was a
+    /// mutated copy of a single parent, so two families that had each solved half a problem could
+    /// never combine the halves, and no family could ever merge with another. This is the largest
+    /// single limit on how far these minds can get, larger than the size of the network.
+    pub mates: bool,
+    /// How far away a partner may be, in cells.
+    pub mate_range: f32,
     /// Rich finds: how many, how much each holds, and how close a body must be to notice one.
     /// Zero leaves the world exactly as it was. The point of them is not the food: it is that
     /// knowing where one is becomes worth more than anything else a mind can hold, and worth a
@@ -334,6 +341,8 @@ impl Default for Config {
             wear: 1.0,
             shelter_warmth: 0.35,
             learn_scale: 1.0,
+            mates: false,
+            mate_range: 3.0,
             finds: 0,
             find_food: 900.0,
             find_radius: 2.5,
@@ -423,6 +432,11 @@ impl Config {
                 i += 1;
                 continue;
             }
+            if key == "--mates" {
+                c.mates = true;
+                i += 1;
+                continue;
+            }
             if key == "--forever" {
                 c.forever = true;
                 i += 1;
@@ -503,6 +517,7 @@ impl Config {
                 "--finds" => set!(finds),
                 "--find-food" => set!(find_food),
                 "--find-radius" => set!(find_radius),
+                "--mate-range" => set!(mate_range),
                 "--snapshot-window" => set!(snapshot_window),
                 "--load" => c.load_path = Some(val.clone()),
                 "--wrap" => c.wrap = val == "1" || val == "true",
@@ -597,6 +612,8 @@ USAGE: sim [--flag value ...]
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
   --seed random     pick a world at random; the seed chosen is printed, so it can be replayed
   --bare            no leaders, no orders, no customs: only bodies, actions and calls
+  --mates           children of two parents, crossing their brains, instead of one
+  --mate-range F    how far a partner may be (3.0)
   --finds N         N rich spots that cannot be seen from afar (0 = none)
   --find-food F     how much each holds (900)
   --find-radius F   how close a body must be to notice one (2.5)

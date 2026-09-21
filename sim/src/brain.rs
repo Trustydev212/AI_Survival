@@ -89,6 +89,44 @@ impl Genome {
         Genome { weights, marker, temper, learn }
     }
 
+    /// A child of two, in blocks rather than weight by weight.
+    ///
+    /// Until this existed every child was a mutated copy of one parent, so two lineages that had
+    /// each worked out half of something could never put the halves together: evolution here had
+    /// only mutation, which is the slowest search there is. Crossing in stretches rather than at
+    /// random keeps whatever a run of weights was doing together instead of shredding it.
+    pub fn crossed(&self, other: &Genome, rng: &mut Rng) -> Genome {
+        let mut g = self.clone();
+        let mut from_other = rng.f32() < 0.5;
+        let mut run = 0usize;
+        for (i, w) in g.weights.iter_mut().enumerate() {
+            if run == 0 {
+                run = 8 + (rng.f32() * 40.0) as usize;
+                from_other = !from_other;
+            }
+            run -= 1;
+            if from_other {
+                *w = other.weights[i];
+            }
+        }
+        for (i, t) in g.temper.iter_mut().enumerate() {
+            if rng.f32() < 0.5 {
+                *t = other.temper[i];
+            }
+        }
+        for (i, l) in g.learn.iter_mut().enumerate() {
+            if rng.f32() < 0.5 {
+                *l = other.learn[i];
+            }
+        }
+        // The kin marker is the average of the two, so a child of two families belongs a little to
+        // both and reads as kin to neither entirely. That is how a new people begins.
+        for k in 0..3 {
+            g.marker[k] = (self.marker[k] + other.marker[k]) * 0.5;
+        }
+        g
+    }
+
     pub fn mutated(&self, rng: &mut Rng, p_mut: f32, sigma: f32) -> Genome {
         let mut g = self.clone();
         for w in g.weights.iter_mut() {
