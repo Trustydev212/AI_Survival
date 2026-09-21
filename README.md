@@ -533,7 +533,14 @@ Sau đó ba thí nghiệm 16 seed với tín hiệu tốn năng lượng:
 | tập quán (mặc định, tắt tập quán, tắt cả mệnh lệnh) | tắt tập quán: định cư tụt từ 92% xuống 38%, tuyệt chủng 5/16 so với 3/16, kết cục tốt 4/16 so với 8/16; tắt cả mệnh lệnh: biên độ bùng-vỡ gấp đôi | docs/lab/customs.md |
 | chế tác (mặc định, tắt chế tác) | tắt chế tác: phát minh −37, kiến thức −27 (KTC không chứa 0), nhưng kết cục gần như không đổi và dân số đỉnh còn cao hơn; đồ vật trong 20.000 tick là tri thức nhiều hơn là sống còn | docs/lab/crafting.md |
 
-Cách đọc từng kết quả và độ tin nằm trong docs/THEORY.md, mục 8 đến 11.
+Trên mặc định cuối cùng (nghe cả người lạ, không bầy thú), hai thí nghiệm 16 seed nữa:
+
+| Thí nghiệm | Kết quả | Báo cáo |
+|---|---|---|
+| nghe nhau, lặp lại | kết cục tốt 9/16 nghe hết, 6/16 điếc, 8/16 chỉ họ hàng; phát minh 124 so với 62 so với 77; cùng hướng lần đầu nhưng khoảng tin cậy chứa 0. Nhánh điếc cho thấy phần thông tin "do nghe" chỉ 0,02 bit | docs/lab/hearing.md |
+| bầy thú (không, có) | có bầy thú: định cư 15% so với 68%, kết cục tốt 5/16 so với 9/16, 12/16 thế giới không săn chung được lần nào, tín hiệu không có nghĩa hơn. Bầy thú tắt mặc định | docs/lab/herds.md |
+
+Cách đọc từng kết quả và độ tin nằm trong docs/THEORY.md, mục 8 đến 12.
 
 ### Đối chứng: có mệnh lệnh và không có mệnh lệnh
 

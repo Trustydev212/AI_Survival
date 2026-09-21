@@ -123,8 +123,19 @@ tỉ lệ người có đồ +0,23 [+0,06, +0,41], thời đại cuối +1,8 [0,
 hành động vẫn ở 0,01 đến 0,02 bit; một thế giới (seed 10, nghe người lạ) loé 0,27 bit ở tick 5.500 rồi tắt.
 Độ ồn trung bình 1,45 đến 1,57 trên tối đa 2 dù nói tốn năng lượng: chọn lọc không tắt tiếng.
 
-**Độ tin.** Có bằng chứng cho đồ vật và người có đồ; gợi ý mạnh cho dân số và kiến thức. Vì kết quả này,
-mặc định của sim từ đây là nghe cả người lạ. Ngôn ngữ (tín hiệu mang nghĩa bền vững) vẫn chưa xuất hiện;
+**Lặp lại trên mặc định cuối** (nghe cả người lạ, không bầy thú), 16 seed, docs/lab/hearing.md bản mới: kết
+cục tốt 9/16 nghe hết, 6/16 điếc, 8/16 chỉ họ hàng; phát minh trung vị 124 so với 62 so với 77; đồ vật mỗi
+đầu người 0,47 so với 0,11 so với 0,16. Cùng hướng với lần đầu, nhưng lần này mọi khoảng tin cậy 95% đều
+chứa 0 (phát minh điếc so với nghe hết: −22,6, KTC [−54,3, +8,7]); phương sai giữa các thế giới lớn.
+
+**Một điểm phương pháp.** Nhánh điếc là mô hình không cho chỉ số ngôn ngữ: ở đó tín hiệu hàng xóm vẫn được
+ghi nhưng không đi vào não, nên mọi thông tin tương hỗ còn lại là do hoàn cảnh chung (cùng đói, cùng mùa),
+không phải do nghe. Trung vị 0,00 bit điếc so với 0,02 nghe: phần "do nghe" chỉ khoảng 0,02 bit. Sự kiện
+"tiếng gọi bắt đầu có nghĩa" cũng bắn được ở một thế giới điếc (seed 5), nên ngưỡng 0,2 bit một mình chưa
+đủ để gọi là ngôn ngữ; từ đây phải so với nhánh điếc.
+
+**Độ tin.** Đã lặp lại về hướng ở hai đợt (16 seed mỗi đợt), có bằng chứng ở đợt đầu, chưa ở đợt hai. Vì kết
+quả này, mặc định của sim là nghe cả người lạ. Ngôn ngữ (tín hiệu mang nghĩa bền vững) vẫn chưa xuất hiện;
 cái đã xuất hiện là **đọc trạng thái người khác qua tiếng gọi**, một bước trước ngôn ngữ.
 
 ### 10. Tập quán giữ người ở lại, và ở lại là sống
@@ -161,7 +172,7 @@ giới không có cuộc săn thành công nào, thế giới nhiều nhất có
 làng: định cư trung vị tụt từ 68% xuống 15%, đồ vật mỗi đầu người từ 0,47 xuống 0,09, kết cục tốt từ 9/16
 xuống 5/16, tuyệt chủng từ 2 lên 5.
 
-**Bằng chứng.** `tools/lab.py run herds --seeds 1-16` (docs/lab/herds.md, ở đó `default` là có bầy thú). Trung
+**Bằng chứng.** `tools/lab.py run herds --seeds 1-16` (docs/lab/herds.md: `default` không bầy thú, `herds` có). Trung
 vị khác nhau nhiều nhưng phương sai lớn: hiệu số trung bình định cư +0,15 với KTC 95% [−0,14, +0,42], tuân
 lệnh +0,20 [−0,02, +0,42]. Sự kiện "tiếng gọi bắt đầu có nghĩa" bắn ở 3/16 thế giới có bầy thú (seed 5, 14,
 16; cao nhất 0,134 bit) so với 1/16 không có, nhưng đều tắt sau đó.
