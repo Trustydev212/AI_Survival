@@ -21,7 +21,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SIM = os.path.join(ROOT, "sim", "target", "release", "sim")
+SIM = os.environ.get("AISV_SIM") or os.path.join(ROOT, "sim", "target", "release", "sim")
 REF = os.path.join(ROOT, "tools", "fingerprints.json")
 WORK = os.path.join(ROOT, "sim", "target", "check")
 SMALL = ["--width", "96", "--height", "96", "--agents", "400", "--ticks", "4000", "--quiet"]

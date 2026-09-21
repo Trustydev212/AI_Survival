@@ -1,9 +1,12 @@
 {
-  "deaf": "c7fc76375272b262",
-  "default": "988649eb1329bc9a",
-  "gradient": "acf87d3073fd93ec",
-  "gradient-social": "dd3ae80a573c4fab",
-  "herds": "caf78dfaf7e7830c",
-  "no-crafting": "06d99a25e3bcaf16",
-  "no-orders": "33b2dec5f5d2935a"
+  "fingerprints": {
+    "deaf": "c7fc76375272b262",
+    "default": "988649eb1329bc9a",
+    "gradient": "acf87d3073fd93ec",
+    "gradient-social": "dd3ae80a573c4fab",
+    "herds": "caf78dfaf7e7830c",
+    "no-crafting": "06d99a25e3bcaf16",
+    "no-orders": "33b2dec5f5d2935a"
+  },
+  "world": 5
 }

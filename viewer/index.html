@@ -318,7 +318,7 @@ async function boot(bytes, meta, evText) {
   if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'AISV' || dv.getUint32(4, true) < 3) { $('loadmsg').textContent = t('badfile') + ' (v3+)'; return; }
   state.W = dv.getUint16(8, true); state.H = dv.getUint16(10, true); state.maxFood = dv.getFloat32(12, true);
   state.version = dv.getUint32(4, true); state.water = null; state.dataStart = 16;
-  state.nLayers = state.version >= 5 ? 4 : 3; state.agentBytes = state.version >= 7 ? 27 : state.version >= 6 ? 24 : state.version >= 5 ? 23 : 22;
+  state.nLayers = state.version >= 5 ? 4 : 3; state.agentBytes = state.version >= 9 ? 28 : state.version >= 7 ? 27 : state.version >= 6 ? 24 : state.version >= 5 ? 23 : 22;
   if (state.version >= 4) { const n = dv.getUint32(16, true); state.water = new Uint8Array(state.W * state.H); for (let i = 0; i < state.W * state.H; i++) state.water[i] = (bytes[20 + (i >> 3)] >> (i & 7)) & 1; state.dataStart = 20 + n; }
   state.meta = meta || { names: {}, eras: T.en.eras };
   state.frames = []; indexFrames();
@@ -368,12 +368,12 @@ function agentsOf(idx) {
   const f = state.frames[idx], b = state.bytes, dv = new DataView(b.buffer, b.byteOffset); const n = f.pop;
   const a = { n, id: new Uint32Array(n), x: new Float32Array(n), y: new Float32Array(n), lineage: new Uint16Array(n), name: new Uint32Array(n),
     followers: new Uint16Array(n), flags: new Uint8Array(n), energy: new Uint8Array(n), mdx: new Int8Array(n), mdy: new Int8Array(n),
-    under: new Uint8Array(n), action: new Uint8Array(n), gear: new Uint8Array(n), sig: new Uint8Array(n), plastic: new Uint8Array(n), reward: new Int8Array(n), heard: new Uint8Array(n), index: new Map(), stores: [] };
+    under: new Uint8Array(n), action: new Uint8Array(n), gear: new Uint8Array(n), sig: new Uint8Array(n), plastic: new Uint8Array(n), reward: new Int8Array(n), heard: new Uint8Array(n), skill: new Uint8Array(n), index: new Map(), stores: [] };
   let o = f.agents; const AB = state.agentBytes;
   for (let i = 0; i < n; i++, o += AB) {
     a.id[i] = dv.getUint32(o, true); a.x[i] = dv.getUint16(o + 4, true) / 64; a.y[i] = dv.getUint16(o + 6, true) / 64;
     a.lineage[i] = dv.getUint16(o + 8, true); a.name[i] = dv.getUint32(o + 10, true); a.followers[i] = dv.getUint16(o + 14, true);
-    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21]; a.gear[i] = AB >= 23 ? b[o + 22] : 0; a.sig[i] = AB >= 24 ? b[o + 23] : 255; if (AB >= 27) { a.plastic[i] = b[o + 24]; a.reward[i] = dv.getInt8(o + 25); a.heard[i] = b[o + 26]; }
+    a.flags[i] = b[o + 16]; a.energy[i] = b[o + 17]; a.mdx[i] = dv.getInt8(o + 18); a.mdy[i] = dv.getInt8(o + 19); a.under[i] = b[o + 20]; a.action[i] = b[o + 21]; a.gear[i] = AB >= 23 ? b[o + 22] : 0; a.sig[i] = AB >= 24 ? b[o + 23] : 255; if (AB >= 27) { a.plastic[i] = b[o + 24]; a.reward[i] = dv.getInt8(o + 25); a.heard[i] = b[o + 26]; } if (AB >= 28) a.skill[i] = b[o + 27];
     a.index.set(a.id[i], i);
   }
   o = f.storesOff;
@@ -913,8 +913,14 @@ function draw(force) {
     }
     bodies.removeChild(sp.body); sp.body.destroy(); if (sp.sh) { shadows.removeChild(sp.sh); sp.sh.destroy(); } if (sp.boat) { boats.removeChild(sp.boat); sp.boat.destroy(); } state.sprites.delete(id);
   }
-  if (force || state.lastPropsFrame !== idx) {
+  // Props are rebuilt when the frame changes, but some of them only exist above a zoom level,
+  // and zooming alone never rebuilt: the marks were drawn with whatever zoom the last frame
+  // change happened to have, so zooming in on a still world showed nothing. Cross a threshold
+  // and the layer is rebuilt.
+  const zoomStep = state.cam.zoom >= 6 ? 2 : state.cam.zoom >= 5 ? 1 : 0;
+  if (force || state.lastPropsFrame !== idx || state.lastPropsZoom !== zoomStep) {
     state.lastPropsFrame = idx;
+    state.lastPropsZoom = zoomStep;
     for (const L of [storeLayer, fxLayer, labelLayer, animLayer]) L.removeChildren().forEach(c => c.destroy({ children: true })); animSprites = [];
     const built = state.nLayers >= 4 ? layersOf(idx)[3] : null;
     if (built) {
@@ -977,6 +983,24 @@ function draw(force) {
     }
     // attack swings and love bubbles (the pack's characters swing their own sword, so only the fallback needs a slash)
     if (!sunny) for (let i = 0; i < A.n; i++) if (A.action[i] === 1) { const sl = new PIXI.Sprite(slashTex); sl.anchor.set(0.5, 0.5); sl.position.set(A.x[i] * TILE + TILE / 2 + (A.mdx[i] < 0 ? -10 : 10), A.y[i] * TILE + 4); sl.scale.set(A.mdx[i] < 0 ? -1 : 1, 1); sl.alpha = 0.9; fxLayer.addChild(sl); }
+    if (state.cam.zoom >= 5 && state.agentBytes >= 28) {
+      // The craft of a life. Skills climb all through a life and nothing ever showed it, so
+      // people looked like they never got better at anything. A bar under the feet, longer and
+      // brighter the more practised: green for gathering, red for fighting, amber for farming.
+      // Only from halfway up, because everyone is a little bit of everything at the start.
+      const SKILL_COLORS = [0x6bbf73, 0xd9534f, 0xf2c14e];
+      let n = 0; const g = new PIXI.Graphics();
+      for (let i = 0; i < A.n && n < 2000; i++) {
+        const sk = A.skill[i]; if (!sk) continue;
+        const which = (sk >> 6) - 1, level = (sk & 63) / 63;
+        if (which < 0 || level < 0.5) continue;
+        const wide = 6 + Math.round(level * 10), cx = A.x[i] * TILE + TILE / 2, cy = A.y[i] * TILE + TILE + 2;
+        g.beginFill(0x10131c, 0.65).drawRect(cx - wide / 2 - 1, cy - 1, wide + 2, 5).endFill();
+        g.beginFill(SKILL_COLORS[which], 0.6 + 0.4 * level).drawRect(cx - wide / 2, cy, wide, 3).endFill();
+        n++;
+      }
+      fxLayer.addChild(g);
+    }
     if (state.cam.zoom >= 6 && state.agentBytes >= 24) {
       // What people are saying: one of sixteen colours per signal symbol. Same colour, same call.
       let n = 0; const g = new PIXI.Graphics();
@@ -1181,7 +1205,14 @@ function renderLife(idx, A) {
   spark($('lf-plastic'), L.map(e => e.plastic / 850), 0, 0.3, '#8fa3ff');
 }
 $('life').innerHTML = '';
-window.__dbg = () => ({ selected: state.selected, life: state.life && state.life.length, cam: [state.cam.x, state.cam.y, state.cam.zoom], follow: state.follow, dragMoved: state.dragMoved });
+window.__dbg = () => {
+  const A = state.frames.length ? agentsOf(Math.min(state.frame, state.frames.length - 1)) : null;
+  let marked = 0, skilled = 0;
+  if (A) for (let i = 0; i < A.n; i++) { if (A.skill[i]) { skilled++; if ((A.skill[i] & 63) / 63 >= 0.5) marked++; } }
+  return { selected: state.selected, life: state.life && state.life.length, cam: [state.cam.x, state.cam.y, state.cam.zoom],
+    follow: state.follow, dragMoved: state.dragMoved, version: state.version, agentBytes: state.agentBytes,
+    agents: A ? A.n : 0, skilled, marked, fx: fxLayer && fxLayer.children.length };
+};
 
 // ---------- camera
 state.cam = { x: 0, y: 0, zoom: 4, tx: null, ty: null };
