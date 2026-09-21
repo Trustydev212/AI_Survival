@@ -1,4 +1,5 @@
 mod agent;
+mod ark;
 mod brain;
 mod config;
 mod craft;
@@ -425,6 +426,9 @@ fn run_forever(cfg: Config) {
             stats::csv_row(&mut csv, &m).unwrap();
             let _ = csv.flush();
             last_metrics = (m.soil, m.obedience, m.mean_known);
+            // Notice the brains that did well while their owners are still alive: at the end of a
+            // civilisation there is nobody left to ask.
+            sim.ark.consider(&sim.agents, generation, t);
             sim.events.check_window(&m, &sim.agents, &sim.innovations, cfg.log_every, &sim.defected);
             sim.defected.clear();
         }
@@ -443,16 +447,18 @@ fn run_forever(cfg: Config) {
         }
         if cfg.save_every > 0 && t % cfg.save_every == 0 {
             put_down(&sim, &save_path);
+            let _ = sim.ark.save(&ark_path(&cfg));
         }
         if sim.agents.is_empty() {
             // Read the age back off its own record rather than off this shift, because a
             // civilisation usually outlives the shift that happened to be watching when it died.
             let (peak, best_known) = high_water(&cfg, generation);
             let line = format!(
-                "generation {generation}\tseed {}\tlived {t} ticks\tpeak {} people\t{} things\t{:.1} known per head at its best\tended: everyone died",
+                "generation {generation}\tseed {}\tlived {t} ticks\tpeak {} people\t{} things\t{:.1} known per head at its best\tark {} brains, best left {} children\tended: everyone died",
                 seed_for(&cfg, generation), peak.max(peak_pop), sim.innovations.iter().filter(|i| !i.name.is_empty()).count(),
-                best_known,
+                best_known, sim.ark.kept.len(), sim.ark.best(),
             );
+            let _ = sim.ark.save(&ark_path(&cfg));
             append_line(&chronicle_path, &line);
             eprintln!("{line}");
             generation += 1;
@@ -465,6 +471,7 @@ fn run_forever(cfg: Config) {
         }
         if cfg.ticks > 0 && ticks_this_session >= cfg.ticks {
             put_down(&sim, &save_path);
+            let _ = sim.ark.save(&ark_path(&cfg));
             eprintln!("stopping this shift at tick {t}, generation {generation}");
             return;
         }
@@ -507,16 +514,28 @@ fn open_world(cfg: &Config, save_path: &str, generation: u32) -> sim::Sim {
     c.seed = seed_for(cfg, generation);
     let events_path = format!("{}/events_gen{generation}.txt", cfg.out_dir);
     let log = events::EventLog::new(Some(&events_path), !cfg.quiet);
+    let ark = ark::Ark::load(&ark_path(cfg));
     if !save_path.is_empty() && std::path::Path::new(save_path).exists() {
         match persist::load(&c, save_path, log) {
-            Ok(s) => return s,
+            Ok(mut s) => {
+                s.ark = ark;
+                return s;
+            }
             Err(e) => {
                 eprintln!("could not pick up {save_path}: {e}\nstarting a fresh world instead");
-                return sim::Sim::new(c.clone(), events::EventLog::new(Some(&events_path), !cfg.quiet));
+                let log = events::EventLog::new(Some(&events_path), !cfg.quiet);
+                return sim::Sim::new_founded(c.clone(), log, ark);
             }
         }
     }
-    sim::Sim::new(c, log)
+    if !ark.kept.is_empty() {
+        eprintln!("founding from {} brains carried over, best left {} children", ark.kept.len(), ark.best());
+    }
+    sim::Sim::new_founded(c, log, ark)
+}
+
+fn ark_path(cfg: &Config) -> String {
+    format!("{}/ark.bin", cfg.out_dir)
 }
 
 fn generation_csv(cfg: &Config, generation: u32) -> BufWriter<std::fs::File> {

@@ -61,6 +61,22 @@ Trong `world/`, không nằm trong git vì nó nặng vài chục MB và đổi 
 | `events_gen<N>.txt` | sử ký của từng thế hệ |
 | `live.bin`, `live.json` | cửa sổ gần đây cho viewer, tự bắt đầu lại mỗi 20.000 tick |
 
+| `ark.bin` | vài chục bộ não được mang qua cái chết của thế giới |
+
+## Thứ duy nhất sống sót qua ngày tận thế
+
+Trước đây khi mọi người chết, thế giới mới bắt đầu với bộ não **ngẫu nhiên hoàn toàn**. Chạy một triệu
+tick mà cứ vài chục nghìn tick lại xoá sạch thì không tích luỹ được gì: mỗi nền văn minh học lại đúng
+những bài học đầu tiên.
+
+`ark.bin` giữ khoảng hai chục bộ não làm tốt nhất, đo bằng thước duy nhất thế giới tự có là **để lại bao
+nhiêu con**, mỗi dòng họ một bộ. Một nửa số bộ lạc của thế giới mới sinh ra từ đó kèm đột biến, nửa còn
+lại vẫn từ nhiễu. Cố ý chia đôi: toàn bộ từ ark thì mọi thế giới thành bản sao của nhau, toàn bộ từ nhiễu
+thì không có gì tích luỹ. Chọn lọc nhờ đó vươn qua được cái chết của cả nền văn minh.
+
+Thử sáu ca liên tiếp: thế hệ 0 sống 4.545 tick rồi chết, thế hệ 1 dựng từ 24 bộ não mang qua và sống
+hơn 19.000 tick, vẫn đang sống. Một mẫu thì chưa nói lên điều gì; biên niên sử chạy dài mới trả lời được.
+
 Muốn giữ lại biên niên sử thì thỉnh thoảng commit `world/chronicle.txt` vào repo bằng tay. Đó là thứ
 duy nhất ở đây đáng đọc lại sau nhiều năm.
 

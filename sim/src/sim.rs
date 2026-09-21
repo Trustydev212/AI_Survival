@@ -36,6 +36,8 @@ pub struct Sim {
     /// Big prey that takes several hunters at once.
     pub herds: Herds,
     pub hunts_total: u32,
+    /// Brains carried over from worlds that ended; empty unless something put them here.
+    pub ark: crate::ark::Ark,
     /// Seconds spent per phase, for --profile.
     pub profile: [f64; 5],
     spatial: SpatialHash,
@@ -66,6 +68,11 @@ impl Sim {
     }
 
     pub fn new(cfg: Config, events: EventLog) -> Sim {
+        Sim::new_founded(cfg, events, crate::ark::Ark::default())
+    }
+
+    /// A world founded partly by brains carried over from worlds that ended, when there are any.
+    pub fn new_founded(cfg: Config, events: EventLog, ark: crate::ark::Ark) -> Sim {
         let mut rng = Rng::new(cfg.seed);
         let world = World::generate(
             cfg.width, cfg.height, cfg.max_food, cfg.regrow, cfg.season_len, cfg.farm_boost, cfg.cult_decay,
@@ -80,6 +87,7 @@ impl Sim {
             stores: Stores::default(),
             herds: Herds::default(),
             hunts_total: 0,
+            ark,
             profile: [0.0; 5],
             agents: Vec::with_capacity(cfg.agents * 4),
             tick: 0,
@@ -112,12 +120,24 @@ impl Sim {
     /// Founding tribes: each has a home spot on fertile land, a shared marker
     /// colour and a shared ancestral brain with individual variation.
     fn spawn_tribes(&mut self) {
+        let from_ark = (self.cfg.tribes as f32 * crate::ark::FOUNDED_FROM_ARK) as usize;
+        let mut founded = 0usize;
         let tribes = self.cfg.tribes.max(1);
         let per_tribe = self.cfg.agents / tribes;
         for _ in 0..tribes {
             let (hx, hy) = self.fertile_spot();
             let marker = [self.rng.f32(), self.rng.f32(), self.rng.f32()];
-            let ancestor = Genome::random(&mut self.rng, marker);
+            // Half the tribes descend from the ark, the rest from noise. All of one or all of the
+            // other would each answer the question by removing it: no memory means every world
+            // starts over, and no newcomers means every world is a copy of the last.
+            let ancestor = match self.ark.draw(&mut self.rng).filter(|_| founded < from_ark) {
+                Some(mut g) => {
+                    founded += 1;
+                    g.marker = marker;
+                    g.mutated(&mut self.rng, 1.0, 0.5)
+                }
+                None => Genome::random(&mut self.rng, marker),
+            };
             let lineage = self.new_lineage();
             for _ in 0..per_tribe {
                 let (nx, ny) = (self.rng.normal(), self.rng.normal());
