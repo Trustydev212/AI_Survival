@@ -540,6 +540,7 @@ Trên mặc định cuối cùng (nghe cả người lạ, không bầy thú), h
 | Thí nghiệm | Kết quả | Báo cáo |
 |---|---|---|
 | học trong đời, lặp lại (bật, tắt, nhanh gấp ba) | không lặp lại kết quả đầu: kết cục tốt 9/16 so với 8/16 so với 6/16, đồ vật mỗi đầu người 0,47 so với 0,53 so với 0,34; chỉ độ dẻo não khác 0. Coi như chưa có bằng chứng học trong đời có ích | docs/lab/learning.md |
+| dân số xuất phát (300, 1.000, 3.000) | ít người: phát minh 38,5 so với 124 (KTC không chứa 0), 5/16 tuyệt chủng, kết cục tốt 4/16; đông người: phát minh chỉ 128 nhưng mỗi người biết 66,8 so với 36,7. Phát minh bão hoà theo dân số, kiến thức mỗi đầu thì không; có dân số tối thiểu giữa 300 và 1.000 | docs/lab/population.md |
 | nghe nhau, lặp lại | kết cục tốt 9/16 nghe hết, 6/16 điếc, 8/16 chỉ họ hàng; phát minh 124 so với 62 so với 77; cùng hướng lần đầu nhưng khoảng tin cậy chứa 0. Nhánh điếc cho thấy phần thông tin "do nghe" chỉ 0,02 bit | docs/lab/hearing.md |
 | bầy thú (không, có) | có bầy thú: định cư 15% so với 68%, kết cục tốt 5/16 so với 9/16, 12/16 thế giới không săn chung được lần nào, tín hiệu không có nghĩa hơn. Bầy thú tắt mặc định | docs/lab/herds.md |
 

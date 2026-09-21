@@ -54,8 +54,20 @@ hội đông tìm ra trên 120.
 **Bằng chứng.** 8 thế giới có chế tác: seed 1 và 3 (đỉnh 1.000) tìm ra 14 đồ vật mỗi seed; seed 2, 5, 6
 (đỉnh 3.000 đến 5.800) tìm ra 124 đến 148. Tổng 543 đồ vật, không cái nào được viết sẵn.
 
-**Độ tin.** Có bằng chứng (chênh lệch một bậc), nhưng là tương quan; `tools/lab.py run population` (300 so
-với 3.000 người xuất phát) kiểm tra nhân quả.
+**Kiểm tra nhân quả**, `tools/lab.py run population --seeds 1-16` (docs/lab/population.md): cùng bản đồ,
+xuất phát 300, 1.000 (mặc định) và 3.000 người. Ít người: phát minh trung vị 38,5 so với 124, hiệu số −39,5
+với khoảng tin cậy 95% [−70,4, −6,4]; đồ vật mỗi đầu người 0,05 so với 0,47; kết cục tốt 4/16 so với 9/16,
+5/16 tuyệt chủng. Nhiều người: phát minh 128, kiến thức mỗi đầu 66,8 so với 36,7, đồ vật 0,73, kết cục tốt
+8/16, nhưng khoảng tin cậy của phát minh và kiến thức còn chứa 0 (+23,8, KTC [−3,9, +50,8]). Đường cong
+bão hoà: từ 300 lên 1.000 người, phát minh tăng gấp ba; từ 1.000 lên 3.000, chỉ thêm vài phần trăm, dù đỉnh
+dân số lên 4.750. Cái tăng tiếp ở xã hội đông không phải số thứ tìm ra mà là **số thứ mỗi người biết** và
+cầm: kiến thức lan rộng hơn trong đám đông.
+
+**Độ tin.** Có bằng chứng nhân quả cho chiều "ít người thì ít phát minh" (khoảng tin cậy không chứa 0);
+chiều "đông hơn nữa thì nhiều hơn nữa" chưa rõ, và có lý do để nghĩ nó bão hoà: kho đồ vật có 128 chỗ và
+số cách ghép có nghĩa là hữu hạn, nên thế giới đông chạm trần của vật lý trước khi chạm trần của người.
+Một hệ quả đáng ghi: 300 người xuất phát là dưới ngưỡng sống của thế giới này (5/16 tuyệt chủng), tức là
+có một **dân số tối thiểu** để một xã hội tự duy trì, và nó nằm giữa 300 và 1.000.
 
 ### 5. Lửa đến từ đá, luôn luôn
 
