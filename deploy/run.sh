@@ -17,6 +17,8 @@
 #   WORLD_DIR   where the world and its records live (default ./world)
 #   SHIFT       ticks per shift before the world is put down (default 200000)
 #   PUBLISH     seconds between publishes to the web (0 = never)
+#   SNAP_EVERY  ticks between frames kept for the viewer (default 200; higher is smaller)
+#   SNAP_WINDOW ticks a live window covers before starting again (default 20000)
 set -u
 cd "$(dirname "$0")/.."
 
@@ -31,18 +33,32 @@ MAP="${MAP:-384}"
 # ticks rather than for a screen. This is the run that can answer it, so they are on.
 FINDS="${FINDS:-60}"
 PUBLISH="${PUBLISH:-900}"
+# How often a frame is kept for the viewer, and how many ticks a live window covers before it
+# starts again. At MAP=384 a frame is around half a megabyte, so the defaults make a live slice of
+# roughly fifty megabytes, republished on every PUBLISH. Turn SNAP_EVERY up to make that smaller.
+SNAP_EVERY="${SNAP_EVERY:-200}"
+SNAP_WINDOW="${SNAP_WINDOW:-20000}"
 SIM="$PWD/sim/target/release/sim"
 
 mkdir -p "$WORLD_DIR"
 [ -x "$SIM" ] || { echo "build first: cd sim && cargo build --release"; exit 1; }
+
+# One world, one writer. Two copies of this script sharing a directory take turns overwriting the
+# same save, and the world starts going backwards: a run here once went from tick 16,000 to tick
+# 12,000 that way and the directory had to be thrown out. It costs one line to make impossible.
+exec 9> "$WORLD_DIR/.lock"
+if ! flock -n 9; then
+  echo "$(date -u +%FT%TZ) another run.sh already holds $WORLD_DIR; not starting a second one" >&2
+  exit 1
+fi
 
 last_publish=0
 while true; do
   "$SIM" --forever \
       --ticks "$SHIFT" \
       --save-every 50000 \
-      --snapshot-every 200 \
-      --snapshot-window 20000 \
+      --snapshot-every "$SNAP_EVERY" \
+      --snapshot-window "$SNAP_WINDOW" \
       --quiet \
       --width "$MAP" --height "$MAP" \
       --finds "$FINDS" \
@@ -50,7 +66,7 @@ while true; do
       >> "$WORLD_DIR/run.log" 2>&1
   code=$?
   if [ $code -ne 0 ]; then
-    # A crash must not stop the world for good: the last save is at most 5000 ticks old.
+    # A crash must not stop the world for good: the last save is at most 50,000 ticks old.
     echo "$(date -u +%FT%TZ) sim exited $code, picking the world back up in 10s" >> "$WORLD_DIR/run.log"
     sleep 10
   fi
@@ -59,6 +75,13 @@ while true; do
   # generations are kept in full; the chronicle keeps the one line that matters about the rest.
   ls -t "$WORLD_DIR"/stats_gen*.csv 2>/dev/null | tail -n +21 | xargs -r rm -f
   ls -t "$WORLD_DIR"/events_gen*.txt 2>/dev/null | tail -n +21 | xargs -r rm -f
+  # Left alone these two grow for as long as the machine runs, which on a ten gigabyte disk is a
+  # way to lose the world months from now for no reason at all.
+  for f in "$WORLD_DIR/run.log" "$WORLD_DIR/publish.log"; do
+    if [ -f "$f" ] && [ "$(stat -c %s "$f" 2>/dev/null || echo 0)" -gt 5000000 ]; then
+      tail -n 2000 "$f" > "$f.trim" && mv "$f.trim" "$f"
+    fi
+  done
 
   now=$(date +%s)
   if [ "$PUBLISH" -gt 0 ] && [ $((now - last_publish)) -ge "$PUBLISH" ]; then

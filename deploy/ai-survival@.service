@@ -1,6 +1,9 @@
 # Keep the world running across reboots.
-#   sudo cp deploy/ai-survival.service /etc/systemd/system/
-#   sudo systemctl enable --now ai-survival
+# A template unit, because it runs as a named user rather than as root:
+#   sudo cp deploy/ai-survival@.service /etc/systemd/system/
+#   sudo systemctl enable --now "ai-survival@$USER"
+# Written as ai-survival.service instead, User=%i expands to nothing and systemd refuses to
+# start the unit at all.
 [Unit]
 Description=AI Survival: a world that does not stop
 After=network-online.target
