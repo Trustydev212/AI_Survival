@@ -177,5 +177,19 @@
         "--bare"
       ]
     }
+  },
+  "long": {
+    "title": "Chạy dài gấp ba thì có gì xuất hiện muộn không?",
+    "question": "60.000 tick thay vì 20.000. Ba câu hỏi trong một lần chạy: tiếng gọi có mang nghĩa khi có đủ thời gian không (mọi lần loé lên trước đây đều muộn), trần 512 phát minh có bị chạm không, và cái giá sớm của chế tác có đổi thành lợi ích muộn không. Nhánh bare bỏ hết khung xã hội, vì ở 8.000 tick nó có đuôi phân phối cao nhất về nghĩa. Nhánh đối chứng ghi rõ --hear-strangers 1, đúng bằng giá trị mặc định, chỉ để nó có thư mục riêng và không đè lên kết quả 20.000 tick.",
+    "control": "default",
+    "arms": {
+      "default": [
+        "--hear-strangers",
+        "1"
+      ],
+      "bare": [
+        "--bare"
+      ]
+    }
   }
 }
