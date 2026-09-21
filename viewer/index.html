@@ -88,6 +88,8 @@
   #loader .big { font-size: 18px; font-weight: 600; }
   #loader .small { color: var(--muted); max-width: 520px; }
   /* Nút kéo sử ký lên, chỉ có trên điện thoại. */
+  #backToNow { display: block; width: calc(100% - 24px); margin: 6px 12px; padding: 7px; border-radius: 6px;
+    background: var(--panel2); border: 1px solid var(--accent); color: var(--accent); cursor: pointer; font: inherit; }
   #sheetTab { display: none; position: fixed; right: 10px; bottom: 74px; z-index: 31; align-items: center;
     gap: 6px; padding: 10px 14px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line);
     color: var(--text); font: inherit; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
@@ -153,6 +155,7 @@
   <aside>
     <h3><span data-t="history">Sử ký</span><label><input type="checkbox" id="pauseMajor"> <span data-t="pauseMajor">dừng ở sự kiện lớn</span></label></h3>
     <div id="events"></div>
+    <button id="backToNow" style="display:none" data-t="backToNow">↓ theo kịp sử ký</button>
     <h3 id="lifeHead" style="display:none"><span data-t="life">Một cuộc đời</span><label><button id="unfollow" style="padding:1px 8px">×</button></label></h3>
     <div id="life"></div>
     <h3><span data-t="records">Kỷ lục thế giới</span></h3>
@@ -190,7 +193,7 @@ const T = {
     drop: 'Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.',
     loading: 'Đang tải', notfound: 'Chưa có dữ liệu cho seed này. Dữ liệu không nằm trong git, phải chạy sim để sinh ra:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Rồi mở lại trang này. Mở thế giới khác bằng <code>?seed=N</code>, đúng số seed bạn đã chạy. Hoặc kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
     tlPop: 'dân số', tlKnown: 'kiến thức', tlSoil: 'đất', chronicleTab: 'Sử ký',
-    records: 'Kỷ lục thế giới', recPop: 'đông nhất', recKnown: 'biết nhiều nhất', recThings: 'đã làm ra',
+    backToNow: '↓ theo kịp sử ký', records: 'Kỷ lục thế giới', recPop: 'đông nhất', recKnown: 'biết nhiều nhất', recThings: 'đã làm ra',
     recDeep: 'thứ phức tạp nhất', recTick: 'tick', recNothing: 'chưa có gì', recLayers: 'tầng',
     followers: 'người theo', unnamed: '(chưa có tên)', fps: 'khung/giây', order: 'lệnh', custom: 'tập quán', none: 'không',
     normal: 'bình thường', winter: 'mùa đông', drought: 'hạn hán', droughtWinter: 'hạn + đông', plenty: 'được mùa', harsh: 'năm khắc nghiệt',
@@ -204,7 +207,7 @@ const T = {
     drop: 'Or drop the three files snap_seedN.bin, meta_seedN.json, events_seedN.txt here.',
     loading: 'Loading', notfound: 'No data for this seed yet. The data is not in git; run the sim to make it:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Then reload. Open another world with <code>?seed=N</code>, the seed you actually ran. Or drop the files here.', badfile: 'Not a snapshot file.',
     tlPop: 'people', tlKnown: 'knowledge', tlSoil: 'soil', chronicleTab: 'History',
-    records: 'What this world has reached', recPop: 'most people', recKnown: 'most known', recThings: 'things made',
+    backToNow: '↓ catch up', records: 'What this world has reached', recPop: 'most people', recKnown: 'most known', recThings: 'things made',
     recDeep: 'most involved thing', recTick: 'tick', recNothing: 'nothing yet', recLayers: 'layers deep',
     followers: 'followers', unnamed: '(unnamed)', fps: 'frames/s', order: 'order', custom: 'custom', none: 'none',
     normal: 'normal', winter: 'winter', drought: 'drought', droughtWinter: 'drought + winter', plenty: 'year of plenty', harsh: 'harsh year',
@@ -287,6 +290,7 @@ function describeEvent(e) {
 // ---------- state
 const state = {
   bytes: null, W: 0, H: 0, maxFood: 10, frames: [], meta: null, events: [], live: false, liveOffset: 0,
+  nowEvent: -1, markedUpto: 0, markedTick: -1, handScrolled: 0, lastScroll: 0, autoScrolling: 0,
   frame: 0, sub: 0, playing: false, fps: 4, follow: null, drag: null, pauseMajor: false, shownBanner: -1,
   layerCache: { idx: -1, layers: null }, agentCache: new Map(), lastType: null,
   tileTypes: null, pixi: null, sprites: new Map(), lastFrameDrawn: -1, seenMajor: new Set(), selected: null, life: null, dragMoved: false,
@@ -1163,6 +1167,7 @@ function renderLeaders(A) {
 }
 function renderEventList() {
   const box = $('events'); box.innerHTML = '';
+  state.nowEvent = -1; state.markedUpto = 0; state.markedTick = -1;
   for (const [i, e] of state.events.entries()) {
     const d = describeEvent(e); const el = document.createElement('div');
     el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','first_house_burned','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience','first_sail','craft','first_tool','first_weapon','first_armour','first_boat','first_vessel','first_fire','first_shelter','first_hunt'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
@@ -1171,7 +1176,47 @@ function renderEventList() {
     box.appendChild(el);
   }
 }
-function markEvents(tick) { const box = $('events'); let last = null; for (const d of box.children) { const e = state.events[+d.dataset.i]; const past = e.tick <= tick; d.classList.toggle('past', past); d.classList.remove('now'); if (past) last = d; } if (last) { last.classList.add('now'); if (state.playing) last.scrollIntoView({ block: 'nearest' }); } }
+// Keeping the chronicle in step with the world, without it bolting.
+//
+// The old version walked every event and called scrollIntoView on every drawn frame, so at any
+// speed above a crawl the list jumped rather than moved and nothing could be read; and it fought
+// anyone who scrolled back to read something. Now only the entries between the last tick and this
+// one change, the scroll happens at most a few times a second and lands the current line in the
+// middle so there is context above and below, and scrolling by hand switches it off for a while.
+function markEvents(tick) {
+  const box = $('events');
+  const children = box.children;
+  if (!children.length) return;
+  let now = -1;
+  // Walk forward from wherever we were; only jump back if the viewer went back in time.
+  let i = tick < (state.markedTick ?? -1) ? 0 : Math.max(0, state.markedUpto ?? 0);
+  if (i === 0) {
+    for (const d of children) d.classList.remove('past', 'now');
+  }
+  for (; i < children.length; i++) {
+    const e = state.events[+children[i].dataset.i];
+    if (e.tick > tick) break;
+    children[i].classList.add('past');
+  }
+  for (let j = i; j < children.length; j++) children[j].classList.remove('past');
+  now = i - 1;
+  state.markedUpto = i;
+  state.markedTick = tick;
+  if (state.nowEvent === now) return;
+  if (state.nowEvent >= 0 && children[state.nowEvent]) children[state.nowEvent].classList.remove('now');
+  state.nowEvent = now;
+  if (now < 0) return;
+  const el = children[now];
+  el.classList.add('now');
+  if (!state.playing) return;
+  const quiet = Date.now() - (state.handScrolled || 0) > 4000;
+  const due = Date.now() - (state.lastScroll || 0) > 400;
+  if (quiet && due) {
+    state.lastScroll = Date.now();
+    state.autoScrolling = Date.now();
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
 function frameAt(tick) { let i = 0; while (i + 1 < state.frames.length && state.frames[i + 1].tick <= tick) i++; return i; }
 
 // ---------- timeline
@@ -1331,6 +1376,24 @@ gl.addEventListener('touchend', e => {
   state.drag = null;
   state.pinch = null;
 }, { passive: true });
+// Scrolling by hand means "let me read": auto-scroll stands down for a few seconds. Smooth
+// scrolling fires scroll events of its own, so anything within a moment of one we started is not
+// counted as a hand.
+// Listen for the hand, not for the scrollbar: a smooth scroll we started fires scroll events of
+// its own, so watching those meant the viewer could never tell a reader from itself.
+for (const ev of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+  $('events').addEventListener(ev, () => {
+    state.handScrolled = Date.now();
+    $('backToNow').style.display = '';
+  }, { passive: true });
+}
+$('backToNow').onclick = () => {
+  state.handScrolled = 0;
+  $('backToNow').style.display = 'none';
+  const el = $('events').children[state.nowEvent];
+  if (el) { state.autoScrolling = Date.now(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+};
+
 $('sheetTab').onclick = () => {
   const app = document.getElementById('app');
   app.classList.toggle('sheet');
