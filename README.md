@@ -19,9 +19,11 @@ chỉ có xuất ảnh PPM, CSV, sử ký, và bảng kết cục khi chạy nhi
 ![one life](docs/viewer-life.png)
 
 ```bash
-cd sim && ./target/release/sim --seed 2 --ticks 20000 --snapshot-every 25 --out ../viewer/out
-python3 ../viewer/serve.py            # rồi mở http://127.0.0.1:8765/index.html?seed=2
+cd sim && ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out
+python3 ../viewer/serve.py            # rồi mở http://127.0.0.1:8765/index.html?seed=3
 # thêm &live=1 để xem trong lúc sim đang chạy
+# Dữ liệu cho trình xem KHÔNG nằm trong git: vừa clone về thì phải chạy dòng trên trước.
+# Số seed trên URL phải trùng số seed đã chạy, nếu không trang sẽ báo không có dữ liệu.
 ```
 
 `viewer/index.html` là game viewer 2D pixel art chạy trong trình duyệt bằng **PixiJS** (WebGL, đã kèm sẵn

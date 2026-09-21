@@ -61,5 +61,5 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    print(f"viewer: http://127.0.0.1:{port}/index.html?seed=2   (add &live=1 while a run is writing)")
+    print(f"viewer: http://127.0.0.1:{port}/index.html?seed=3   (add &live=1 while a run is writing)")
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()

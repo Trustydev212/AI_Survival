@@ -161,7 +161,7 @@ const T = {
     factions: 'Phe phái', history: 'Sử ký', pauseMajor: 'dừng ở sự kiện lớn', leading: 'Thủ lĩnh đang dẫn dắt',
     hint: 'kéo để di chuyển · lăn chuột để phóng · bấm vào người để theo cả đời · space phát/dừng · F bám thủ lĩnh · E bám sự kiện · L đổi ngôn ngữ · ← → từng khung',
     drop: 'Hoặc kéo thả ba file snap_seedN.bin, meta_seedN.json, events_seedN.txt vào đây.',
-    loading: 'Đang tải', notfound: 'Không tìm thấy dữ liệu trên server. Kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
+    loading: 'Đang tải', notfound: 'Chưa có dữ liệu cho seed này. Dữ liệu không nằm trong git, phải chạy sim để sinh ra:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Rồi mở lại trang này. Mở thế giới khác bằng <code>?seed=N</code>, đúng số seed bạn đã chạy. Hoặc kéo thả file vào đây.', badfile: 'File không đúng định dạng.',
     followers: 'người theo', unnamed: '(chưa có tên)', fps: 'khung/giây', order: 'lệnh', custom: 'tập quán', none: 'không',
     normal: 'bình thường', winter: 'mùa đông', drought: 'hạn hán', droughtWinter: 'hạn + đông', plenty: 'được mùa', harsh: 'năm khắc nghiệt',
     lineage: 'dòng họ', eras: ['hoang dã','nhóm lửa','bén rễ','đan kết','nhiều tầng','vút cao','rực rỡ','vượt xa'],
@@ -172,7 +172,7 @@ const T = {
     factions: 'Factions', history: 'Chronicle', pauseMajor: 'pause on major events', leading: 'Leaders now',
     hint: 'drag to pan · wheel to zoom · click a person to follow a life · space play/pause · F follow leader · E follow events · L language · ← → step',
     drop: 'Or drop the three files snap_seedN.bin, meta_seedN.json, events_seedN.txt here.',
-    loading: 'Loading', notfound: 'No data on the server. Drop the files here.', badfile: 'Not a snapshot file.',
+    loading: 'Loading', notfound: 'No data for this seed yet. The data is not in git; run the sim to make it:<br><code>cd sim &amp;&amp; ./target/release/sim --seed 3 --ticks 20000 --snapshot-every 25 --out ../viewer/out</code><br>Then reload. Open another world with <code>?seed=N</code>, the seed you actually ran. Or drop the files here.', badfile: 'Not a snapshot file.',
     followers: 'followers', unnamed: '(unnamed)', fps: 'frames/s', order: 'order', custom: 'custom', none: 'none',
     normal: 'normal', winter: 'winter', drought: 'drought', droughtWinter: 'drought + winter', plenty: 'year of plenty', harsh: 'harsh year',
     lineage: 'lineage', eras: ['wild','kindled','rooted','woven','layered','soaring','radiant','beyond'],
@@ -262,7 +262,7 @@ const state = {
 // ---------- loading
 async function loadFromServer() {
   const q = new URLSearchParams(location.search);
-  const seed = q.get('seed') || '2', dir = q.get('dir') || 'out';
+  const seed = q.get('seed') || '3', dir = q.get('dir') || 'out';
   state.live = q.get('live') === '1';
   state.src = { seed, dir };
   $('loadmsg').textContent = `${t('loading')} ${dir}/snap_seed${seed}.bin …`;
@@ -274,7 +274,7 @@ async function loadFromServer() {
     ]);
     boot(new Uint8Array(bin), meta, ev);
     if (state.live) { $('live').style.display = ''; setInterval(pollLive, 2000); }
-  } catch (e) { $('loadmsg').textContent = t('notfound'); }
+  } catch (e) { $('loadmsg').innerHTML = t('notfound'); }
 }
 async function pollLive() {
   const { seed, dir } = state.src;
