@@ -191,5 +191,24 @@
         "--bare"
       ]
     }
+  },
+  "pace": {
+    "title": "Đất có phải là cái tạo nhịp dao động không?",
+    "question": "Mục 15: xã hội không tìm được cân bằng mà lắc, càng già càng mạnh. Nghi can là vòng phản hồi âm có độ trễ qua đất: hái nhiều thì đất mòn, mòn thì đói, đói thì chết bớt, chết bớt thì đất hồi. Nếu đúng thì làm đất mòn nhanh hơn phải lắc mạnh hơn, và làm đất bền hơn phải lắc êm hơn. 60.000 tick vì dao động chỉ lộ ra ở đường dài. Nhánh đối chứng ghi rõ giá trị mặc định để có thư mục riêng.",
+    "control": "default",
+    "arms": {
+      "default": [
+        "--soil-drain",
+        "0.001"
+      ],
+      "fragile": [
+        "--soil-drain",
+        "0.003"
+      ],
+      "tough": [
+        "--soil-drain",
+        "0.0001"
+      ]
+    }
   }
 }
