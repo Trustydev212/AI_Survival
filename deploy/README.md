@@ -62,6 +62,28 @@ Trong `world/`, không nằm trong git vì nó nặng vài chục MB và đổi 
 | `live.bin`, `live.json` | cửa sổ gần đây cho viewer, tự bắt đầu lại mỗi 20.000 tick |
 
 | `ark.bin` | vài chục bộ não được mang qua cái chết của thế giới |
+| `postmortem.txt` | vì sao mỗi nền văn minh chết, ở tick nào, và thứ sâu nhất họ từng làm ra |
+
+## Vì sao họ chết
+
+"Mọi người đã chết" không phải một nguyên nhân. Một thế giới chạy hàng năm chỉ đáng nhìn nếu mỗi cái
+kết phân biệt được với cái kết khác. `postmortem.txt` đọc ngược lại từ chính bảng số của thế hệ đó và
+ghi: chết đói trên đất đã kiệt, giết lẫn nhau, dịch bệnh, hay đơn giản là thôi không sinh con nữa. Kèm
+theo là đỉnh dân số đạt ở tick nào, suy tàn kéo dài bao lâu, đất và thức ăn còn lại bao nhiêu, và thứ
+sâu nhất nền văn minh ấy từng làm ra.
+
+Một ví dụ thật, và nó ngược với điều tôi đoán:
+
+```
+== generation 0, tick 4545: grew old with too few born ==
+peaked at 111 people on tick 500, then 4045 ticks of decline. In its last stretch:
+0 starved, 0 killed, 0 taken by plague, 1 died old, 0 born.
+Soil 100% at its peak and 100% at the end, 105505 food left standing.
+Deepest thing made: Kuhelin (3 deep): bind(hollow(clay), hollow(sharpen(wood))) -> vessel
+```
+
+Họ không chết đói. Đất còn nguyên vẹn, thức ăn còn hơn trăm nghìn đơn vị. Họ chỉ **thôi sinh con**, rồi
+già đi suốt bốn nghìn tick. Nếu chỉ ghi "mọi người đã chết" thì không ai biết điều đó.
 
 ## Thứ duy nhất sống sót qua ngày tận thế
 

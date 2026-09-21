@@ -378,7 +378,7 @@ impl Config {
         while i < args.len() {
             let key = args[i].as_str();
             if key == "--help" || key == "-h" {
-                return Err(HELP.to_string());
+                return Err(format!("{HELP}\nWorlds so far:\n  {}\n", crate::version::HISTORY.join("\n  ")));
             }
             if key == "--quiet" {
                 c.quiet = true;

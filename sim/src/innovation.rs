@@ -53,6 +53,7 @@ impl Known {
         }
     }
     #[inline]
+    #[allow(dead_code)]
     pub fn unset(&mut self, i: usize) {
         if i < MAX_INNOVATIONS {
             self.0[i >> 6] &= !(1u64 << (i & 63));

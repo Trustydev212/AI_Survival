@@ -118,7 +118,7 @@ impl Ark {
             return Ark::default();
         }
         let mut at = 4usize;
-        let mut take4 = |at: &mut usize| {
+        let take4 = |at: &mut usize| {
             let v = u32::from_le_bytes(bytes[*at..*at + 4].try_into().unwrap());
             *at += 4;
             v
@@ -139,7 +139,7 @@ impl Ark {
             if at + need > bytes.len() {
                 break;
             }
-            let mut f32s = |at: &mut usize, count: usize| -> Vec<f32> {
+            let f32s = |at: &mut usize, count: usize| -> Vec<f32> {
                 let v = (0..count).map(|i| f32::from_le_bytes(bytes[*at + i * 4..*at + i * 4 + 4].try_into().unwrap())).collect();
                 *at += count * 4;
                 v

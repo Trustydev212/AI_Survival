@@ -21,7 +21,7 @@ use crate::rng::Rng;
 use crate::sim::Sim;
 use crate::store::{Store, Stores};
 use crate::version;
-use crate::world::{Building, World};
+use crate::world::Building;
 use std::io::{Read, Write};
 
 const MAGIC: &[u8; 4] = b"AISW";

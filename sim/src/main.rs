@@ -123,8 +123,8 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         None
     };
     let mut last_metrics: (f32, f32, f32) = (1.0, 0.0, 0.0); // soil, obedience, mean_known
-    let mut peak_pop = sim.agents.len();
     let mut peak_level = 0;
+    let mut peak_pop = sim.agents.len();
     let mut last: Option<stats::Metrics> = None;
     let mut extinct = false;
     let mut pops: Vec<usize> = Vec::new();
@@ -400,17 +400,15 @@ fn run_forever(cfg: Config) {
     let save_path = cfg.save_path.clone().unwrap_or_else(|| format!("{}/world.bin", cfg.out_dir));
     let mut sim = open_world(&cfg, &save_path, generation);
     let mut csv = generation_csv(&cfg, generation);
-    let mut peak_pop = sim.agents.len();
     let mut ticks_this_session = 0u64;
     let mut last_metrics = (1.0f32, 0.0f32, 0.0f32);
     // The live picture is a rolling window. A world with no end cannot keep every frame, so the
     // file starts over every so often and the viewer is shown the recent stretch.
     let mut snap = open_window(&cfg, &sim);
-    eprintln!("world=v{} forever: generation {generation} from tick {}", version::WORLD, sim.tick);
+    eprintln!("world=v{} ({}) forever: generation {generation} from tick {}", version::WORLD, version::NOTE, sim.tick);
     loop {
         sim.step();
         ticks_this_session += 1;
-        peak_pop = peak_pop.max(sim.agents.len());
         let t = sim.tick;
         if t % cfg.log_every == 0 || sim.agents.is_empty() {
             let window = sim.take_window();
@@ -453,9 +451,12 @@ fn run_forever(cfg: Config) {
             // Read the age back off its own record rather than off this shift, because a
             // civilisation usually outlives the shift that happened to be watching when it died.
             let (peak, best_known) = high_water(&cfg, generation);
+            let (cause, detail) = postmortem(&cfg, generation);
+            append_line(&format!("{}/postmortem.txt", cfg.out_dir),
+                &format!("\n== generation {generation}, tick {t}: {cause} ==\n{detail}\nDeepest thing made: {}\n", deepest_made(&sim)));
             let line = format!(
-                "generation {generation}\tseed {}\tlived {t} ticks\tpeak {} people\t{} things\t{:.1} known per head at its best\tark {} brains, best left {} children\tended: everyone died",
-                seed_for(&cfg, generation), peak.max(peak_pop), sim.innovations.iter().filter(|i| !i.name.is_empty()).count(),
+                "generation {generation}\tseed {}\tlived {t} ticks\tfounded {} reached {} people\t{} things\t{:.1} known per head at its best\tark {} brains, best left {} children\tended at tick {t}: {cause}",
+                seed_for(&cfg, generation), cfg.agents, peak, sim.innovations.iter().filter(|i| !i.name.is_empty()).count(),
                 best_known, sim.ark.kept.len(), sim.ark.best(),
             );
             let _ = sim.ark.save(&ark_path(&cfg));
@@ -465,7 +466,6 @@ fn run_forever(cfg: Config) {
             sim = open_world(&cfg, "", generation);
             csv = generation_csv(&cfg, generation);
             snap = open_window(&cfg, &sim);
-            peak_pop = sim.agents.len();
             put_down(&sim, &save_path);
             continue;
         }
@@ -590,4 +590,70 @@ fn high_water(cfg: &Config, generation: u32) -> (usize, f32) {
 
 fn count_generations(path: &str) -> u32 {
     std::fs::read_to_string(path).map(|s| s.lines().filter(|l| l.starts_with("generation")).count() as u32).unwrap_or(0)
+}
+
+/// Why a civilisation ended, read off its own record.
+///
+/// "Everyone died" is not a cause. A world running for years is only worth watching if each
+/// ending can be told apart from the others: starved on exhausted land is a different story from
+/// killed each other, and both are different from simply stopping having children. All of it is
+/// already in the generation's own statistics; nobody had ever read it back.
+fn postmortem(cfg: &Config, generation: u32) -> (String, String) {
+    let path = format!("{}/stats_gen{generation}.csv", cfg.out_dir);
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return ("no record".into(), String::new());
+    };
+    let mut lines = text.lines();
+    let Some(header) = lines.next() else { return ("no record".into(), String::new()) };
+    let cols: Vec<&str> = header.split(',').collect();
+    let at = |name: &str| cols.iter().position(|c| *c == name);
+    let rows: Vec<Vec<f32>> = lines
+        .map(|l| l.split(',').map(|v| v.parse::<f32>().unwrap_or(0.0)).collect())
+        .filter(|r: &Vec<f32>| r.len() == cols.len())
+        .collect();
+    if rows.len() < 4 {
+        return ("died too young to tell".into(), String::new());
+    }
+    let get = |r: &Vec<f32>, name: &str| at(name).and_then(|i| r.get(i).copied()).unwrap_or(0.0);
+    // The last fifth of a life is where the ending is written.
+    let tail = &rows[rows.len() * 4 / 5..];
+    let sum = |name: &str| tail.iter().map(|r| get(r, name)).sum::<f32>();
+    let (starved, killed, plague, aged) = (sum("starved"), sum("killed"), sum("plague_deaths"), sum("aged"));
+    let births = sum("births");
+    let deaths = starved + killed + plague + aged;
+    let peak = rows.iter().enumerate().max_by(|a, b| get(a.1, "pop").total_cmp(&get(b.1, "pop"))).map(|(i, r)| (i, get(r, "pop"))).unwrap_or((0, 0.0));
+    let peak_tick = get(&rows[peak.0], "tick");
+    let end_tick = get(rows.last().unwrap(), "tick");
+    let soil_end = get(rows.last().unwrap(), "soil_health");
+    let soil_peak = get(&rows[peak.0], "soil_health");
+    let food_end = get(rows.last().unwrap(), "food");
+    let cause = if deaths < 1.0 && births < 1.0 {
+        "nobody left to have children"
+    } else if starved >= killed.max(plague).max(aged) {
+        if soil_end < 0.6 { "starved on land they had worn out" } else { "starved" }
+    } else if killed >= plague.max(aged) {
+        "killed one another"
+    } else if plague >= aged {
+        "plague"
+    } else {
+        "grew old with too few born"
+    };
+    let detail = format!(
+        "peaked at {:.0} people on tick {:.0}, then {:.0} ticks of decline. In its last stretch: \
+         {starved:.0} starved, {killed:.0} killed, {plague:.0} taken by plague, {aged:.0} died old, \
+         {births:.0} born. Soil {:.0}% at its peak and {:.0}% at the end, {:.0} food left standing.",
+        peak.1, peak_tick, end_tick - peak_tick, soil_peak * 100.0, soil_end * 100.0, food_end,
+    );
+    (cause.into(), detail)
+}
+
+/// The deepest thing a civilisation ever made: the one measure of how far its craft got.
+fn deepest_made(sim: &sim::Sim) -> String {
+    sim.innovations
+        .iter()
+        .filter(|i| !i.name.is_empty())
+        .filter_map(|i| i.craft.as_ref().map(|c| (c.depth, i.name.clone(), i.describe(&sim.innovations))))
+        .max_by_key(|(d, _, _)| *d)
+        .map(|(d, name, recipe)| format!("{name} ({d} deep): {recipe}"))
+        .unwrap_or_else(|| "nothing made".into())
 }
