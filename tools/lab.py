@@ -11,6 +11,7 @@ Nothing here needs more than the standard library.
     python3 tools/lab.py run all --seeds 1-8 --ticks 20000
     python3 tools/lab.py run all --seeds 1-16 --reuse   # skip arms already run on these seeds
     python3 tools/lab.py index                     # docs/lab/README.md: every experiment at a glance
+    python3 tools/lab.py screen brains             # cheap first look: 8 seeds, 8000 ticks
 
 Reports land in docs/lab/<name>.md: per-arm outcome counts, medians of every metric, and
 for each treatment arm the difference of means against the control with a bootstrap 95%
@@ -37,15 +38,17 @@ def load_defs():
         return json.load(f)
 
 
-def arm_dir(name, arm, flags=None):
+def arm_dir(name, arm, flags=None, screen=False):
     """Arms with no flags are the same world everywhere, so they share one run directory."""
+    if screen:
+        return os.path.join(LAB, "runs", "_screen", name, arm)
     if flags is not None and not flags:
         return os.path.join(LAB, "runs", "_default")
     return os.path.join(LAB, "runs", name, arm)
 
 
-def run_arm(name, arm, flags, seeds, ticks, reuse=False):
-    out = arm_dir(name, arm, flags)
+def run_arm(name, arm, flags, seeds, ticks, reuse=False, screen=False):
+    out = arm_dir(name, arm, flags, screen)
     os.makedirs(out, exist_ok=True)
     if reuse and os.path.exists(os.path.join(out, f"experiment_{seeds.replace('-', '_')}.csv")):
         print("   (reusing", os.path.relpath(out, ROOT) + ")", flush=True)
@@ -59,8 +62,8 @@ def run_arm(name, arm, flags, seeds, ticks, reuse=False):
     subprocess.run(cmd, check=True, stdout=log, stderr=subprocess.STDOUT)
 
 
-def read_arm(name, arm, flags=None):
-    out = arm_dir(name, arm, flags)
+def read_arm(name, arm, flags=None, screen=False):
+    out = arm_dir(name, arm, flags, screen)
     files = [f for f in os.listdir(out) if f.startswith("experiment_") and f.endswith(".csv")] if os.path.isdir(out) else []
     rows = []
     for f in sorted(files):
@@ -245,8 +248,59 @@ def index(defs):
     print("index ->", os.path.relpath(path, ROOT))
 
 
+SCREEN_SEEDS = "1-8"
+SCREEN_TICKS = 8000
+
+
+def screen(name, exp, seeds=SCREEN_SEEDS, ticks=SCREEN_TICKS):
+    """A cheap first look before committing to a full run.
+
+    Cost is dominated by the late, crowded ticks: over sixteen worlds of the default, the first
+    8000 ticks are only 23% of the work of 20000, and half the seeds halve it again. So a screen
+    costs about a ninth of a full arm.
+
+    What it can and cannot tell you, measured against the experiments already run in full: where
+    an effect is large (crafting, the brains experiment) the ranking of the arms is already the
+    final one by tick 2500 to 8000. Where the ranking is still moving at 8000, the full run turned
+    out to have no effect worth reporting either. So a screen that separates is worth pursuing,
+    and a screen that does not is a reason to stop, not a reason to run longer.
+    """
+    arms = list(exp["arms"].keys())
+    if not os.path.exists(SIM):
+        sys.exit("build the sim first: cd sim && cargo build --release")
+    print(f"== sàng lọc {name}: {exp['title']}  ({seeds}, {ticks} tick)")
+    for arm, flags in exp["arms"].items():
+        run_arm(name, arm, flags, seeds, ticks, screen=True)
+    data = {arm: read_arm(name, arm, exp["arms"][arm], screen=True) for arm in arms}
+    control = exp.get("control", arms[0])
+    print()
+    print(f"{'nhánh':<18}{'sống':>7}{'tốt':>7}{'dân đỉnh':>11}{'biết':>9}{'đồ/người':>11}{'phát minh':>11}")
+    for arm in arms:
+        rows = data[arm]
+        if not rows:
+            continue
+        alive = sum(1 for r in rows if float(r["final_pop"]) > 0)
+        good = sum(1 for r in rows if r["outcome"] in GOOD)
+        med = lambda k: median([r.get(k, float("nan")) for r in rows])
+        print(f"{arm:<18}{alive:>4}/{len(rows):<2}{good:>4}/{len(rows):<2}"
+              f"{fmt(med('peak_pop')):>11}{fmt(med('mean_known')):>9}{fmt(med('things_per_head')):>11}{fmt(med('innovations')):>11}")
+    print()
+    for arm in arms:
+        if arm == control:
+            continue
+        clear = []
+        for m in METRICS:
+            a = [r.get(m, float("nan")) for r in data[control]]
+            b = [r.get(m, float("nan")) for r in data[arm]]
+            d, lo, hi = bootstrap_diff(a, b)
+            if d == d and (lo > 0 or hi < 0):
+                clear.append(f"{m} {'+' if d > 0 else '−'}{fmt(abs(d))}")
+        print(f"{arm} so với {control}: " + ("; ".join(clear) if clear else "chưa tách được nhánh nào"))
+    print("\nTách được thì chạy đầy đủ: python3 tools/lab.py run " + name + " --seeds 1-16")
+
+
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("list", "run", "report", "index"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("list", "run", "report", "index", "screen"):
         sys.exit(__doc__)
     defs = load_defs()
     cmd = sys.argv[1]
@@ -272,6 +326,9 @@ def main():
             reuse = True
     for name in names:
         exp = defs[name]
+        if cmd == "screen":
+            screen(name, exp, seeds, SCREEN_TICKS if ticks == 20000 else ticks)
+            continue
         if cmd == "run":
             if not os.path.exists(SIM):
                 sys.exit("build the sim first: cd sim && cargo build --release")

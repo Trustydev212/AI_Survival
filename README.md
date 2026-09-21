@@ -592,6 +592,7 @@ Repo này là nơi quan sát một xã hội thu nhỏ, nên có sẵn cách đ�
 
 ```bash
 python3 tools/lab.py list                     # các câu hỏi có sẵn
+python3 tools/lab.py screen orders            # sàng lọc rẻ: 8 seed, 8.000 tick, vài phút
 python3 tools/lab.py run orders --seeds 1-16  # chạy mọi nhánh trên cùng seed, viết docs/lab/orders.md
 ```
 

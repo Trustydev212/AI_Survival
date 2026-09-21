@@ -286,6 +286,37 @@ trên cả dải rộng. Chi tiết trong docs/HOC-MAY.md.
 5. **Có "đêm trường" không?** Sự kiện *lãng quên* ghi lúc kiến thức tụt quá nửa. Bao nhiêu thế giới quên rồi
    tìm lại được, và tìm lại bằng cùng công thức hay công thức khác?
 
+## Chạy nhanh hơn: sàng lọc trước, chạy đầy đủ sau
+
+Một nhánh đầy đủ là 16 thế giới nhân 20.000 tick, khoảng 19 phút trên một máy bốn lõi. Bốn nhánh là hơn một
+tiếng. Chờ chừng đó chỉ để biết một ý tưởng không đi đến đâu là lãng phí.
+
+Chi phí dồn về cuối, vì càng về sau càng đông người. Đo trên 16 thế giới mặc định:
+
+| chạy tới tick | phần chi phí |
+|---|---|
+| 2.500 | 3,4% |
+| 5.000 | 12,0% |
+| 8.000 | 22,9% |
+| 10.000 | 34,4% |
+| 15.000 | 68,5% |
+
+Cắt xuống 8.000 tick và 8 seed còn khoảng **một phần chín** công sức. Câu hỏi là cắt như thế có đổi kết luận
+không. Kiểm tra lại trên mọi thí nghiệm đã chạy đầy đủ, bằng cách hỏi thứ hạng các nhánh ở tick T có trùng
+thứ hạng cuối cùng không:
+
+- Nơi hiệu ứng lớn (chế tác, thí nghiệm bộ não, dân số) thứ hạng đã đúng từ tick 2.500 đến 8.000.
+- Nơi thứ hạng còn nhảy ở tick 8.000 (học trong đời, nghe nhau, tập quán, bầy thú) thì chạy đủ 20.000 tick
+  cũng **không** tìm ra hiệu ứng nào đáng báo cáo.
+
+Nói cách khác: sàng lọc tách được nhánh là lý do để chạy đầy đủ; sàng lọc không tách được là lý do để dừng,
+không phải lý do để chạy lâu hơn. Lệnh:
+
+```bash
+python3 tools/lab.py screen brains          # 8 seed, 8.000 tick, vài phút
+python3 tools/lab.py run brains --seeds 1-16   # chỉ khi sàng lọc tách được
+```
+
 ## Cách chạy một thí nghiệm
 
 ```bash
