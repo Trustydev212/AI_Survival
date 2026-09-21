@@ -30,8 +30,82 @@ pub const N_EFFECT: usize = 13;
 pub const EFFECT_NAMES: [&str; N_EFFECT] =
     ["gather", "metabolism", "attack", "defense", "farm", "resist", "teach", "invent", "share", "soil", "sea", "store", "shelter"];
 
-/// Knowledge is a u128 bitset, so a world holds at most this many innovations.
-pub const MAX_INNOVATIONS: usize = 128;
+/// Knowledge is a bitset of fixed width, so a world holds at most this many innovations at once.
+/// It used to be one u128, and a thriving world filled all 128 slots by about tick 6500 and then
+/// could never invent anything again: development stopped dead while the society lived on. The
+/// bitset is now eight words wide.
+pub const KNOWN_WORDS: usize = 8;
+
+/// What one mind knows: one bit per innovation in the world's registry.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub struct Known(pub [u64; KNOWN_WORDS]);
+
+impl Known {
+    pub const EMPTY: Known = Known([0; KNOWN_WORDS]);
+    #[inline]
+    pub fn has(&self, i: usize) -> bool {
+        i < MAX_INNOVATIONS && self.0[i >> 6] >> (i & 63) & 1 != 0
+    }
+    #[inline]
+    pub fn set(&mut self, i: usize) {
+        if i < MAX_INNOVATIONS {
+            self.0[i >> 6] |= 1u64 << (i & 63);
+        }
+    }
+    #[inline]
+    pub fn unset(&mut self, i: usize) {
+        if i < MAX_INNOVATIONS {
+            self.0[i >> 6] &= !(1u64 << (i & 63));
+        }
+    }
+    #[inline]
+    pub fn count(&self) -> u32 {
+        self.0.iter().map(|w| w.count_ones()).sum()
+    }
+    #[inline]
+    pub fn any(&self) -> bool {
+        self.0.iter().any(|w| *w != 0)
+    }
+    #[inline]
+    pub fn union_with(&mut self, o: &Known) {
+        for k in 0..KNOWN_WORDS {
+            self.0[k] |= o.0[k];
+        }
+    }
+    /// What `self` holds that neither `a` nor `b` does: what one could still teach the other.
+    pub fn beyond(&self, a: &Known, b: &Known) -> Known {
+        let mut out = Known::EMPTY;
+        for k in 0..KNOWN_WORDS {
+            out.0[k] = self.0[k] & !a.0[k] & !b.0[k];
+        }
+        out
+    }
+    /// The first `n` slots, all set: everything a world of `n` innovations could know.
+    pub fn all_upto(n: usize) -> Known {
+        let mut out = Known::EMPTY;
+        for i in 0..n.min(MAX_INNOVATIONS) {
+            out.set(i);
+        }
+        out
+    }
+    /// Every slot that is set, lowest first.
+    pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
+        (0..KNOWN_WORDS).flat_map(move |k| {
+            let mut w = self.0[k];
+            std::iter::from_fn(move || {
+                if w == 0 {
+                    return None;
+                }
+                let b = w.trailing_zeros() as usize;
+                w &= w - 1;
+                Some(k * 64 + b)
+            })
+        })
+    }
+}
+
+/// How many innovations a world can hold at once.
+pub const MAX_INNOVATIONS: usize = KNOWN_WORDS * 64;
 
 #[derive(Clone)]
 pub struct Innovation {
@@ -148,12 +222,9 @@ pub fn ing_name(ing: Ing, registry: &[Innovation]) -> String {
 }
 
 /// Sum the effects of every practice an agent knows. Crafts count only when held (gear).
-pub fn capabilities(known: u128, registry: &[Innovation]) -> [f32; N_EFFECT] {
+pub fn capabilities(known: &Known, registry: &[Innovation]) -> [f32; N_EFFECT] {
     let mut caps = [0.0f32; N_EFFECT];
-    let mut bits = known;
-    while bits != 0 {
-        let i = bits.trailing_zeros() as usize;
-        bits &= bits - 1;
+    for i in known.iter() {
         if let Some(inn) = registry.get(i) {
             if inn.craft.is_none() {
                 for d in 0..N_EFFECT {

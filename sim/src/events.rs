@@ -143,8 +143,7 @@ impl EventLog {
             if self.fired.contains(&key) {
                 continue;
             }
-            let bit = 1u128 << idx;
-            let n = agents.iter().filter(|a| a.known & bit != 0).count();
+            let n = agents.iter().filter(|a| a.known.has(idx)).count();
             if pop > 0 && n as f32 / popf >= 0.5 {
                 self.fire(tick, &key, format!("{} is now known by half the population", inn.describe(innovations)));
             }

@@ -1,6 +1,6 @@
 use crate::brain::{Action, Genome, N_ACT, N_HID, N_MEM, N_OUT, N_SIG};
 use crate::craft::{N_MAT, N_SLOT, NO_ITEM};
-use crate::innovation::N_EFFECT;
+use crate::innovation::{Known, N_EFFECT};
 use crate::orders::Order;
 
 /// Behaviour profile dimensions: the five action frequencies plus mobility.
@@ -82,7 +82,7 @@ pub struct Agent {
     /// Exponentially decayed history of what this agent actually does.
     pub profile: [f32; N_PROFILE],
     /// Bitset of known innovations (practices and recipes), indexed into the world's registry.
-    pub known: u128,
+    pub known: Known,
     /// Summed effects of every practice known plus everything held; refreshed on change.
     pub caps: [f32; N_EFFECT],
     /// Raw materials carried, in units.
@@ -162,7 +162,7 @@ pub struct Agent {
 impl Agent {
     #[inline]
     pub fn known_count(&self) -> u32 {
-        self.known.count_ones()
+        self.known.count()
     }
 
     #[inline]

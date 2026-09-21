@@ -132,8 +132,11 @@ pub struct Metrics {
 pub const ERA_NAMES: [&str; 8] = ["wild", "kindled", "rooted", "woven", "layered", "soaring", "radiant", "beyond"];
 
 pub fn level_of(mean_known: f32, settled: f32) -> usize {
-    // Recipes made knowledge plentiful (a tool-using world knows dozens of things per head), so the scale is wider than it was.
-    let mut level = (mean_known / 5.0).floor() as usize;
+    // The scale has widened twice. Recipes made knowledge plentiful, and then the ceiling on how
+    // many innovations a world may hold at once went from 128 to 512, after which a thriving world
+    // kept learning past 130 things per head instead of stopping at about 110. At one era per five
+    // things every such world sat in the last era for most of its life, which told you nothing.
+    let mut level = (mean_known / 25.0).floor() as usize;
     if settled >= 0.3 {
         level += 1;
     }

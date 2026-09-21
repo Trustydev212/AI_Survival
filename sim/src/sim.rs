@@ -42,7 +42,7 @@ pub struct Sim {
     followers: Vec<u16>,
     /// Followers lost this window, by (old leader name, new leader name).
     pub defected: std::collections::HashMap<(u32, u32), u32>,
-    learned: Vec<(u32, u128)>,
+    learned: Vec<(u32, Known)>,
     /// Recipe signature (process, sorted parts) -> innovation index, so the same thing is never registered twice.
     recipes: std::collections::HashMap<(u8, [Ing; 3]), u16>,
     /// Registry indices freed by forgotten recipes.
@@ -179,7 +179,7 @@ impl Sim {
             last_action: Action::Rest,
             children: 0,
             profile: [0.0; N_PROFILE],
-            known: 0,
+            known: Known::EMPTY,
             caps: [0.0; N_EFFECT],
             mats: [0; N_MAT],
             gear: [Gear::NONE; N_SLOT],
@@ -1056,7 +1056,7 @@ impl Sim {
     /// Everything that passes between neighbours: knowledge, skill, habits and disease.
     fn contact(&mut self) {
         let n = self.decisions.len(); // agents present in the spatial hash this tick
-        let all_known: u128 = if self.innovations.len() >= 128 { u128::MAX } else { (1u128 << self.innovations.len()) - 1 };
+        let all_known = Known::all_upto(self.innovations.len());
         self.learned.clear();
         self.infected.clear();
         self.apprentice.clear();
@@ -1092,7 +1092,7 @@ impl Sim {
             }
         }
         for (i, r) in results.into_iter().flatten() {
-            if r.gained != 0 {
+            if r.gained.any() {
                 self.learned.push((i, r.gained));
             }
             if r.caught {
@@ -1119,9 +1119,9 @@ impl Sim {
         }
         for &(i, bits) in &self.learned {
             let a = &mut self.agents[i as usize];
-            a.known |= bits;
+            a.known.union_with(&bits);
             refresh_caps(a, &self.innovations);
-            self.window.learned += bits.count_ones();
+            self.window.learned += bits.count();
         }
         for &i in &self.infected {
             let a = &mut self.agents[i as usize];
@@ -1295,30 +1295,30 @@ impl Sim {
         if self.innovations.len() < MAX_INNOVATIONS / 2 {
             return;
         }
-        let mut alive = 0u128;
+        let mut alive = Known::EMPTY;
         for a in &self.agents {
-            alive |= a.known;
+            alive.union_with(&a.known);
             for g in a.gear.iter() {
                 if g.is_some() {
-                    alive |= 1u128 << g.item;
+                    alive.set(g.item as usize);
                 }
             }
         }
         for b in self.world.buildings.iter().flatten() {
-            alive |= 1u128 << b.item;
+            alive.set(b.item as usize);
         }
         for inn in &self.innovations {
             if let Some(c) = &inn.craft {
                 for &part in &c.parts[..c.n_parts as usize] {
                     if part as usize >= N_MAT {
-                        alive |= 1u128 << (part as usize - N_MAT);
+                        alive.set(part as usize - N_MAT);
                     }
                 }
             }
         }
         let mut freed = Vec::new();
         for (idx, inn) in self.innovations.iter_mut().enumerate() {
-            if inn.craft.is_some() && alive & (1u128 << idx) == 0 && !inn.name.is_empty() {
+            if inn.craft.is_some() && !alive.has(idx) && !inn.name.is_empty() {
                 freed.push(idx);
             }
         }
@@ -1376,7 +1376,7 @@ impl Sim {
                 if a.gear.iter().any(|g| g.item == sub) {
                     continue;
                 }
-                if a.known & (1u128 << (k - N_MAT)) == 0 {
+                if !a.known.has(k - N_MAT) {
                     return None;
                 }
                 let n = self.needs(i, k - N_MAT, depth + 1)?;
@@ -1400,10 +1400,7 @@ impl Sim {
         let a = &self.agents[i];
         let (x, y) = (a.x, a.y);
         let mut best: Option<(usize, f32)> = None;
-        let mut bits = a.known;
-        while bits != 0 {
-            let idx = bits.trailing_zeros() as usize;
-            bits &= bits - 1;
+        for idx in a.known.iter() {
             let Some(inn) = self.innovations.get(idx) else { continue };
             let Some(c) = inn.craft.as_ref() else { continue };
             if c.slot == Slot::Shelter {
@@ -1481,8 +1478,8 @@ impl Sim {
             // Someone, somewhere, made this before. An independent rediscovery.
             let idx = idx as usize;
             let a = &mut self.agents[i];
-            if a.known & (1u128 << idx) == 0 {
-                a.known |= 1u128 << idx;
+            if !a.known.has(idx) {
+                a.known.set(idx);
                 refresh_caps(a, &self.innovations);
                 self.window.rediscoveries += 1;
             }
@@ -1550,7 +1547,7 @@ impl Sim {
         }
         {
             let a = &mut self.agents[i];
-            a.known |= 1u128 << id;
+            a.known.set(id);
             a.feel(JOY, 0.3);
             a.prestige += 2.0;
         }
@@ -1626,7 +1623,7 @@ impl Sim {
             self.innovations.push(inn);
         }
         let a = &mut self.agents[i];
-        a.known |= 1u128 << id;
+        a.known.set(id);
         refresh_caps(a, &self.innovations);
         a.feel(JOY, 0.3);
         a.prestige += 2.0;
@@ -1999,7 +1996,7 @@ fn decide(
 /// What one agent picked up from its neighbours this tick.
 #[derive(Clone, Copy, Default)]
 struct Contact {
-    gained: u128,
+    gained: Known,
     caught: bool,
     skills: [f32; N_SKILL],
     model: u32,
@@ -2009,7 +2006,7 @@ struct Contact {
 /// Contacts for one fixed chunk of agents, with a chunk-local RNG so the outcome
 /// is the same whatever the thread count.
 fn contact_chunk(
-    c: usize, n: usize, seed: u64, all_known: u128, cfg: &Config, agents: &[Agent], spatial: &SpatialHash,
+    c: usize, n: usize, seed: u64, all_known: Known, cfg: &Config, agents: &[Agent], spatial: &SpatialHash,
 ) -> Vec<(u32, Contact)> {
     let geo = Geo { wrap: cfg.wrap };
     let range2 = cfg.learn_range * cfg.learn_range;
@@ -2021,7 +2018,7 @@ fn contact_chunk(
         let can_catch = a.sick == 0 && a.immune == 0;
         let wealth = a.energy + a.inventory;
         let resist = (1.0 + a.caps[E_RESIST]).max(0.2);
-        let mut gained = 0u128;
+        let mut gained = Known::EMPTY;
         let mut caught = false;
         let mut skills = [0.0f32; N_SKILL];
         let mut model = NO_LEADER;
@@ -2032,7 +2029,7 @@ fn contact_chunk(
                 return true;
             }
             let o = &agents[j];
-            let missing = if can_learn { o.known & !a.known & !gained } else { 0 };
+            let missing = if can_learn { o.known.beyond(&a.known, &gained) } else { Known::EMPTY };
             let contagious = can_catch && !caught && o.sick > 0;
             let dx = geo.delta(a.x, o.x, cfg.width);
             let dy = geo.delta(a.y, o.y, cfg.height);
@@ -2061,22 +2058,19 @@ fn contact_chunk(
                     }
                 }
             }
-            if missing == 0 && !contagious {
+            if !missing.any() && !contagious {
                 return true;
             }
-            if missing != 0 {
+            if missing.any() {
                 let mut p = if kin { cfg.p_learn } else { cfg.p_learn * 0.25 };
                 p *= 0.5 + a.emotion[BOND];
                 p *= (1.0 + a.caps[E_TEACH] + o.caps[E_TEACH]).max(0.2);
                 if is_leader {
                     p *= 2.0;
                 }
-                let mut bits = missing;
-                while bits != 0 {
-                    let b = bits & bits.wrapping_neg();
-                    bits &= bits - 1;
+                for b in missing.iter() {
                     if rng.f32() < p {
-                        gained |= b;
+                        gained.set(b);
                     }
                 }
             }
@@ -2085,7 +2079,7 @@ fn contact_chunk(
             }
             seen < cfg.max_neighbours
         });
-        if gained != 0 || caught || model != NO_LEADER || custom.is_some() || skills.iter().any(|g| *g > 0.0) {
+        if gained.any() || caught || model != NO_LEADER || custom.is_some() || skills.iter().any(|g| *g > 0.0) {
             out.push((i as u32, Contact { gained, caught, skills, model, custom }));
         }
     }
@@ -2194,7 +2188,7 @@ for (k, a) in slice.iter_mut().enumerate() {
 
 /// Capabilities: every practice known plus every thing held.
 pub fn refresh_caps(a: &mut Agent, registry: &[Innovation]) {
-    let mut caps = capabilities(a.known, registry);
+    let mut caps = capabilities(&a.known, registry);
     for g in a.gear.iter() {
         if g.is_some() {
             if let Some(inn) = registry.get(g.item as usize) {

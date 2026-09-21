@@ -326,8 +326,7 @@ fn summarize(sim: &sim::Sim) {
         if inn.name.is_empty() {
             continue; // a recipe the world forgot
         }
-        let bit = 1u128 << idx;
-        let share = sim.agents.iter().filter(|a| a.known & bit != 0).count() as f32 / n;
+        let share = sim.agents.iter().filter(|a| a.known.has(idx)).count() as f32 / n;
         println!("  tick {:>6}  {:>4.0}%  lineage {:>3}  {}", inn.born_tick, share * 100.0, inn.lineage, inn.describe(&sim.innovations));
     }
 

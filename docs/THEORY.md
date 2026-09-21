@@ -252,6 +252,29 @@ lần một bước đơn lẻ, khiến nhà phê bình dao động và bơm nhi
 hoá cả hai bước theo độ lớn của chính cái vết. Sau đó sai số dự báo xuống 0,08 và không còn sụp
 trên cả dải rộng. Chi tiết trong docs/HOC-MAY.md.
 
+### 14. Trần của thế giới, không phải trần của xã hội
+
+**Phát biểu.** Mọi thế giới thịnh vượng đều ngừng phát minh ở khoảng tick 6.500 rồi đứng im suốt phần đời
+còn lại, dù dân số vẫn lên xuống bình thường. Nguyên nhân không nằm trong xã hội mà nằm trong mã: kiến thức
+được lưu trong một số nguyên 128 bit, nên một thế giới không thể giữ quá 128 phát minh cùng lúc.
+
+**Bằng chứng.** Seed 3, 20.000 tick: số phát minh 16 ở tick 500, 69 ở tick 2.500, 115 ở tick 4.500, rồi
+**128 từ tick 6.500 cho tới hết**. Kiến thức mỗi người dừng quanh 100 đến 119. Nhà vẫn tiếp tục mọc (3 lên
+1.011) và ruộng vẫn mở, nên nhìn thì xã hội còn sống, nhưng không có ý tưởng mới nào nữa.
+
+**Sau khi gỡ trần** (bitset rộng 512 bit, cùng seed, cùng mọi thứ khác): phát minh 128 lên **243** ở tick
+20.000 và vẫn đang lên; kiến thức mỗi người 118 lên 135; thế giới vẫn thịnh vượng và đất còn tốt hơn (84%
+so với 61%). Đường phát triển không còn nằm ngang.
+
+**Độ tin.** Chắc chắn về nguyên nhân, vì đó là một hằng số trong mã chứ không phải một hiện tượng. Chưa biết
+trần mới nằm ở đâu: 243 sau 20.000 tick chưa chạm 512, nên phải chạy 60.000 tick mới biết thế giới tự bão
+hoà ở đâu, hay bão hoà là do vật lý vật liệu chứ không do chỗ chứa.
+
+**Bài học.** Người dùng phát hiện ra điều này chỉ bằng cách ngồi xem, trước khi có bất kỳ chỉ số nào chỉ ra.
+Một giới hạn kỹ thuật đọc y hệt một quy luật xã hội: "xã hội phát triển tới hạn rồi dừng" là một kết luận
+nghe rất hợp lý, và hoàn toàn sai. Mọi phát biểu trong sổ này cần được hỏi lại một lần: đây là thế giới, hay
+là chỗ chứa của tôi?
+
 ## Những câu hỏi mở
 
 1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
