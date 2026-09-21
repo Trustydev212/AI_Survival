@@ -146,6 +146,20 @@ pub struct Config {
     pub no_customs: bool,
     pub no_crafting: bool,
 
+    // herds: prey that takes several people at once
+    /// Herds per 10,000 cells of map (0 turns them off).
+    pub herd_density: f32,
+    /// Meat in a full herd, split among the hunters who struck the killing tick.
+    pub herd_food: f32,
+    /// Strength that must land in one tick to bring a full herd down (about three ordinary people).
+    pub hunt_threshold: f32,
+    pub hunt_range: f32,
+    pub hunt_cost: f32,
+    /// Distinct hunters that must have struck lately; one person can never do it alone.
+    pub hunt_min_hands: usize,
+    pub herd_regrow: f32,
+    pub herd_respawn: u32,
+
     // customs
     pub custom_gain: f32,
     pub custom_decay: f32,
@@ -276,6 +290,14 @@ impl Default for Config {
             sig_cost: 0.02,
             no_customs: false,
             no_crafting: false,
+            herd_density: 3.5,
+            herd_food: 260.0,
+            hunt_threshold: 150.0,
+            hunt_range: 2.0,
+            hunt_cost: 1.5,
+            hunt_min_hands: 2,
+            herd_regrow: 0.0006,
+            herd_respawn: 1500,
 
             custom_gain: 0.01,
             custom_decay: 0.9995,
@@ -362,6 +384,14 @@ impl Config {
                 "--hear-scale" => set!(hear_scale),
                 "--hear-strangers" => set!(hear_strangers),
                 "--sig-cost" => set!(sig_cost),
+                "--herd-density" => set!(herd_density),
+                "--herd-food" => set!(herd_food),
+                "--hunt-threshold" => set!(hunt_threshold),
+                "--hunt-range" => set!(hunt_range),
+                "--hunt-cost" => set!(hunt_cost),
+                "--hunt-min-hands" => set!(hunt_min_hands),
+                "--herd-regrow" => set!(herd_regrow),
+                "--herd-respawn" => set!(herd_respawn),
                 "--width" => set!(width),
                 "--height" => set!(height),
                 "--agents" => set!(agents),

@@ -27,7 +27,7 @@ SIM = os.path.join(ROOT, "sim", "target", "release", "sim")
 LAB = os.path.join(ROOT, "docs", "lab")
 DEFS = os.path.join(ROOT, "tools", "experiments.json")
 METRICS = ["peak_pop", "final_pop", "innovations", "mean_known", "soil_health", "lived_soil", "settled_share",
-           "obedience", "breed_rate", "swing", "final_level", "plastic", "signal_mi", "things_per_head", "equipped_share", "crafts", "learn_rate", "loudness"]
+           "obedience", "breed_rate", "swing", "final_level", "plastic", "signal_mi", "things_per_head", "equipped_share", "crafts", "learn_rate", "loudness", "hunts"]
 GOOD = {"flourishing", "surviving"}
 
 

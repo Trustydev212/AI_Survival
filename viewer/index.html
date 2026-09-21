@@ -215,6 +215,7 @@ const EV = {
   first_fire:   { icon: '🔥', major: true, re: /first fire: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Dòng họ ${m[1]} tạo ra lửa`, en: m => `Lineage ${m[1]} makes fire`, sub: { vi: () => 'đánh ra từ đá; nấu chín, sưởi ấm, và mở ra cách nung', en: m => m[2] } },
   first_shelter:{ icon: '🏠', major: true, re: /first shelter: lineage (\d+) made (.+) at \((\d+), (\d+)\)/, vi: m => `Nơi trú đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} builds the first shelter`, sub: { vi: () => 'tường và mái, dựng nơi họ ở lại', en: m => m[2] } },
   first_house_burned: { icon: '🔥', major: false, re: /first house burned/, vi: () => 'Nhà bị đốt lần đầu', en: () => 'The first house is burned' },
+  first_hunt:   { icon: '🦌', major: true, re: /first hunt: (\d+) hunters of lineage (\d+) brought down a herd together at \((\d+), (\d+)\)/, vi: m => `Cuộc săn chung đầu tiên: ${m[1]} người của dòng họ ${m[2]} hạ một bầy thú`, en: m => `The first hunt: ${m[1]} of lineage ${m[2]} bring down a herd together`, sub: { vi: () => 'việc đầu tiên trong thế giới mà một người không làm nổi một mình', en: () => 'the first thing in this world nobody can do alone' } },
   first_sail:   { icon: '⛵', major: true, re: /first boat: lineage (\d+) sets out to sea at \((\d+), (\d+)\)/, vi: m => `Chuyến ra khơi đầu tiên của dòng họ ${m[1]}`, en: m => `Lineage ${m[1]} sets out to sea for the first time`, sub: { vi: () => 'thuyền là phát minh của họ, biển không còn là biên giới', en: () => 'boats are their invention; the sea is no longer a border' } },
   first_burn:   { icon: '🔥', major: true, re: /first fields burned/, vi: () => 'Ruộng bị đốt lần đầu', en: () => 'The first fields are burned', sub: { vi: () => 'kẻ cướp được trang bị tốt đã học cách đốt làng', en: () => 'well-armed raiders have learned to torch villages' } },
   drought:      { icon: '☀', major: false, re: /drought: rains fail for (\d+)/, vi: m => `Hạn hán: mưa ngừng ${m[1]} tick`, en: m => `Drought: rains fail for ${m[1]} ticks` },
@@ -340,7 +341,7 @@ function indexFrames() {
       known: dv.getFloat32(start + 26, true), season: dv.getFloat32(start + 30, true), layers: [] };
     let o = start + 34;
     for (let L = 0; L < state.nLayers; L++) { const n = dv.getUint32(o, true); f.layers.push([o + 4, n]); o += 4 + n; }
-    f.agents = o; f.storesOff = o + f.pop * state.agentBytes;
+    f.agents = o; f.storesOff = o + f.pop * state.agentBytes; f.herdsOff = f.storesOff + f.stores * 14;
     state.frames.push(f); off = end;
   }
 }
@@ -375,6 +376,8 @@ function agentsOf(idx) {
   }
   o = f.storesOff;
   for (let i = 0; i < f.stores; i++, o += 14) a.stores.push({ x: dv.getUint16(o, true) / 64, y: dv.getUint16(o + 2, true) / 64, food: dv.getFloat32(o + 4, true), lineage: dv.getUint16(o + 8, true), owner: dv.getUint32(o + 10, true) });
+  a.herds = [];
+  if (state.version >= 8 && f.herdsOff + 4 <= f.end) { const nh = dv.getUint32(f.herdsOff, true); o = f.herdsOff + 4; for (let i = 0; i < nh; i++, o += 6) a.herds.push({ x: dv.getUint16(o, true) / 64, y: dv.getUint16(o + 2, true) / 64, size: b[o + 4] / 255, hunters: b[o + 5] }); }
   if (state.agentCache.size > 6) state.agentCache.delete(state.agentCache.keys().next().value);
   state.agentCache.set(idx, a); return a;
 }
@@ -941,6 +944,17 @@ function draw(force) {
         if (n >= 11) { const names = Object.keys(animalTex); const an = animalTex[names[Math.floor(hash(bx, by, 8) * names.length)]]; if (an) { const a = addAnim(an, hx - 34, hy + 10, 0.75, by); a.scale.x *= hash(bx, by, 9) < 0.5 ? -1 : 1; } }
       } else { const h = new PIXI.Sprite(propTex.house); h.anchor.set(0.5, 1); h.scale.set(0.5); h.position.set(hx, hy); storeLayer.addChild(h); }
     }
+    // Herds: a few animals grazing together, more of them the fatter the herd; a struck herd shows who is on it.
+    for (const [k, hd] of A.herds.entries()) {
+      const kinds = ['cow', 'sheep', 'pig']; const an = sunny ? animalTex[kinds[k % kinds.length]] : null;
+      const count = 1 + Math.round(hd.size * 4);
+      for (let m = 0; m < count; m++) {
+        const ox = (hash(k, m, 31) - 0.5) * 40, oy = (hash(k, m, 32) - 0.5) * 24;
+        if (an) { const s = addAnim(an, hd.x * TILE + ox, hd.y * TILE + 12 + oy, 0.8, k * 7 + m); s.scale.x *= hash(k, m, 33) < 0.5 ? -1 : 1; }
+        else { const g = new PIXI.Graphics(); g.beginFill(0x8b5a2b).drawEllipse(hd.x * TILE + ox, hd.y * TILE + oy, 6, 4).endFill(); storeLayer.addChild(g); }
+      }
+      if (hd.hunters && uiTex.expression_attack) { const b = new PIXI.Sprite(uiTex.expression_attack); b.anchor.set(0.5, 1); b.scale.set(1.5); b.position.set(hd.x * TILE, hd.y * TILE - 14); fxLayer.addChild(b); }
+    }
     for (const st of A.stores) {
       const fill = Math.min(1, st.food / 3000);
       if (sunny) {
@@ -1055,7 +1069,7 @@ function renderEventList() {
   const box = $('events'); box.innerHTML = '';
   for (const [i, e] of state.events.entries()) {
     const d = describeEvent(e); const el = document.createElement('div');
-    el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','first_house_burned','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience','first_sail','craft','first_tool','first_weapon','first_armour','first_boat','first_vessel','first_fire','first_shelter'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
+    el.className = 'ev ' + (['famine','war','plague','plague_toll','collapse','extinction','soil_half','soil_quarter','flood','wildfire','forgetting','leader_died','raids','first_burn','first_loot','first_house_burned','drought','harsh_year'].includes(e.kind) ? 'crisis' : ['innovation','adopted','custom_order','custom_root','era','first_leader','great_leader','first_store','granary','plenty','bounty','settlement','sharers','obedience','first_sail','craft','first_tool','first_weapon','first_armour','first_boat','first_vessel','first_fire','first_shelter','first_hunt'].includes(e.kind) ? 'good' : '') + (d.major ? ' major' : '') + (e.x != null ? ' locatable' : '');
     el.dataset.i = i; el.innerHTML = `<span class="ic">${d.icon}</span><span><span class="t">${e.tick}</span>${d.text.replace(/</g, '&lt;')}${d.sub ? ' <span style="color:var(--muted)">· ' + d.sub + '</span>' : ''}</span>`;
     if (e.x != null) el.onclick = () => { flyTo(e.x, e.y); state.follow = null; state.frame = frameAt(e.tick); state.sub = 0; syncButtons(); draw(true); };
     box.appendChild(el);

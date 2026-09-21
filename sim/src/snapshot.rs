@@ -1,8 +1,8 @@
-//! Binary snapshot stream for the browser viewer (viewer/index.html). Version 7.
+//! Binary snapshot stream for the browser viewer (viewer/index.html). Version 8.
 //! Little endian throughout. The file is flushed after every frame so a viewer can
 //! follow a run while it is still being computed.
 //!
-//! header: "AISV" u32 version(7) u16 width u16 height f32 max_food
+//! header: "AISV" u32 version(8) u16 width u16 height f32 max_food
 //!         u32 len, then the sea as a bitmask (cell y*width+x is bit x%8 of byte (y*width+x)/8)
 //! frame:  u32 frame_len (bytes that follow this field)
 //!         u32 tick u8 era u8 keyframe u32 pop u32 stores
@@ -15,10 +15,12 @@
 //!           u8 signal symbol (0..15: two dimensions in four bins each) | 16 if last reward was positive
 //!           u8 plasticity (mean |plastic synapse| * 850, saturating) i8 reward*100 u8 heard symbol (0..15)
 //!         stores of 14 bytes: u16 x*64 u16 y*64 f32 food u16 lineage u32 owner name id
+//!         u32 herds, then herds of 6 bytes: u16 x*64 u16 y*64 u8 size*255 u8 hunters striking this tick
 //! flags: 1 sick, 2 leader, 4 settled, 8 obeyed, 16 has custom, 32 afloat (in a boat)
 
 use crate::agent::Agent;
 use crate::craft;
+use crate::herd::Herds;
 use crate::innovation::Innovation;
 use crate::store::Store;
 use crate::world::World;
@@ -50,7 +52,7 @@ impl Snapshot {
     pub fn create(path: &str, world: &World) -> std::io::Result<Snapshot> {
         let mut out = BufWriter::new(std::fs::File::create(path)?);
         out.write_all(b"AISV")?;
-        out.write_all(&7u32.to_le_bytes())?;
+        out.write_all(&8u32.to_le_bytes())?;
         out.write_all(&(world.width as u16).to_le_bytes())?;
         out.write_all(&(world.height as u16).to_le_bytes())?;
         out.write_all(&world.max_food.to_le_bytes())?;
@@ -68,7 +70,7 @@ impl Snapshot {
 
     #[allow(clippy::too_many_arguments)]
     pub fn frame(
-        &mut self, tick: u64, era: u8, world: &World, agents: &[Agent], stores: &[Store], soil: f32, obedience: f32,
+        &mut self, tick: u64, era: u8, world: &World, agents: &[Agent], stores: &[Store], herds: &Herds, soil: f32, obedience: f32,
         mean_known: f32, season: f32, settle_ticks: u16, custom_min: f32, registry: &[Innovation],
     ) -> std::io::Result<()> {
         let n = world.width * world.height;
@@ -164,6 +166,14 @@ impl Snapshot {
             body.extend_from_slice(&s.food.to_le_bytes());
             body.extend_from_slice(&(s.lineage as u16).to_le_bytes());
             body.extend_from_slice(&s.owner.to_le_bytes());
+        }
+        let live: Vec<&crate::herd::Herd> = herds.list.iter().filter(|h| h.cooldown == 0).collect();
+        body.extend_from_slice(&(live.len() as u32).to_le_bytes());
+        for h in live {
+            body.extend_from_slice(&((h.x * 64.0) as u16).to_le_bytes());
+            body.extend_from_slice(&((h.y * 64.0) as u16).to_le_bytes());
+            body.push((h.size * 255.0).clamp(0.0, 255.0) as u8);
+            body.push(if h.struck { h.hunters.len().min(255) as u8 } else { 0 });
         }
         self.out.write_all(&(body.len() as u32).to_le_bytes())?;
         self.out.write_all(&body)?;

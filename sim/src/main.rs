@@ -3,6 +3,7 @@ mod brain;
 mod config;
 mod craft;
 mod events;
+mod herd;
 mod innovation;
 mod orders;
 mod render;
@@ -48,6 +49,7 @@ struct Outcome {
     crafts: usize,
     learn_rate: f32,
     loudness: f32,
+    hunts: u32,
 }
 
 fn main() {
@@ -117,7 +119,7 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
             if t % cfg.snapshot_every == 0 || sim.agents.is_empty() {
                 let (soil, obey, known) = last_metrics;
                 let era = stats::level_of(known, sim.settled_share()) as u8;
-                sn.frame(t, era, &sim.world, &sim.agents, &sim.stores.list, soil, obey, known, sim.world.season(t), cfg.settle_ticks, cfg.custom_min, &sim.innovations)
+                sn.frame(t, era, &sim.world, &sim.agents, &sim.stores.list, &sim.herds, soil, obey, known, sim.world.season(t), cfg.settle_ticks, cfg.custom_min, &sim.innovations)
                     .expect("write snapshot frame");
                 if sn.frames % 20 == 1 {
                     let mut names: Vec<(u32, String)> = sim.hall.keys().map(|id| (*id, agent::name_of(*id))).collect();
@@ -227,6 +229,7 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
         crafts: sim.innovations.iter().filter(|i| i.craft.is_some() && !i.name.is_empty()).count(),
         learn_rate: m.learn_rate,
         loudness: m.loudness,
+        hunts: sim.hunts_total,
     };
     (o, sim)
 }
@@ -277,9 +280,9 @@ fn experiment(cfg: &Config, a: u64, b: u64) {
 
     let path = format!("{}/experiment_{}_{}.csv", cfg.out_dir, a, b);
     let mut f = BufWriter::new(std::fs::File::create(&path).expect("create experiment csv"));
-    writeln!(f, "seed,outcome,ticks,peak_pop,final_pop,innovations,mean_known,soil_health,lived_soil,settled_share,obedience,dominant_order,dominant_custom,breed_rate,swing,final_level,peak_level,greatest_leader,events,plastic,signal_mi,things_per_head,equipped_share,crafts,learn_rate,loudness").unwrap();
+    writeln!(f, "seed,outcome,ticks,peak_pop,final_pop,innovations,mean_known,soil_health,lived_soil,settled_share,obedience,dominant_order,dominant_custom,breed_rate,swing,final_level,peak_level,greatest_leader,events,plastic,signal_mi,things_per_head,equipped_share,crafts,learn_rate,loudness,hunts").unwrap();
     for o in &outcomes {
-        writeln!(f, "{},{},{},{},{},{},{:.3},{:.4},{:.4},{:.4},{:.4},{},{},{:.4},{:.3},{},{},{},{},{:.4},{:.4},{:.3},{:.3},{},{:.3},{:.3}", o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil, o.lived_soil, o.settled, o.obedience, o.order, o.custom, o.breed_rate, o.swing, o.final_level, o.peak_level, o.top_leader, o.events, o.plastic, o.sig_mi, o.things, o.equipped, o.crafts, o.learn_rate, o.loudness).unwrap();
+        writeln!(f, "{},{},{},{},{},{},{:.3},{:.4},{:.4},{:.4},{:.4},{},{},{:.4},{:.3},{},{},{},{},{:.4},{:.4},{:.3},{:.3},{},{:.3},{:.3},{}", o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil, o.lived_soil, o.settled, o.obedience, o.order, o.custom, o.breed_rate, o.swing, o.final_level, o.peak_level, o.top_leader, o.events, o.plastic, o.sig_mi, o.things, o.equipped, o.crafts, o.learn_rate, o.loudness, o.hunts).unwrap();
     }
     println!("written to {path}");
 }

@@ -20,6 +20,9 @@ pub struct Window {
     pub immigrants: u32,
     /// Times an agent moved from land onto the sea this window.
     pub voyages: u32,
+    /// Herds brought down together, and hunts that failed for want of hands.
+    pub hunts: u32,
+    pub hunt_fails: u32,
     pub craft_tries: u32,
     /// New things registered, things made, shelters raised, recipes found again independently.
     pub crafts: u32,
@@ -312,7 +315,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
         "breed_rate", "stores", "stored", "deposits", "withdrawals", "winter_withdrawals", "looted",
         "plastic", "signal_entropy", "signal_mi", "things_per_head", "equipped_share", "craft_tries", "crafts", "made", "built",
-        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness",
+        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -390,6 +393,8 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     }
     n(m.learn_rate);
     n(m.loudness);
+    n(w.hunts as f32);
+    n(w.hunt_fails as f32);
     for v in m.emotion {
         n(v);
     }

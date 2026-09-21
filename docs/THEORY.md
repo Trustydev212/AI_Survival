@@ -157,8 +157,9 @@ sớm có đổi thành lợi ích muộn không.
 
 1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
    hai lần loé lên 0,27 đến 0,31 bit rồi tắt. Giả thuyết "chỉ họ hàng nghe thì ngôn ngữ sẽ ra" đã bị bác. Giả
-   thuyết tiếp theo đáng thử: tín hiệu chỉ có nghĩa khi có việc cần phối hợp mà một người không làm nổi (săn
-   lớn, xây lớn), tức là thế giới chưa có nhiệm vụ nào cần lời nói.
+   thuyết tiếp theo đáng thử: tín hiệu chỉ có nghĩa khi có việc cần phối hợp mà một người không làm nổi. Thế
+   giới nay có **bầy thú** chỉ ngã khi ít nhất hai người đánh gần cùng lúc; `tools/lab.py run herds` so sánh có
+   và không có bầy thú trên thông tin tương hỗ và số cuộc săn.
 4. **Tập quán có tự bảo vệ đất không khi tắt hẳn thủ lĩnh?** Đã trả lời một phần ở mục 10: tập quán giữ người
    ở lại; đất thì cả hai nhánh đều 100% trong 20.000 tick, chưa phân biệt được.
 2. **Học trong đời học được gì?** Đã biết nó làm ra người dùng đồ vật (mục 8). Chưa biết tiến hoá đẩy tốc độ

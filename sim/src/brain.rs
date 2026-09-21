@@ -8,7 +8,7 @@ pub const N_MEM: usize = 4;
 /// Signals: a small vector every agent broadcasts each tick and neighbours can hear.
 /// What it means, if anything, is up to evolution.
 pub const N_SIG: usize = 2;
-pub const N_IN: usize = 97;
+pub const N_IN: usize = 101;
 pub const N_HID: usize = 20;
 pub const N_ACT: usize = 6;
 // move_x, move_y, go/stay, action scores, memory, order scores, order direction, signal

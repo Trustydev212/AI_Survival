@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::craft::{self, Ing, Process, Slot, M_BONE, NO_ING, N_MAT, N_PROP, N_SLOT};
 use crate::world::Building;
 use crate::events::EventLog;
+use crate::herd::Herds;
 use crate::innovation::*;
 use crate::orders::{Order, N_ORDER};
 use crate::region::RegionGrid;
@@ -32,6 +33,9 @@ pub struct Sim {
     pub regions: RegionGrid,
     /// Village storehouses.
     pub stores: Stores,
+    /// Big prey that takes several hunters at once.
+    pub herds: Herds,
+    pub hunts_total: u32,
     /// Seconds spent per phase, for --profile.
     pub profile: [f64; 5],
     spatial: SpatialHash,
@@ -66,6 +70,8 @@ impl Sim {
             world,
             regions,
             stores: Stores::default(),
+            herds: Herds::default(),
+            hunts_total: 0,
             profile: [0.0; 5],
             agents: Vec::with_capacity(cfg.agents * 4),
             tick: 0,
@@ -90,6 +96,8 @@ impl Sim {
             cfg,
         };
         sim.spawn_tribes();
+        let n_herds = (sim.cfg.herd_density * (sim.cfg.width * sim.cfg.height) as f32 / 10_000.0).round() as usize;
+        sim.herds = Herds::spawn(n_herds, &sim.world, &mut sim.rng);
         sim
     }
 
@@ -219,6 +227,7 @@ impl Sim {
     pub fn step(&mut self) {
         let t0 = std::time::Instant::now();
         self.weather();
+        self.herds.step(&self.world, &mut self.rng, self.cfg.herd_regrow, self.cfg.wrap);
         let season = self.world.season(self.tick);
         self.world.regrow(season);
         self.world.regrow_mats();
@@ -376,10 +385,11 @@ impl Sim {
         let spatial = &self.spatial;
         let regions = &self.regions;
         let stores = &self.stores;
+        let herds = &self.herds;
         let threads = cfg.threads.max(1);
         if threads == 1 || n < 2 * CHUNK {
             for (i, d) in self.decisions.iter_mut().enumerate() {
-                *d = decide(i, cfg, world, agents, spatial, regions, stores, season);
+                *d = decide(i, cfg, world, agents, spatial, regions, stores, herds, season);
             }
             return;
         }
@@ -396,7 +406,7 @@ impl Sim {
                     }
                     let mut slot = slots[c].lock().unwrap();
                     for (k, d) in slot.iter_mut().enumerate() {
-                        *d = decide(c * CHUNK + k, cfg, world, agents, spatial, regions, stores, season);
+                        *d = decide(c * CHUNK + k, cfg, world, agents, spatial, regions, stores, herds, season);
                     }
                 });
             }
@@ -674,6 +684,8 @@ impl Sim {
                 Action::Attack => {
                     if d.target != u32::MAX {
                         self.resolve_attack(i, d.target as usize);
+                    } else {
+                        self.hunt(i);
                     }
                 }
                 Action::Share => {
@@ -785,6 +797,7 @@ impl Sim {
                 self.discover(i, d.action);
             }
         }
+        self.resolve_hunts();
         self.agents.extend(births);
     }
 
@@ -803,6 +816,73 @@ impl Sim {
                 a.home_y = ay;
             }
             self.world.tend(ax, ay, gain, cfg.wrap);
+        }
+    }
+
+    /// Strike at the nearest herd within reach. Whether it falls is decided once everyone has acted.
+    fn hunt(&mut self, i: usize) {
+        let (x, y) = (self.agents[i].x, self.agents[i].y);
+        let Some((h, _, _, d2)) = self.herds.nearest(x, y, self.cfg.width as f32, self.cfg.height as f32, self.cfg.wrap) else { return };
+        if d2 > self.cfg.hunt_range * self.cfg.hunt_range {
+            return;
+        }
+        let s = self.strength(&self.agents[i], false);
+        let herd = &mut self.herds.list[h];
+        herd.hits += s;
+        herd.struck = true;
+        if !herd.hunters.contains(&(i as u32)) {
+            herd.hunters.push(i as u32);
+        }
+        let a = &mut self.agents[i];
+        a.energy -= self.cfg.hunt_cost;
+        a.train(SK_FIGHT, self.cfg.skill_gain);
+    }
+
+    /// Herds struck this tick fall if enough strength landed together; otherwise they flee.
+    fn resolve_hunts(&mut self) {
+        let cfg_food = self.cfg.herd_food;
+        let threshold = self.cfg.hunt_threshold;
+        let max_energy = self.cfg.max_energy;
+        let respawn = self.cfg.herd_respawn;
+        let wrap = self.cfg.wrap;
+        for h in 0..self.herds.list.len() {
+            if !self.herds.list[h].struck {
+                continue;
+            }
+            let size = self.herds.list[h].size;
+            let hands = self.herds.list[h].hunters.len();
+            if hands >= self.cfg.hunt_min_hands && self.herds.list[h].hits >= threshold * (0.5 + 0.5 * size) {
+                let hunters = std::mem::take(&mut self.herds.list[h].hunters);
+                let share = cfg_food * size / hunters.len() as f32;
+                let (hx, hy) = (self.herds.list[h].x, self.herds.list[h].y);
+                let lineage = self.agents[hunters[0] as usize].lineage;
+                for &j in &hunters {
+                    let a = &mut self.agents[j as usize];
+                    a.energy += share;
+                    if a.energy > max_energy {
+                        a.inventory = (a.inventory + a.energy - max_energy).min(inv_cap(&self.cfg, a));
+                        a.energy = max_energy;
+                    }
+                    a.feel(JOY, 0.3);
+                    a.feel(BOND, 0.1);
+                    a.prestige += 0.4;
+                }
+                let cell = self.world.idx(hx, hy);
+                self.world.mats[cell][M_BONE] = (self.world.mats[cell][M_BONE] + 0.6).min(1.0);
+                let herd = &mut self.herds.list[h];
+                herd.size = 0.0;
+                herd.hits = 0.0;
+                herd.cooldown = respawn;
+                self.window.hunts += 1;
+                self.hunts_total += 1;
+                self.events.fire(self.tick, "first_hunt", format!("first hunt: {} hunters of lineage {} brought down a herd together at ({:.0}, {:.0})", hunters.len(), lineage, hx, hy));
+            } else if self.rng.f32() < 0.15 {
+                // Not enough hands: sometimes the herd bolts and the effort is lost.
+                self.window.hunt_fails += 1;
+                self.herds.list[h].hunters.clear();
+                self.herds.list[h].hits = 0.0;
+                self.herds.flee(h, &self.world, &mut self.rng, wrap);
+            }
         }
     }
 
@@ -1597,7 +1677,7 @@ impl Geo {
 /// One agent senses its surroundings and its brain decides. Pure: reads the world, writes nothing.
 fn decide(
     i: usize, cfg: &Config, world: &World, agents: &[Agent], spatial: &SpatialHash, regions: &RegionGrid,
-    stores: &Stores, season: f32,
+    stores: &Stores, herds: &Herds, season: f32,
 ) -> Decision {
     let geo = Geo { wrap: cfg.wrap };
     let vision2 = cfg.vision * cfg.vision;
@@ -1820,6 +1900,15 @@ fn decide(
         input[94] = hs * cfg.hear_strangers * foe_sig[1] / nf;
         input[95] = hs * heard[0];
         input[96] = hs * heard[1];
+    }
+    // The nearest herd: is there one, where, and how much is on it.
+    if let Some((h, dx, dy, d2)) = herds.nearest(a.x, a.y, cfg.width as f32, cfg.height as f32, cfg.wrap) {
+        if d2 <= cfg.vision * cfg.vision * 4.0 {
+            input[97] = 1.0;
+            input[98] = (dx / cfg.vision).clamp(-2.0, 2.0);
+            input[99] = (dy / cfg.vision).clamp(-2.0, 2.0);
+            input[100] = herds.list[h].size;
+        }
     }
 
         let mut t = a.genome.think(&input, &a.plastic);

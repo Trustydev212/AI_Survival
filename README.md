@@ -59,6 +59,8 @@ Với Sunnyside, cách vẽ như sau:
 - **Tiếng gọi**: phóng đủ gần, trên đầu mỗi người có một ô màu là tín hiệu đang phát (16 màu cho 16 ký hiệu;
   cùng màu là cùng tiếng gọi) và một chấm trắng nếu tick vừa rồi có lời. Nhìn một làng cùng màu là nhìn
   một quy ước đang hình thành.
+- **Bầy thú** là bò, cừu, lợn của pack đứng thành cụm, cụm càng đông bầy càng lớn; bầy đang bị đánh có
+  biểu tượng tấn công trên đầu. Sử ký ghi cuộc săn chung đầu tiên như một sự kiện lớn.
 - **Nơi trú** vẽ từ lớp nhà cửa của snapshot, đúng ô người ta dựng: nhà mái xanh cho khung gỗ, mái đỏ và cam
   cho đá, đất sét, xương, mái tím và lam cho thứ đã nung; nhà chắc (sức trú từ 0,7) vẽ to hơn, nhà nung chắc
   có lửa trại bên cạnh. **Đồ vật** hiện khi phóng đủ gần: rìu cho công cụ, kiếm cho vũ khí, giỏ cho bình
@@ -91,7 +93,7 @@ của pack; nhân vật là Gabe và Mani 24x24 với 7 khung chạy.
 - Thanh thời gian tô màu thời đại và vẽ dân số. Phím F bám thủ lĩnh lớn nhất, E bám sự kiện, space phát,
   mũi tên đi từng khung, kéo thả ba file để xem không cần server.
 
-Định dạng khung bản 7 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, bốn lớp lượng tử hoá (thức ăn,
+Định dạng khung bản 8 ghi ở đầu `sim/src/snapshot.rs`: mặt nạ biển một lần ở đầu file, bốn lớp lượng tử hoá (thức ăn,
 canh tác, độ màu mỡ, nhà cửa), mã hoá delta và RLE với khung
 khoá mỗi 16 khung, agent 27 byte có id để nội suy, đồ vật đang cầm, tín hiệu nói và nghe, phần thưởng, độ trôi não. 20.000 tick chụp mỗi 25 tick, đỉnh 4.000 agent, nặng 70 MB,
 trong đó đất chỉ vài KB mỗi khung. Sim flush sau mỗi khung, `serve.py` hỗ trợ Range, nên `&live=1` bám được
@@ -146,6 +148,13 @@ trên đất, nhân với năng lực đi biển, và biển không bao giờ c�
 quên (thế hệ mới không kịp học) thì chìm dần. Sử ký ghi chuyến ra khơi đầu tiên của mỗi thế giới. Các kết
 quả thí nghiệm ghi bên dưới được đo trước khi có biển và thuyền, trừ mục "Sau khi có biển". Thức ăn mọc lại theo độ màu mỡ và theo mùa. Mùa đông giảm tốc độ mọc
 xuống 20%.
+
+**Bầy thú.** Trên đất màu mỡ có vài bầy thú lớn đi ăn cỏ (3,5 bầy mỗi 10.000 ô), lớn dần lại sau khi bị săn.
+Một bầy chỉ ngã khi **ít nhất hai người** đánh nó gần như cùng lúc với tổng sức đủ lớn (đòn đánh cộng dồn
+nhưng phai một nửa mỗi tick); một người đánh lẻ tốn công và có thể làm bầy bỏ chạy. Thịt chia đều cho những
+ai đã đánh, xương rơi tại chỗ, bầy biến mất 1.500 tick rồi hiện lại nơi khác. Đây là việc duy nhất trong thế
+giới mà một người không làm nổi một mình, đặt ra để xem tiếng gọi có tìm được nghĩa khi có thứ cần phối
+hợp. Não thấy bầy gần nhất: có hay không, hướng, còn bao nhiêu thịt. Cờ `--herd-density 0` tắt bầy thú.
 
 **Đất có thể chết.** Mỗi đơn vị thức ăn hái đi bào mòn độ màu mỡ một chút. Đất được nghỉ, còn nhiều
 thức ăn, thì hồi phục chậm về tiềm năng. Đất cạn hẳn hồi phục cực chậm. Phát minh làm hái nhanh hơn
@@ -578,6 +587,7 @@ Những quy luật đã quan sát được, bằng chứng và độ tin của t
 sim/src/
   config.rs   toàn bộ luật thế giới và tham số, đọc từ CLI
   craft.rs    vật lý vật liệu: sáu vật liệu, năm cách gia công, công dụng suy từ tính chất
+  herd.rs     bầy thú: con mồi lớn cần nhiều người cùng đánh
   innovation.rs ý tưởng và công thức, sổ đăng ký phát minh của thế giới
   world.rs    sinh địa hình, thức ăn, mùa
   brain.rs    gen, mạng thần kinh, đột biến, độ họ hàng

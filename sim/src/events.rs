@@ -282,5 +282,8 @@ pub fn kind_of(text: &str) -> &'static str {
     if text.starts_with("crafted:") {
         return "craft";
     }
+    if text.starts_with("first hunt:") {
+        return "first_hunt";
+    }
     "other"
 }
