@@ -147,7 +147,8 @@ pub struct Config {
     pub no_crafting: bool,
 
     // herds: prey that takes several people at once
-    /// Herds per 10,000 cells of map (0 turns them off).
+    /// Herds per 10,000 cells of map. Off by default: the lab found herds a costly distraction that
+    /// halves settlement without teaching anyone to hunt together (docs/lab/herds.md); 3.5 turns them on.
     pub herd_density: f32,
     /// Meat in a full herd, split among the hunters who struck the killing tick.
     pub herd_food: f32,
@@ -290,7 +291,7 @@ impl Default for Config {
             sig_cost: 0.02,
             no_customs: false,
             no_crafting: false,
-            herd_density: 3.5,
+            herd_density: 0.0,
             herd_food: 260.0,
             hunt_threshold: 150.0,
             hunt_range: 2.0,

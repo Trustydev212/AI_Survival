@@ -149,12 +149,13 @@ quên (thế hệ mới không kịp học) thì chìm dần. Sử ký ghi chuy�
 quả thí nghiệm ghi bên dưới được đo trước khi có biển và thuyền, trừ mục "Sau khi có biển". Thức ăn mọc lại theo độ màu mỡ và theo mùa. Mùa đông giảm tốc độ mọc
 xuống 20%.
 
-**Bầy thú.** Trên đất màu mỡ có vài bầy thú lớn đi ăn cỏ (3,5 bầy mỗi 10.000 ô), lớn dần lại sau khi bị săn.
+**Bầy thú** (tắt mặc định, bật bằng `--herd-density 3.5`). Trên đất màu mỡ có vài bầy thú lớn đi ăn cỏ, lớn dần lại sau khi bị săn.
 Một bầy chỉ ngã khi **ít nhất hai người** đánh nó gần như cùng lúc với tổng sức đủ lớn (đòn đánh cộng dồn
 nhưng phai một nửa mỗi tick); một người đánh lẻ tốn công và có thể làm bầy bỏ chạy. Thịt chia đều cho những
 ai đã đánh, xương rơi tại chỗ, bầy biến mất 1.500 tick rồi hiện lại nơi khác. Đây là việc duy nhất trong thế
 giới mà một người không làm nổi một mình, đặt ra để xem tiếng gọi có tìm được nghĩa khi có thứ cần phối
-hợp. Não thấy bầy gần nhất: có hay không, hướng, còn bao nhiêu thịt. Cờ `--herd-density 0` tắt bầy thú.
+hợp. Não thấy bầy gần nhất: có hay không, hướng, còn bao nhiêu thịt. Thí nghiệm 16 seed (docs/lab/herds.md) cho
+thấy bầy thú làm định cư tụt từ 68% xuống 15% mà gần như không ai săn được chung, nên mặc định tắt.
 
 **Đất có thể chết.** Mỗi đơn vị thức ăn hái đi bào mòn độ màu mỡ một chút. Đất được nghỉ, còn nhiều
 thức ăn, thì hồi phục chậm về tiềm năng. Đất cạn hẳn hồi phục cực chậm. Phát minh làm hái nhanh hơn

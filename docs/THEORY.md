@@ -153,13 +153,33 @@ lượng thử) nhiều hơn là lợi ích cho sự sống còn; lợi ích c�
 **Độ tin.** Có bằng chứng cho tri thức; gợi ý cho dân số. Câu hỏi tiếp: chạy 60.000 tick để xem chi phí
 sớm có đổi thành lợi ích muộn không.
 
+### 12. Một việc cần nhiều tay không đủ để sinh ra lời nói
+
+**Phát biểu.** Thêm bầy thú chỉ hạ được khi ít nhất hai người đánh gần cùng lúc không làm tín hiệu có nghĩa
+hơn (thông tin tương hỗ trung vị 0,02 bit ở cả hai nhánh) và gần như không ai săn được chung: 12/16 thế
+giới không có cuộc săn thành công nào, thế giới nhiều nhất có 6. Cái bầy thú làm được là kéo người rời
+làng: định cư trung vị tụt từ 68% xuống 15%, đồ vật mỗi đầu người từ 0,47 xuống 0,09, kết cục tốt từ 9/16
+xuống 5/16, tuyệt chủng từ 2 lên 5.
+
+**Bằng chứng.** `tools/lab.py run herds --seeds 1-16` (docs/lab/herds.md, ở đó `default` là có bầy thú). Trung
+vị khác nhau nhiều nhưng phương sai lớn: hiệu số trung bình định cư +0,15 với KTC 95% [−0,14, +0,42], tuân
+lệnh +0,20 [−0,02, +0,42]. Sự kiện "tiếng gọi bắt đầu có nghĩa" bắn ở 3/16 thế giới có bầy thú (seed 5, 14,
+16; cao nhất 0,134 bit) so với 1/16 không có, nhưng đều tắt sau đó.
+
+**Độ tin.** Gợi ý. Cách đọc: với não hiện tại, "đánh khi không có ai gần" bỗng thành "săn" là một cám dỗ
+đắt (mỗi đòn tốn 1,5 năng lượng, bầy bỏ chạy) mà chọn lọc chưa kịp học cách phối hợp trong 20.000 tick.
+Giả thuyết "có việc cần phối hợp thì tiếng gọi có nghĩa" **chưa được ủng hộ**; có thể cần việc phối hợp
+không phạt nặng người thử, hoặc cần thời gian dài hơn nhiều. Vì kết quả này, bầy thú tắt mặc định và giữ
+lại như một cờ thí nghiệm.
+
 ## Những câu hỏi mở
 
 1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
    hai lần loé lên 0,27 đến 0,31 bit rồi tắt. Giả thuyết "chỉ họ hàng nghe thì ngôn ngữ sẽ ra" đã bị bác. Giả
    thuyết tiếp theo đáng thử: tín hiệu chỉ có nghĩa khi có việc cần phối hợp mà một người không làm nổi. Thế
-   giới nay có **bầy thú** chỉ ngã khi ít nhất hai người đánh gần cùng lúc; `tools/lab.py run herds` so sánh có
-   và không có bầy thú trên thông tin tương hỗ và số cuộc săn.
+   giới có **bầy thú** chỉ ngã khi ít nhất hai người đánh gần cùng lúc (mục 12): chưa đủ, và còn có hại. Giả
+   thuyết tiếp theo: việc phối hợp phải rẻ khi thử và chỉ đắt khi bỏ dở, ví dụ dựng một công trình lớn cần
+   nhiều người góp vật liệu, không ai mất gì nếu góp một mình.
 4. **Tập quán có tự bảo vệ đất không khi tắt hẳn thủ lĩnh?** Đã trả lời một phần ở mục 10: tập quán giữ người
    ở lại; đất thì cả hai nhánh đều 100% trong 20.000 tick, chưa phân biệt được.
 2. **Học trong đời học được gì?** Đã biết nó làm ra người dùng đồ vật (mục 8). Chưa biết tiến hoá đẩy tốc độ

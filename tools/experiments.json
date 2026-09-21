@@ -129,13 +129,13 @@
   },
   "herds": {
     "title": "Có việc cần nhiều tay thì tiếng gọi có nghĩa không?",
-    "question": "Bầy thú chỉ hạ được khi ít nhất hai người đánh gần như cùng lúc (mặc định), so với không có bầy thú nào (--herd-density 0).",
+    "question": "Không có bầy thú (mặc định) so với có bầy thú chỉ hạ được khi ít nhất hai người đánh gần như cùng lúc (--herd-density 3.5).",
     "control": "default",
     "arms": {
       "default": [],
-      "no-herds": [
+      "herds": [
         "--herd-density",
-        "0"
+        "3.5"
       ]
     }
   }
