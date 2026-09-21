@@ -9,6 +9,11 @@
 #   ./deploy/run.sh                 # runs until stopped
 #
 # Settings come from the environment so systemd can override them without editing the file:
+# The world is put down every 50,000 ticks rather than every 5,000: the file is around fifteen
+# megabytes, and at roughly 250 ticks a second a save every 5,000 would write it three times a
+# minute, which is tens of gigabytes a day for nothing. Fifty thousand costs at most a few minutes
+# of world if the machine dies.
+#
 #   WORLD_DIR   where the world and its records live (default ./world)
 #   SHIFT       ticks per shift before the world is put down (default 200000)
 #   PUBLISH     seconds between publishes to the web (0 = never)
@@ -27,7 +32,7 @@ last_publish=0
 while true; do
   "$SIM" --forever \
       --ticks "$SHIFT" \
-      --save-every 5000 \
+      --save-every 50000 \
       --snapshot-every 200 \
       --snapshot-window 20000 \
       --quiet \
@@ -39,6 +44,12 @@ while true; do
     echo "$(date -u +%FT%TZ) sim exited $code, picking the world back up in 10s" >> "$WORLD_DIR/run.log"
     sleep 10
   fi
+  # Each civilisation leaves a statistics file and a history file behind. A machine left running
+  # for weeks would otherwise fill a directory with thousands of them, so only the last twenty
+  # generations are kept in full; the chronicle keeps the one line that matters about the rest.
+  ls -t "$WORLD_DIR"/stats_gen*.csv 2>/dev/null | tail -n +21 | xargs -r rm -f
+  ls -t "$WORLD_DIR"/events_gen*.txt 2>/dev/null | tail -n +21 | xargs -r rm -f
+
   now=$(date +%s)
   if [ "$PUBLISH" -gt 0 ] && [ $((now - last_publish)) -ge "$PUBLISH" ]; then
     ./deploy/publish.sh "$WORLD_DIR" >> "$WORLD_DIR/publish.log" 2>&1 || true

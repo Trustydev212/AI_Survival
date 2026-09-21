@@ -33,8 +33,10 @@ pub const EFFECT_NAMES: [&str; N_EFFECT] =
 /// Knowledge is a bitset of fixed width, so a world holds at most this many innovations at once.
 /// It used to be one u128, and a thriving world filled all 128 slots by about tick 6500 and then
 /// could never invent anything again: development stopped dead while the society lived on. The
-/// bitset is now eight words wide.
-pub const KNOWN_WORDS: usize = 8;
+/// bitset is now thirty-two words wide. Eight was not enough either: a world left running
+/// reached 437 things by tick 66,000 and was still climbing, so 512 would have bound within
+/// hours of a machine left alone, and the plateau would have looked like a law again.
+pub const KNOWN_WORDS: usize = 32;
 
 /// What one mind knows: one bit per innovation in the world's registry.
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
