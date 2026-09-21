@@ -202,6 +202,34 @@ Giả thuyết "có việc cần phối hợp thì tiếng gọi có nghĩa" **c
 không phạt nặng người thử, hoặc cần thời gian dài hơn nhiều. Vì kết quả này, bầy thú tắt mặc định và giữ
 lại như một cờ thí nghiệm.
 
+### 13. Cái đầu học từ hậu quả của chính mình thì hiệu quả và hết tò mò
+
+**Phát biểu.** Thay luật Hebb bằng actor-critic có vết đủ điều kiện làm kiến thức mỗi người rơi
+khoảng bốn lần, trong khi vẫn sống được. Thủ phạm không phải sự ngẫu nhiên của chính sách, mà là
+chính việc học.
+
+**Bằng chứng.** Một thế giới (seed 3, 3.000 tick), cùng bản đồ, bốn cách học: Hebb cho dân số 2.125
+và kiến thức 47,3; chỉ chọn việc theo xác suất mà **không học gì** cho 2.826 và 43,3; bật học
+gradient cho 1.436 và 10,1; thêm kênh truyền lại cái đã học cho 1.226 và 5,1. Nhánh không học là
+nhánh quyết định: nó chứng minh việc rút thăm hành động không hề có hại, nên phần kiến thức mất đi
+là do học. Nới tầm nhìn của nhà phê bình từ 20 tick lên 100 tick không cứu được (kiến thức 7,7);
+chỉ liều hơn mới kéo lại số đồ vật mỗi người (2,3) chứ không kéo lại kiến thức.
+
+**Cách đọc.** Phần thưởng của thế giới này là của cải và tâm trạng tăng **ngay trong tick đó**. Chế
+tác tốn ngay và trả công muộn, rải rác. Một cái đầu học từ hậu quả trước mắt học được rằng chế tác
+là việc dở, và bỏ. Cái gì không được trả công thì không được học, dù nhìn xa đến đâu.
+
+**Độ tin.** Mới một thế giới, chưa chạy 16 seed; coi là dấu hiệu mạnh chứ chưa phải bằng chứng.
+Một điều phải nói rõ: trong nhánh gradient chỉ các đầu ra hành động học trong đời, còn trí nhớ,
+mệnh lệnh và tín hiệu thì không, nên mọi so sánh về ngôn ngữ giữa hai nhánh là không công bằng.
+
+**Bài học kỹ thuật, ghi lại vì nó tốn nhiều lần chạy.** Bản đầu cập nhật trọng số theo đúng công
+thức sách vở và giết sạch mọi thế giới: dân số 1.000 xuống 62, phân công lao động vọt lên 0,98,
+tức mỗi người khoá cứng vào một hành động rồi chết. Nguyên nhân là vết tích luỹ dài gấp khoảng bảy
+lần một bước đơn lẻ, khiến nhà phê bình dao động và bơm nhiễu vào bộ chọn việc. Sửa bằng cách chuẩn
+hoá cả hai bước theo độ lớn của chính cái vết. Sau đó sai số dự báo xuống 0,08 và không còn sụp
+trên cả dải rộng. Chi tiết trong docs/HOC-MAY.md.
+
 ## Những câu hỏi mở
 
 1. **Ngôn ngữ có xuất hiện không?** Chưa. Cái đã có là đọc trạng thái người khác qua tiếng gọi (mục 9), và
@@ -221,6 +249,10 @@ lại như một cờ thí nghiệm.
    được nhau. Tiến hoá không đẩy tốc độ học lên: `plastic` trung vị 0,01, `learn_rate` 2 đến 3 phần nghìn.
    Câu hỏi còn lại: có việc nào trong thế giới này mà chỉ học trong đời mới làm nổi, còn tiến hoá và nghe thì
    không? Nếu không có, học là chi phí thuần.
+6. **Trả công cho tò mò thì được gì?** Mục 13 cho thấy cái đầu học từ hậu quả bỏ hẳn chế tác. Thử
+   thêm một phần thưởng nhỏ cho việc biết thêm điều mới sẽ cứu được sáng tạo, nhưng lúc đó ta đang
+   tự tay viết vào thế giới đúng cái ta muốn quan sát nó tự mọc lên. Câu hỏi thật: có cách đặt phần
+   thưởng nào chỉ nói về sinh tồn mà vẫn để sáng tạo sống sót không?
 3. **Phân công lao động có nổi lên không?** Có người chỉ chế tác, người chỉ hái không? Từ giờ có chỉ số
    `division_of_labour` (0 đến 1): thông tin tương hỗ giữa *ai* và *làm gì*, chia cho entropy của việc làm,
    tính trên hồ sơ hành động có quên dần của từng người (Gorelick và cộng sự). 0 là mọi người sống cùng một

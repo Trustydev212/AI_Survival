@@ -213,6 +213,15 @@ và hành động ngay sau đó (tiếng gọi được hiểu). Khi cả hai v�
 ghi "tiếng gọi bắt đầu có nghĩa". Đó là dấu hiệu sớm nhất của ngôn ngữ, và là một câu hỏi nghiên cứu mở của
 repo này.
 
+Não có **hai cách học trong đời**, chọn bằng cờ. Mặc định là luật Hebb có điều biến: nối hoạt động
+đang diễn ra với phần thưởng đang tới. `--gradient` bật cách thứ hai, actor-critic có vết đủ điều
+kiện: não tự nuôi một **nhà phê bình** định giá hiện tại, học từ khoảng cách giữa điều xảy ra và
+điều nó tưởng, và giữ một vết mờ dần về các lựa chọn gần đây nên phần thưởng đến muộn vẫn tìm được
+việc đã sinh ra nó. Não ấy phải chọn việc theo xác suất chứ không lấy điểm cao nhất, vì việc không
+thử thì không dạy được gì. `--know-rate` mở kênh thứ ba: người bắt chước lấy luôn một phần **cái
+người kia đã học được**, không chỉ cái họ được sinh ra cùng. Cách đọc từng mảnh, vì sao bước học
+phải tự chuẩn hoá, và kết quả đo được nằm trong docs/HOC-MAY.md.
+
 Phần viết tay là **luật thế giới**: thức ăn mọc thế nào, đánh nhau tính thắng thua ra sao, công nghệ
 có tác dụng gì, thiên tai xảy ra thế nào, cảm xúc tăng giảm theo sự kiện nào. Đó là "harness". Não phải
 tự tìm cách sống trong luật đó. Nông nghiệp, định cư, tầng lớp chiến binh, thủ lĩnh, chia sẻ, và giờ là

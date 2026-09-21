@@ -135,6 +135,24 @@ pub struct Config {
     // minds
     /// Multiplier on within-life learning rates; 0 turns learning off (a control).
     pub learn_scale: f32,
+    /// Learn by actor-critic with eligibility traces instead of the Hebbian rule. The Hebbian
+    /// brain ties what it is doing to the reward arriving at that instant; this one keeps a
+    /// fading record of recent choices, prices the present with a critic it grows itself, and
+    /// learns from the gap between the two. It also has to act at random sometimes, or it would
+    /// never find out what the choices it avoids are worth.
+    pub grad_rule: bool,
+    /// How far ahead a mind counts the future (0 = only this tick matters).
+    pub gamma: f32,
+    /// How long the trace of a choice lasts; with gamma it sets how far back a reward reaches.
+    pub trace_lambda: f32,
+    /// Step sizes for the two learners: the one that chooses, and the one that prices.
+    /// Both are normalised by their own trace size, so they mean the same at any trace length.
+    pub actor_rate: f32,
+    pub critic_rate: f32,
+    /// How wildly the gradient brain samples its actions. Low is near the old "take the best".
+    pub policy_temp: f32,
+    /// How much of a model's *learned* mind an imitator takes (0 = know-how never spreads).
+    pub know_rate: f32,
     /// Multiplier on signal inputs; 0 makes everyone deaf (a control).
     pub hear_scale: f32,
     /// How much of strangers' calls gets through (1 = as loud as kin; 0 = only kin are heard, which the
@@ -286,6 +304,13 @@ impl Default for Config {
             wear: 1.0,
             shelter_warmth: 0.35,
             learn_scale: 1.0,
+            grad_rule: false,
+            gamma: 0.95,
+            trace_lambda: 0.9,
+            actor_rate: 0.1,
+            critic_rate: 0.1,
+            policy_temp: 0.1,
+            know_rate: 0.0,
             hear_scale: 1.0,
             hear_strangers: 1.0,
             sig_cost: 0.02,
@@ -352,6 +377,11 @@ impl Config {
                 i += 1;
                 continue;
             }
+            if key == "--gradient" {
+                c.grad_rule = true;
+                i += 1;
+                continue;
+            }
             let val = args.get(i + 1).ok_or_else(|| format!("missing value for {key}"))?;
             macro_rules! set {
                 ($field:ident) => {
@@ -382,6 +412,12 @@ impl Config {
                 "--wear" => set!(wear),
                 "--shelter-warmth" => set!(shelter_warmth),
                 "--learn-scale" => set!(learn_scale),
+                "--gamma" => set!(gamma),
+                "--trace-lambda" => set!(trace_lambda),
+                "--actor-rate" => set!(actor_rate),
+                "--critic-rate" => set!(critic_rate),
+                "--policy-temp" => set!(policy_temp),
+                "--know-rate" => set!(know_rate),
                 "--hear-scale" => set!(hear_scale),
                 "--hear-strangers" => set!(hear_strangers),
                 "--sig-cost" => set!(sig_cost),
@@ -493,6 +529,13 @@ USAGE: sim [--flag value ...]
   --p-infect F      plague spread per contact-tick (0.02)
   --p-windfall F --p-accident F   per agent-tick personal luck
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
+  --gradient        learn by actor-critic with traces instead of the Hebbian rule
+  --gamma F         how far ahead a gradient mind counts the future (0.95)
+  --trace-lambda F  how long a choice stays creditable (0.9)
+  --actor-rate F    step length of the chooser along its trace (0.1; above 0.3 worlds collapse)
+  --critic-rate F   fraction of its own error the pricer corrects each tick (0.1)
+  --policy-temp F   how wildly a gradient mind samples actions (0.1)
+  --know-rate F     how much learned know-how an imitator takes (0; 0.3 makes culture)
   --skill-gain F    skill gained per practice (0.002)
   --leader-min-followers N   kin needed to count as a leader (5)
   --raid-bonus F --hold-bonus F --march-saving F --conserve-saving F

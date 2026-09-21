@@ -1,7 +1,7 @@
 //! One tick of the world: weather, regrow, sense, think, act, contact, metabolise, luck, die.
 
 use crate::agent::*;
-use crate::brain::{Action, Genome, N_HID, N_IN, N_MEM, N_OUT, N_PLASTIC, N_SIG};
+use crate::brain::{act_probs, learn_td, trace_step, Action, Genome, N_ACT, N_CRITIC, N_HID, N_IN, N_MEM, N_OUT, N_PLASTIC, N_SIG, N_TRACE};
 use crate::config::Config;
 use crate::craft::{self, Ing, Process, Slot, M_BONE, NO_ING, N_MAT, N_PROP, N_SLOT};
 use crate::world::Building;
@@ -190,6 +190,11 @@ impl Sim {
             emotion: [0.0; N_EMO],
             memory: [0.0; N_MEM],
             plastic: vec![0.0; N_PLASTIC],
+            critic: vec![0.0; N_CRITIC],
+            trace: vec![0.0; N_TRACE],
+            vtrace: vec![0.0; N_CRITIC],
+            v_prev: 0.0,
+            td: 0.0,
             last_hidden: [0.0; N_HID],
             last_out: [0.0; N_OUT],
             signal: [0.0; N_SIG],
@@ -555,6 +560,21 @@ impl Sim {
                 a.under = d.under;
                 a.obeyed = obeyed;
                 a.record(d.action, (d.mx * d.mx + d.my * d.my).sqrt());
+                // Actor-critic learning, one step behind: only now, with the next moment priced,
+                // can the last choice be judged. Surprise = what came + what comes next is worth
+                // - what this was thought to be worth. Then the traces fade and record this tick.
+                if cfg.grad_rule {
+                    if a.age > 0 {
+                        let td = (a.reward + cfg.gamma * d.value - a.v_prev).clamp(-5.0, 5.0);
+                        a.td = td;
+                        let Agent { plastic, critic, trace, vtrace, .. } = a;
+                        learn_td(plastic, critic, trace, vtrace, td, cfg.actor_rate, cfg.critic_rate);
+                    }
+                    a.v_prev = d.value;
+                    let decay = cfg.gamma * cfg.trace_lambda;
+                    let Agent { trace, vtrace, .. } = a;
+                    trace_step(trace, vtrace, &d.hidden, &d.probs, d.action as usize, decay);
+                }
                 // Acting together binds people; defying a leader loosens the tie.
                 if d.under.is_some() {
                     if obeyed {
@@ -1118,6 +1138,24 @@ impl Sim {
         for &(i, j) in &self.imitations {
             let model = self.agents[j as usize].genome.clone();
             self.agents[i as usize].genome.imitate(&model, cfg.imitate_rate);
+            // Know-how, not only nature: with --know-rate above zero the learner also takes a
+            // step towards what the model has *learned* in its own life. Nothing is inherited
+            // by this; it spreads sideways, between the living, and dies with the last holder
+            // unless someone else picks it up. That is what makes it culture rather than blood.
+            if cfg.know_rate > 0.0 {
+                let (plastic, critic) = {
+                    let m = &self.agents[j as usize];
+                    (m.plastic.clone(), m.critic.clone())
+                };
+                let a = &mut self.agents[i as usize];
+                for (w, m) in a.plastic.iter_mut().zip(plastic.iter()) {
+                    *w += (m - *w) * cfg.know_rate;
+                }
+                for (w, m) in a.critic.iter_mut().zip(critic.iter()) {
+                    *w += (m - *w) * cfg.know_rate;
+                }
+                self.window.know_gifts += 1;
+            }
             self.window.imitations += 1;
         }
     }
@@ -1911,7 +1949,25 @@ fn decide(
         }
     }
 
-        let mut t = a.genome.think(&input, &a.plastic);
+        let mut t = a.genome.think(&input, &a.plastic, &a.critic);
+        // A brain that learns from consequences has to take chances: an action never tried
+        // teaches nothing. So under the gradient rule the action is drawn from the scores
+        // rather than simply taken as the highest. The draw is a hash of who and when, so the
+        // world still replays the same on any number of threads.
+        let mut probs = [0.0f32; N_ACT];
+        if cfg.grad_rule {
+            probs = act_probs(&t.out, cfg.policy_temp);
+            let mut u = roll(a.id as u64, a.age as u64);
+            let mut pick = N_ACT - 1;
+            for k in 0..N_ACT {
+                if u < probs[k] {
+                    pick = k;
+                    break;
+                }
+                u -= probs[k];
+            }
+            t.action = Action::ALL[pick];
+        }
         // Dead zone: a weak movement signal means "stay", so standing still is a stable choice.
         if t.mx * t.mx + t.my * t.my < 0.09 {
             t.mx = 0.0;
@@ -1935,6 +1991,8 @@ fn decide(
         heard,
         hidden: t.hidden,
         out: t.out,
+        value: t.value,
+        probs,
     }
 }
 
@@ -2125,8 +2183,10 @@ for (k, a) in slice.iter_mut().enumerate() {
             let mood = a.emotion[JOY] - a.emotion[FEAR];
             let r = ((a.energy + a.inventory - a.prev_wealth) / 8.0 + (mood - a.prev_mood) * 2.0).clamp(-1.0, 1.0);
             a.reward = r;
-            let Agent { genome, plastic, last_hidden, last_out, .. } = a;
-            genome.learn(plastic, last_hidden, last_out, r, cfg.learn_scale);
+            if !cfg.grad_rule {
+                let Agent { genome, plastic, last_hidden, last_out, .. } = a;
+                genome.learn(plastic, last_hidden, last_out, r, cfg.learn_scale);
+            }
         }
     }
     (hungry, (windfalls, accidents))
@@ -2151,4 +2211,16 @@ pub fn refresh_caps(a: &mut Agent, registry: &[Innovation]) {
 #[inline]
 fn inv_cap(cfg: &Config, a: &Agent) -> f32 {
     cfg.inv_cap * (1.0 + a.caps[E_STORE]).max(0.5)
+}
+
+
+/// A deterministic coin in [0, 1) from who is asking and when. Same answer on any thread count,
+/// so a world drawn this way replays exactly.
+#[inline]
+fn roll(id: u64, age: u64) -> f32 {
+    let mut z = id.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ age.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+    ((z >> 40) as f32) / 16_777_216.0
 }

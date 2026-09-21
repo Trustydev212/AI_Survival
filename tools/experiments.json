@@ -138,5 +138,28 @@
         "3.5"
       ]
     }
+  },
+  "brains": {
+    "title": "Học từ hậu quả có làm xã hội khá hơn không?",
+    "question": "Luật Hebb như cũ (mặc định), so với actor-critic có vết đủ điều kiện, so với actor-critic cộng truyền lại cái đã học cho người khác, và so với nhánh đối chứng quan trọng nhất: vẫn chọn việc theo xác suất nhưng không học gì cả.",
+    "control": "default",
+    "arms": {
+      "default": [],
+      "sample-only": [
+        "--gradient",
+        "--actor-rate",
+        "0",
+        "--critic-rate",
+        "0"
+      ],
+      "gradient": [
+        "--gradient"
+      ],
+      "gradient-social": [
+        "--gradient",
+        "--know-rate",
+        "0.3"
+      ]
+    }
   }
 }

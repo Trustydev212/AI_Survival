@@ -23,6 +23,8 @@ pub struct Window {
     /// Herds brought down together, and hunts that failed for want of hands.
     pub hunts: u32,
     pub hunt_fails: u32,
+    /// Times someone took a step towards what another had *learned*, not inherited.
+    pub know_gifts: u32,
     pub craft_tries: u32,
     /// New things registered, things made, shelters raised, recipes found again independently.
     pub crafts: u32,
@@ -107,6 +109,10 @@ pub struct Metrics {
     pub sig_mi: f32,
     /// How much what one says reflects one's own state (bits): meaning on the speaker's side.
     pub sig_meaning: f32,
+    /// Mean size of the surprise a mind gets each tick (temporal-difference error), and the mean
+    /// price it puts on the present. Both are 0 unless the gradient learner is on.
+    pub td: f32,
+    pub value: f32,
     /// Division of labour, 0..1: how much of the population's activity mix is explained by who
     /// does it (mutual information between person and action, over the entropy of actions).
     pub dol: f32,
@@ -144,6 +150,8 @@ pub fn compute(
     let plastic = agents.iter().map(|a| a.plastic.iter().map(|p| p.abs()).sum::<f32>() / a.plastic.len().max(1) as f32).sum::<f32>() / n;
     let (sig_ent, sig_mi, sig_meaning) = signal_stats(agents);
     let dol = division_of_labour(agents);
+    let td = agents.iter().map(|a| a.td.abs()).sum::<f32>() / n;
+    let value = agents.iter().map(|a| a.v_prev).sum::<f32>() / n;
     let things = agents.iter().map(|a| a.gear.iter().filter(|g| g.is_some()).count() as f32).sum::<f32>() / n;
     let equipped = agents.iter().filter(|a| a.gear.iter().any(|g| g.is_some())).count() as f32 / n;
     let learn_rate = agents.iter().map(|a| a.genome.learn_rate() * 1000.0).sum::<f32>() / n;
@@ -261,6 +269,8 @@ pub fn compute(
         sig_ent,
         sig_mi,
         sig_meaning,
+        td,
+        value,
         dol,
         things,
         equipped,
@@ -323,7 +333,7 @@ pub fn csv_header(out: &mut impl Write) -> std::io::Result<()> {
         "max_followers", "leader_deaths", "level", "custom_acts", "custom_spread", "defections", "mergers",
         "breed_rate", "stores", "stored", "deposits", "withdrawals", "winter_withdrawals", "looted",
         "plastic", "signal_entropy", "signal_mi", "things_per_head", "equipped_share", "craft_tries", "crafts", "made", "built",
-        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning", "division_of_labour",
+        "rediscoveries", "forgotten_recipes", "material_gifts", "voyages", "learn_rate", "loudness", "hunts", "hunt_fails", "signal_meaning", "division_of_labour", "td_error", "mean_value", "know_gifts",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -405,6 +415,9 @@ pub fn csv_row(out: &mut impl Write, m: &Metrics) -> std::io::Result<()> {
     n(w.hunt_fails as f32);
     n(m.sig_meaning);
     n(m.dol);
+    n(m.td);
+    n(m.value);
+    n(w.know_gifts as f32);
     for v in m.emotion {
         n(v);
     }

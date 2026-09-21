@@ -23,6 +23,14 @@ pub const N_PLASTIC: usize = N_HID * N_OUT;
 pub const N_TEMPER: usize = 9; // 4 emotion decay genes, 4 emotion sensitivity genes, 1 charisma gene
 /// Learning genes: rate, and the three Hebbian coefficients (pre*post, pre, post).
 pub const N_LEARN: usize = 4;
+/// The critic: one weight per hidden unit plus a bias, estimating how good the present is.
+/// It is born blank and learned within one life, never inherited, so the genome is untouched
+/// and every world made before the critic existed still replays identically.
+pub const N_CRITIC: usize = N_HID + 1;
+/// Eligibility trace over the action readout: which of those weights pushed the recent choices.
+pub const N_TRACE: usize = N_ACT * N_HID;
+/// Where the action scores start inside the output vector.
+pub const O_ACT: usize = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -133,7 +141,7 @@ impl Genome {
     /// Forward pass. Movement is zero when the go/stay output is negative, so staying
     /// put is one sign flip away from roaming. Every brain also forms an order; it only
     /// reaches anyone if this agent happens to be a leader.
-    pub fn think(&self, input: &[f32; N_IN], plastic: &[f32]) -> Thought {
+    pub fn think(&self, input: &[f32; N_IN], plastic: &[f32], critic: &[f32]) -> Thought {
         let w = &self.weights;
         let mut hidden = [0.0f32; N_HID];
         let mut off = 0;
@@ -185,7 +193,11 @@ impl Genome {
         let order = Order::ALL[best_order];
         let sig = [fast_tanh(out[O_SIG]), fast_tanh(out[O_SIG + 1])];
         let (mx, my) = if out[2] <= 0.0 { (0.0, 0.0) } else { (fast_tanh(out[0]), fast_tanh(out[1])) };
-        Thought { mx, my, action: Action::ALL[best], memory: mem, order, odx, ody, sig, hidden, out }
+        let mut value = critic[N_HID];
+        for h in 0..N_HID {
+            value += critic[h] * hidden[h];
+        }
+        Thought { mx, my, action: Action::ALL[best], memory: mem, order, odx, ody, sig, hidden, out, value: value.clamp(-25.0, 25.0) }
     }
 
     /// The heritable learning rate this genome encodes (before the config scale).
@@ -239,4 +251,79 @@ pub struct Thought {
     pub sig: [f32; N_SIG],
     pub hidden: [f32; N_HID],
     pub out: [f32; N_OUT],
+    /// The critic's estimate of how good this moment is, in units of future reward.
+    pub value: f32,
+}
+
+/// The policy: action scores turned into probabilities. A brain that learns by gradient has to
+/// take chances, because a choice never taken teaches nothing. Temperature sets how wild it is;
+/// as temperature goes to zero this becomes the old "pick the highest score".
+pub fn act_probs(out: &[f32; N_OUT], temp: f32) -> [f32; N_ACT] {
+    let t = temp.max(0.05);
+    let mut p = [0.0f32; N_ACT];
+    let mut top = f32::NEG_INFINITY;
+    for a in 0..N_ACT {
+        if out[O_ACT + a] > top {
+            top = out[O_ACT + a];
+        }
+    }
+    let mut sum = 0.0;
+    for a in 0..N_ACT {
+        p[a] = ((out[O_ACT + a] - top) / t).exp();
+        sum += p[a];
+    }
+    for v in p.iter_mut() {
+        *v /= sum;
+    }
+    p
+}
+
+/// One step of actor-critic learning with eligibility traces.
+///
+/// `td` is the surprise: reward that arrived plus what the next moment is worth, minus what this
+/// moment was thought to be worth. Positive means better than expected. The traces remember which
+/// weights argued for the recent choices, fading as they go, so a reward arriving late still finds
+/// the choice that earned it. This is the piece plain Hebbian learning cannot do.
+///
+/// Both steps are normalised by the size of their own trace, which is what keeps this stable.
+/// Without it the step grows with however long the trace happens to be, the critic overshoots,
+/// its error never settles, and the noise it feeds the chooser makes everyone lock onto a single
+/// action and starve. Measured, not guessed: the unnormalised version collapsed every world.
+/// The critic takes a fixed fraction of the correction that would wipe out its own error
+/// (`crit` = 0.1 means a tenth of it). The chooser takes a step of fixed length `actor` along
+/// the direction its trace points, so no single loud moment can throw it.
+#[allow(clippy::too_many_arguments)]
+pub fn learn_td(plastic: &mut [f32], critic: &mut [f32], trace: &[f32], vtrace: &[f32], td: f32, actor: f32, crit: f32) {
+    let vnorm2: f32 = vtrace.iter().map(|x| x * x).sum::<f32>().max(1e-3);
+    let vstep = crit * td / vnorm2;
+    for h in 0..N_CRITIC {
+        critic[h] = (critic[h] + vstep * vtrace[h]).clamp(-8.0, 8.0);
+    }
+    let tnorm: f32 = trace.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-3);
+    let astep = actor * td / tnorm;
+    for a in 0..N_ACT {
+        for h in 0..N_HID {
+            let p = &mut plastic[(O_ACT + a) * N_HID + h];
+            *p = (*p + astep * trace[a * N_HID + h]).clamp(-0.6, 0.6);
+        }
+    }
+}
+
+/// Fade the traces, then add what this tick's choice did.
+///
+/// For the chosen action the gradient of the log-probability is (1 - p) times the hidden activity;
+/// for the others it is (0 - p) times it. Reading it plainly: raise what you did, lower what you
+/// were also tempted by, in proportion to how surprised you would be to have done it.
+pub fn trace_step(trace: &mut [f32], vtrace: &mut [f32], hidden: &[f32; N_HID], probs: &[f32; N_ACT], chosen: usize, decay: f32) {
+    for a in 0..N_ACT {
+        let g = if a == chosen { 1.0 - probs[a] } else { -probs[a] };
+        for h in 0..N_HID {
+            let t = &mut trace[a * N_HID + h];
+            *t = (*t * decay + g * hidden[h]).clamp(-6.0, 6.0);
+        }
+    }
+    for h in 0..N_HID {
+        vtrace[h] = (vtrace[h] * decay + hidden[h]).clamp(-6.0, 6.0);
+    }
+    vtrace[N_HID] = (vtrace[N_HID] * decay + 1.0).clamp(-6.0, 6.0);
 }

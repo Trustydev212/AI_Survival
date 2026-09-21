@@ -100,6 +100,17 @@ pub struct Agent {
     pub memory: [f32; N_MEM],
     /// Within-life changes to the output layer (see Genome::learn). Born blank, never inherited.
     pub plastic: Vec<f32>,
+    /// The critic: what this mind thinks the present is worth. Born blank, learned in life,
+    /// never inherited. It exists only to tell luck apart from good judgement.
+    pub critic: Vec<f32>,
+    /// Eligibility traces: which action weights, and which critic weights, argued for what was
+    /// done lately. They fade, so a reward arriving late still finds the choice that earned it.
+    pub trace: Vec<f32>,
+    pub vtrace: Vec<f32>,
+    /// Last tick's estimate of the present's worth, and the last surprise (temporal-difference
+    /// error). The surprise is the whole teaching signal.
+    pub v_prev: f32,
+    pub td: f32,
     pub last_hidden: [f32; N_HID],
     pub last_out: [f32; N_OUT],
     /// What this agent is broadcasting, and what it last heard from its nearest neighbour.
@@ -215,6 +226,10 @@ pub struct Decision {
     pub heard: [f32; N_SIG],
     pub hidden: [f32; N_HID],
     pub out: [f32; N_OUT],
+    /// What the critic thought this moment was worth, and how likely each action looked.
+    /// Both are only used by the gradient learner; the Hebbian brain ignores them.
+    pub value: f32,
+    pub probs: [f32; N_ACT],
 }
 
 impl Default for Decision {
@@ -237,6 +252,8 @@ impl Default for Decision {
             heard: [0.0; N_SIG],
             hidden: [0.0; N_HID],
             out: [0.0; N_OUT],
+            value: 0.0,
+            probs: [0.0; N_ACT],
         }
     }
 }
