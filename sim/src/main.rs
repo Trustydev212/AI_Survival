@@ -713,21 +713,52 @@ fn evaluate(cfg: &Config, path: &str) {
         })
         .collect();
     let trained: Vec<brain::Genome> = ark.kept.iter().map(|s| s.genome.clone()).collect();
+    // One number per trial, not one per brain. A line either takes hold or dies out, so the
+    // scores are mostly zeros with a few very large numbers among them, and an average over
+    // that shape says more about which trial got lucky than about the brain.
     let score_all = |set: &[brain::Genome]| -> Vec<f32> {
-        set.iter().map(|g| trials.iter().map(|s| score_brain(cfg, g, *s)).sum::<f32>() / trials.len() as f32).collect()
+        let mut v = Vec::new();
+        for g in set {
+            for s in &trials {
+                v.push(score_brain(cfg, g, *s));
+            }
+        }
+        v
     };
     let a = score_all(&random);
     let b = score_all(&trained);
     let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32;
-    let sd = |v: &[f32]| {
-        let m = mean(v);
-        (v.iter().map(|x| (x - m).powi(2)).sum::<f32>() / v.len().max(1) as f32).sqrt()
+    let median = |v: &[f32]| {
+        let mut s = v.to_vec();
+        s.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        match s.len() {
+            0 => 0.0,
+            n if n % 2 == 1 => s[n / 2],
+            n => (s[n / 2 - 1] + s[n / 2]) / 2.0,
+        }
     };
-    println!("brains        trials  mean score  spread");
-    println!("random        {:>6}  {:>10.1}  {:>6.1}", a.len() * trials.len(), mean(&a), sd(&a));
-    println!("from the ark  {:>6}  {:>10.1}  {:>6.1}", b.len() * trials.len(), mean(&b), sd(&b));
-    let lift = if mean(&a).abs() > 0.01 { (mean(&b) - mean(&a)) / mean(&a) * 100.0 } else { 0.0 };
-    println!("\ndifference: {:+.1} ({:+.0}%)", mean(&b) - mean(&a), lift);
+    let alive = |v: &[f32]| v.iter().filter(|x| **x > 0.0).count() as f32 / v.len().max(1) as f32;
+    // How often a brain from the ark outlives a random one, over every pairing of the two sets.
+    // This cannot run away with one lucky trial the way an average can: it only ever asks which
+    // of two lines is larger, so it stays between 0 and 1 however heavy the tail gets.
+    let mut wins = 0.0f64;
+    for x in &a {
+        for y in &b {
+            wins += if y > x {
+                1.0
+            } else if (y - x).abs() < f32::EPSILON {
+                0.5
+            } else {
+                0.0
+            };
+        }
+    }
+    let head_to_head = wins / (a.len() * b.len()).max(1) as f64;
+    println!("brains        trials  lines that lived  median  mean");
+    for (name, v) in [("random", &a), ("from the ark", &b)] {
+        println!("{name:<12}  {:>6}  {:>15.0}%  {:>6.0}  {:>4.0}", v.len(), alive(v) * 100.0, median(v), mean(v));
+    }
+    println!("\nhead to head: an ark brain outlives a random one in {:.0}% of pairings", head_to_head * 100.0);
     println!("A brain is scored by how many people its line leaves behind: twenty copies of it are put");
     println!("into an empty world of their own and counted after {} ticks.", cfg.ticks);
 }
