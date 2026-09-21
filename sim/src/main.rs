@@ -10,6 +10,7 @@ mod render;
 mod region;
 mod rng;
 mod sim;
+mod version;
 mod snapshot;
 mod spatial;
 mod store;
@@ -70,8 +71,8 @@ fn main() {
         return;
     }
     eprintln!(
-        "seed={} agents={} tribes={} map={}x{} ticks={} brain={}-{}-{} ({} weights)",
-        cfg.seed, cfg.agents, cfg.tribes, cfg.width, cfg.height, cfg.ticks,
+        "world=v{} seed={} agents={} tribes={} map={}x{} ticks={} brain={}-{}-{} ({} weights)",
+        version::WORLD, cfg.seed, cfg.agents, cfg.tribes, cfg.width, cfg.height, cfg.ticks,
         brain::N_IN, brain::N_HID, brain::N_OUT, brain::N_WEIGHTS
     );
     let start = Instant::now();
@@ -135,7 +136,9 @@ fn run_one(cfg: Config) -> (Outcome, sim::Sim) {
             let path = format!("{}/frame_{:06}.ppm", cfg.out_dir, t);
             render::write_ppm(&path, &sim.world, &sim.agents, 3).expect("write ppm");
         }
-        if t % cfg.log_every == 0 || sim.agents.is_empty() {
+        // A run shorter than one window used to end in a panic, which made a quick trial of
+        // the sim impossible; the last tick always closes a window now.
+        if t % cfg.log_every == 0 || sim.agents.is_empty() || t == cfg.ticks {
             let window = sim.take_window();
             let m = stats::compute(
                 t, sim.world.season(t), sim.world.climate, &sim.agents, sim.world.total_food(), sim.world.soil_health(),
@@ -284,9 +287,9 @@ fn experiment(cfg: &Config, a: u64, b: u64) {
 
     let path = format!("{}/experiment_{}_{}.csv", cfg.out_dir, a, b);
     let mut f = BufWriter::new(std::fs::File::create(&path).expect("create experiment csv"));
-    writeln!(f, "seed,outcome,ticks,peak_pop,final_pop,innovations,mean_known,soil_health,lived_soil,settled_share,obedience,dominant_order,dominant_custom,breed_rate,swing,final_level,peak_level,greatest_leader,events,plastic,signal_mi,things_per_head,equipped_share,crafts,learn_rate,loudness,hunts,signal_meaning,division_of_labour").unwrap();
+    writeln!(f, "world,seed,outcome,ticks,peak_pop,final_pop,innovations,mean_known,soil_health,lived_soil,settled_share,obedience,dominant_order,dominant_custom,breed_rate,swing,final_level,peak_level,greatest_leader,events,plastic,signal_mi,things_per_head,equipped_share,crafts,learn_rate,loudness,hunts,signal_meaning,division_of_labour").unwrap();
     for o in &outcomes {
-        writeln!(f, "{},{},{},{},{},{},{:.3},{:.4},{:.4},{:.4},{:.4},{},{},{:.4},{:.3},{},{},{},{},{:.4},{:.4},{:.3},{:.3},{},{:.3},{:.3},{},{:.4},{:.3}", o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil, o.lived_soil, o.settled, o.obedience, o.order, o.custom, o.breed_rate, o.swing, o.final_level, o.peak_level, o.top_leader, o.events, o.plastic, o.sig_mi, o.things, o.equipped, o.crafts, o.learn_rate, o.loudness, o.hunts, o.sig_meaning, o.dol).unwrap();
+        writeln!(f, "{},{},{},{},{},{},{},{:.3},{:.4},{:.4},{:.4},{:.4},{},{},{:.4},{:.3},{},{},{},{},{:.4},{:.4},{:.3},{:.3},{},{:.3},{:.3},{},{:.4},{:.3}", version::WORLD, o.seed, o.label, o.ticks, o.peak_pop, o.final_pop, o.innovations, o.mean_known, o.soil, o.lived_soil, o.settled, o.obedience, o.order, o.custom, o.breed_rate, o.swing, o.final_level, o.peak_level, o.top_leader, o.events, o.plastic, o.sig_mi, o.things, o.equipped, o.crafts, o.learn_rate, o.loudness, o.hunts, o.sig_meaning, o.dol).unwrap();
     }
     println!("written to {path}");
 }

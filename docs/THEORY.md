@@ -309,6 +309,30 @@ là chỗ chứa của tôi?
 5. **Có "đêm trường" không?** Sự kiện *lãng quên* ghi lúc kiến thức tụt quá nửa. Bao nhiêu thế giới quên rồi
    tìm lại được, và tìm lại bằng cùng công thức hay công thức khác?
 
+## Thế giới có phiên bản
+
+Mỗi con số trong sổ này là số đo của **một** thế giới, và luật của thế giới ấy đã đổi nhiều lần: biển
+tới, rồi vật liệu và chế tác, rồi nghe được người lạ, rồi trần kiến thức. Mỗi lần như vậy mọi bảng đo
+trước đó chết lặng lẽ, và hơn một phát biểu trong sổ đã phải rút lại **chỉ vì lý do đó**, không vì lý do
+nào khác.
+
+Nên luật giờ mang số phiên bản, trong `sim/src/version.rs`. Sim in nó ra ở dòng đầu mỗi lần chạy
+(`world=v5`), ghi nó vào cột đầu của mọi bảng kết quả, và mỗi báo cáo trong docs/lab ghi rõ nó đo trên
+thế giới nào. Quan trọng nhất: **phòng thí nghiệm từ chối so hai nhánh khác phiên bản** và bảo chạy lại,
+thay vì lặng lẽ lấy trung bình của hai vũ trụ khác nhau.
+
+Đổi hành vi thì tăng số phiên bản trong cùng commit đó, ghi một dòng vào NOTE và HISTORY. Nếu vân tay
+trong `tools/check.py` dịch chuyển mà số phiên bản không dịch theo, bộ kiểm tra sẽ nói thẳng ra. Đó
+đúng là cái nó sinh ra để bắt.
+
+| phiên bản | thế giới |
+|---|---|
+| v1 | biển và thuyền |
+| v2 | vật liệu, chế tác, đồ vật, nơi trú |
+| v3 | tắt bầy thú, nghe được người lạ |
+| v4 | não học bằng gradient, truyền nghề ngang |
+| v5 | 512 phát minh, mỗi thế giới tự đặt tên |
+
 ## Biết mình làm hỏng gì trong 15 giây
 
 Trước khi có mục này, cách duy nhất để biết một thay đổi làm hỏng thứ gì là chạy một thí nghiệm và

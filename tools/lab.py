@@ -79,6 +79,30 @@ def read_arm(name, arm, flags=None, screen=False):
     return rows
 
 
+def worlds_of(rows):
+    """Which version of the rules these worlds were measured under."""
+    return {r.get("world", "?") for r in rows}
+
+
+def check_one_world(name, data):
+    """Refuse to compare arms measured on different worlds.
+
+    The rules have changed several times, and each change quietly invalidated every table
+    measured before it. More than one claim in docs/THEORY.md had to be withdrawn for that
+    reason alone. An arm run before a change and an arm run after it are two different
+    universes, and averaging them together produces a number that describes neither.
+    """
+    seen = {}
+    for arm, rows in data.items():
+        for w in worlds_of(rows):
+            seen.setdefault(w, []).append(arm)
+    if len(seen) <= 1:
+        return next(iter(seen), "?")
+    lines = "; ".join(f"v{w}: {', '.join(sorted(set(a)))}" for w, a in sorted(seen.items()))
+    sys.exit(f"{name}: các nhánh chạy trên hai phiên bản thế giới khác nhau ({lines}).\n"
+             f"Không so được. Chạy lại toàn bộ: python3 tools/lab.py run {name} --seeds <dãy>")
+
+
 def mean(xs):
     xs = [x for x in xs if x == x]
     return sum(xs) / len(xs) if xs else float("nan")
@@ -143,7 +167,9 @@ def report(name, exp):
     arms = list(exp["arms"].keys())
     data = {arm: read_arm(name, arm, exp["arms"][arm]) for arm in arms}
     control = exp.get("control", arms[0])
-    lines = [f"# {exp['title']}", "", exp["question"], ""]
+    world = check_one_world(name, data)
+    lines = [f"# {exp['title']}", "", exp["question"], "",
+             f"_Đo trên thế giới phiên bản **v{world}** (xem sim/src/version.rs). Kết quả đo trên phiên bản khác không so được với bảng này._", ""]
     lines.append("## Cách chạy")
     lines.append("")
     for arm in arms:
@@ -273,6 +299,7 @@ def screen(name, exp, seeds=SCREEN_SEEDS, ticks=SCREEN_TICKS):
         run_arm(name, arm, flags, seeds, ticks, screen=True)
     data = {arm: read_arm(name, arm, exp["arms"][arm], screen=True) for arm in arms}
     control = exp.get("control", arms[0])
+    print(f"   thế giới v{check_one_world(name, data)}")
     print()
     print(f"{'nhánh':<18}{'sống':>7}{'tốt':>7}{'dân đỉnh':>11}{'biết':>9}{'đồ/người':>11}{'phát minh':>11}")
     for arm in arms:

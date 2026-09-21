@@ -55,6 +55,15 @@ def fingerprint(name, flags):
     return h.hexdigest()[:16]
 
 
+def world_version():
+    """The rules version the built sim carries, read straight from its own header."""
+    r = subprocess.run([SIM, "--seed", "1", "--ticks", "1", "--quiet", "--out", WORK], capture_output=True, text=True)
+    for word in (r.stderr + r.stdout).split():
+        if word.startswith("world=v"):
+            return int(word[7:])
+    return 0
+
+
 def main():
     bless = "--bless" in sys.argv
     if not os.path.exists(SIM):
@@ -65,7 +74,12 @@ def main():
         print(r.stdout[-3000:])
         sys.exit("unit tests failed")
     print("  ok")
-    ref = json.load(open(REF)) if os.path.exists(REF) else {}
+    world = world_version()
+    stored = json.load(open(REF)) if os.path.exists(REF) else {}
+    ref = stored.get("fingerprints", {})
+    was_world = stored.get("world")
+    if was_world is not None and was_world != world:
+        print(f"thế giới đã lên v{was_world} -> v{world}: mọi vân tay đổi là điều đương nhiên")
     now = {name: fingerprint(name, flags) for name, flags in CONFIGS.items()}
     moved, broken = [], []
     for name, fp in now.items():
@@ -84,13 +98,18 @@ def main():
     for m in moved:
         print("ĐỔI   ", m)
     if bless:
-        json.dump(now, open(REF, "w"), indent=2, sort_keys=True)
+        json.dump({"world": world, "fingerprints": now}, open(REF, "w"), indent=2, sort_keys=True)
         print("đã ghi lại làm mốc:", os.path.relpath(REF, ROOT))
         return
     if broken:
         sys.exit(1)
     if moved:
-        print("\nCác thế giới trên đã đổi hành vi. Nếu là cố ý: python3 tools/check.py --bless")
+        print("\nCác thế giới trên đã đổi hành vi.")
+        if was_world == world:
+            print(f"Hành vi đổi mà phiên bản thế giới vẫn là v{world}. Tăng WORLD trong sim/src/version.rs,")
+            print("ghi một dòng vào NOTE và HISTORY, rồi: python3 tools/check.py --bless")
+        else:
+            print("Nếu là cố ý: python3 tools/check.py --bless")
         sys.exit(2)
     print("\nKhông có gì đổi.")
 
