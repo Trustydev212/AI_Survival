@@ -153,6 +153,8 @@ pub struct Config {
     /// mutated copy of a single parent, so two families that had each solved half a problem could
     /// never combine the halves, and no family could ever merge with another. This is the largest
     /// single limit on how far these minds can get, larger than the size of the network.
+    /// Judge the brains in an ark against random ones on a world none of them evolved in.
+    pub eval_path: Option<String>,
     pub mates: bool,
     /// How far away a partner may be, in cells.
     pub mate_range: f32,
@@ -341,6 +343,7 @@ impl Default for Config {
             wear: 1.0,
             shelter_warmth: 0.35,
             learn_scale: 1.0,
+            eval_path: None,
             mates: false,
             mate_range: 3.0,
             finds: 0,
@@ -518,6 +521,7 @@ impl Config {
                 "--find-food" => set!(find_food),
                 "--find-radius" => set!(find_radius),
                 "--mate-range" => set!(mate_range),
+                "--eval" => c.eval_path = Some(val.clone()),
                 "--snapshot-window" => set!(snapshot_window),
                 "--load" => c.load_path = Some(val.clone()),
                 "--wrap" => c.wrap = val == "1" || val == "true",
@@ -612,6 +616,7 @@ USAGE: sim [--flag value ...]
   --p-imitate F     per contact-tick chance of copying a richer kin's brain (0.002); 0 disables
   --seed random     pick a world at random; the seed chosen is printed, so it can be replayed
   --bare            no leaders, no orders, no customs: only bodies, actions and calls
+  --eval PATH       score the brains in an ark against random ones on a fresh world
   --mates           children of two parents, crossing their brains, instead of one
   --mate-range F    how far a partner may be (3.0)
   --finds N         N rich spots that cannot be seen from afar (0 = none)

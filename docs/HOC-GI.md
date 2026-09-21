@@ -16,6 +16,35 @@ tại trong `docs/lab/learning-curves.md`:
 Cấu hình đoán giỏi nhất là cấu hình giết sạch thế giới. Đây là sai lầm phổ biến nhất của máy học ứng
 dụng, và ở đây bạn nhìn thấy nó bằng số của chính mình thay vì đọc trong sách.
 
+## 1b. Và đây là phép đo chứng minh model thật sự học được
+
+Câu hỏi nặng nhất với một dự án kiểu này: **cái mạng đó có giỏi lên thật không, hay chỉ là xã hội may
+mắn?** Mọi chỉ số xã hội đều trộn bộ não với đất đai, hàng xóm và vận may. Phép đo đúng phải tách bộ não
+ra khỏi thế giới đã sinh ra nó.
+
+`--eval` làm việc đó: lấy các bộ não trong ark, thả hai mươi bản sao của **từng bộ** vào một thế giới
+mới tinh 64×64 mà không bộ não nào từng sống ở đó, không có dòng họ nào khác, năm lần thử mỗi bộ, rồi
+đếm còn lại bao nhiêu người sau 2.500 tick. Đó là **tập kiểm định tách rời** theo đúng nghĩa thông thường.
+
+```bash
+sim --forever --ticks 30000 --out world/     # huấn luyện
+sim --eval world/ark.bin --ticks 2500        # chấm điểm
+```
+
+| bộ não | điểm trung bình |
+|---|---|
+| ngẫu nhiên, chưa huấn luyện | **9,3** |
+| từ ark, sau 8.000 tick | 72,4 |
+| từ ark, sau 32.000 tick | **331,9** |
+
+Gấp ba mươi lăm lần bộ não ngẫu nhiên, và **điểm tăng theo thời gian huấn luyện**. Đây là đường học của
+tiến hoá thần kinh, đo trên dữ liệu chưa từng thấy. Mạng này học thật.
+
+**Một chỗ phải phân biệt cho đúng.** Con số trên chứng minh **tiến hoá trọng số** hiệu quả. Nó **không**
+chứng minh phần học trong đời (Hebb hay actor-critic) đóng góp thêm; mục 3 dưới đây cho thấy phần đó vẫn
+chưa thắng nổi đường cơ sở ngẫu nhiên. Hai cơ chế khác nhau, hai kết luận khác nhau, và gộp chúng lại là
+sai. Tôi đã từng gộp.
+
 ## 2. Siêu tham số không phải chú thích cuối trang
 
 Cùng một thuật toán, đổi mỗi bước học: 0,01 thì xã hội ngang đối chứng, 0,1 thì mười trên mười sáu thế

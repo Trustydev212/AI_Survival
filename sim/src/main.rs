@@ -68,6 +68,10 @@ fn main() {
     };
     std::fs::create_dir_all(&cfg.out_dir).expect("create out dir");
 
+    if let Some(path) = cfg.eval_path.clone() {
+        evaluate(&cfg, &path);
+        return;
+    }
     if cfg.forever {
         run_forever(cfg);
         return;
@@ -681,4 +685,78 @@ fn deepest_made(sim: &sim::Sim) -> String {
         .max_by_key(|(d, _, _)| *d)
         .map(|(d, name, recipe)| format!("{name} ({d} deep): {recipe}"))
         .unwrap_or_else(|| "nothing made".into())
+}
+
+/// Does a brain from this world actually do better than one drawn at random?
+///
+/// Nothing in the repository answered that. Evolution and within-life learning both ran, and both
+/// were measured by how the societies turned out, which mixes the brain with its luck, its land
+/// and its neighbours. This is the missing measurement: take brains out of the world that made
+/// them, drop copies of each into the *same* fresh world nobody evolved in, and count what they
+/// manage. A held-out test, in the ordinary sense.
+fn evaluate(cfg: &Config, path: &str) {
+    let ark = ark::Ark::load(path);
+    if ark.kept.is_empty() {
+        eprintln!("no brains in {path}");
+        return;
+    }
+    let trials: Vec<u64> = (901..=905).collect();
+    eprintln!(
+        "world=v{} evaluating {} brains from {path} against {} random ones, {} trials each of {} ticks",
+        version::WORLD, ark.kept.len(), ark.kept.len(), trials.len(), cfg.ticks
+    );
+    let mut rng = rng::Rng::new(12345);
+    let random: Vec<brain::Genome> = (0..ark.kept.len())
+        .map(|_| {
+            let marker = [rng.f32(), rng.f32(), rng.f32()];
+            brain::Genome::random(&mut rng, marker)
+        })
+        .collect();
+    let trained: Vec<brain::Genome> = ark.kept.iter().map(|s| s.genome.clone()).collect();
+    let score_all = |set: &[brain::Genome]| -> Vec<f32> {
+        set.iter().map(|g| trials.iter().map(|s| score_brain(cfg, g, *s)).sum::<f32>() / trials.len() as f32).collect()
+    };
+    let a = score_all(&random);
+    let b = score_all(&trained);
+    let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32;
+    let sd = |v: &[f32]| {
+        let m = mean(v);
+        (v.iter().map(|x| (x - m).powi(2)).sum::<f32>() / v.len().max(1) as f32).sqrt()
+    };
+    println!("brains        trials  mean score  spread");
+    println!("random        {:>6}  {:>10.1}  {:>6.1}", a.len() * trials.len(), mean(&a), sd(&a));
+    println!("from the ark  {:>6}  {:>10.1}  {:>6.1}", b.len() * trials.len(), mean(&b), sd(&b));
+    let lift = if mean(&a).abs() > 0.01 { (mean(&b) - mean(&a)) / mean(&a) * 100.0 } else { 0.0 };
+    println!("\ndifference: {:+.1} ({:+.0}%)", mean(&b) - mean(&a), lift);
+    println!("A brain is scored by how many people its line leaves behind: twenty copies of it are put");
+    println!("into an empty world of their own and counted after {} ticks.", cfg.ticks);
+}
+
+/// One brain, one fresh world, one number: how many of its line are alive at the end.
+fn score_brain(cfg: &Config, genome: &brain::Genome, seed: u64) -> f32 {
+    let mut c = cfg.clone();
+    c.seed = seed;
+    c.width = 64;
+    c.height = 64;
+    c.agents = 20;
+    c.tribes = 1;
+    c.quiet = true;
+    c.out_dir = std::env::temp_dir().to_string_lossy().into_owned();
+    c.snapshot_every = 0;
+    c.image_every = 0;
+    let mut sim = sim::Sim::new(c.clone(), events::EventLog::new(None, false));
+    // Everyone in the trial is a copy of the brain being judged, so the score is the brain's and
+    // not its neighbours'. Small differences remain because the world is not still.
+    for a in sim.agents.iter_mut() {
+        let marker = a.genome.marker;
+        a.genome = genome.clone();
+        a.genome.marker = marker;
+    }
+    for _ in 0..cfg.ticks {
+        sim.step();
+        if sim.agents.is_empty() {
+            return 0.0;
+        }
+    }
+    sim.agents.len() as f32
 }

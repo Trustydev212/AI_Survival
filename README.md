@@ -631,6 +631,7 @@ Repo này là nơi quan sát một xã hội thu nhỏ, nên có sẵn cách đ�
 ./target/release/sim --load world.bin --ticks 20000 --save world.bin  # nhặt lên chạy tiếp
 ./tools/programme.sh                          # chạy cả một chương trình dài, không cần trông
 python3 tools/things.py                       # danh mục mọi thứ mọi thế giới từng làm ra
+./target/release/sim --eval world/ark.bin --ticks 2500   # chấm điểm bộ não trên thế giới chưa từng thấy
 python3 tools/learning.py                     # quét siêu tham số, vẽ đường học
 python3 tools/check.py                        # 15 giây: chạy bài kiểm tra, báo thế giới nào đổi hành vi
 python3 tools/check.py --bless                # chấp nhận hành vi hiện tại làm mốc mới
