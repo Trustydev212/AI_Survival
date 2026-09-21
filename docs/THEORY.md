@@ -338,12 +338,33 @@ trước thức ăn 500 tick với r = −0,79** ở hai trên ba thế giới �
 nghìn tick sau thức ăn cạn. Đó là dấu vân tay của một vòng tiêu thụ tài nguyên có độ trễ, thứ luôn sinh
 dao động. Tương quan giữa đất và dân số thì lung tung, từ −0,73 đến 0,00.
 
-**Dự đoán ghi trước.** Nếu thức ăn tạo nhịp thì vặn tốc độ mọc lại phải đổi được dao động: mọc nhanh thì
-tài nguyên đuổi kịp miệng ăn và biên độ giảm; mọc chậm thì vọt lên rồi sập mạnh hơn. Đang chạy
-`tools/lab.py run food --seeds 1-4 --ticks 60000`.
+**Dự đoán ghi trước, và kết quả.** Dự đoán viết ra trước khi chạy: nếu thức ăn tạo nhịp thì vặn tốc độ mọc
+lại phải đổi được dao động, mọc nhanh thì tài nguyên đuổi kịp miệng ăn và biên độ giảm, mọc chậm thì vọt
+lên rồi sập mạnh hơn. `tools/lab.py run food --seeds 1-4 --ticks 60000` (docs/lab/food.md):
 
-**Độ tin.** Phần bác bỏ đất: bốn thế giới mỗi nhánh, hướng nhất quán, coi là dấu hiệu mạnh. Phần chỉ điểm
-thức ăn: mới là tương quan, chưa phải nhân quả; thí nghiệm đang chạy mới là phép thử.
+| nhánh | biên độ dao động | dân đỉnh | đất còn | kiến thức |
+|---|---|---|---|---|
+| mọc gấp đôi (0,16) | **4,32** | 6.677 | 82% | 27,9 |
+| mặc định (0,08) | 9,54 | 2.679 | 95% | 43,8 |
+| mọc một nửa (0,04) | 6,67 | 1.344 | 64% | 54,3 |
+
+**Nửa trước của dự đoán đúng, và đúng ở mức đo được.** Thức ăn mọc nhanh gấp đôi làm biên độ giảm 6,15 với
+khoảng tin cậy 95% [−12,72, −0,46], không chứa 0. Cùng với đó dân số đỉnh tăng gấp hai lần rưỡi và tỉ lệ
+sinh tăng 6,16 [+0,12, +11,94]. Đây là lần đầu trong sổ này một dự đoán định lượng được viết ra trước rồi
+mới đo, và nó đúng.
+
+**Nửa sau thì không kiểm được.** Mọc chậm cho biên độ 6,67, tức là cũng thấp hơn mặc định chứ không cao hơn.
+Nhưng những thế giới ấy chỉ đạt đỉnh 1.344 người: quá nhỏ để lắc mạnh, đúng cái bẫy đã gặp ở nhánh đất mỏng
+manh. Không thể tách "êm vì cân bằng" khỏi "êm vì nghèo" bằng thiết kế này.
+
+**Một điều ngoài dự đoán, đáng theo.** Thế giới thức ăn dồi dào có tiếng gọi **mang nghĩa hơn**: +0,06 bit
+với khoảng tin cậy [0,00, +0,10]. Nhỏ, chạm 0, nhưng đây là lần đầu một can thiệp làm chỉ số nghĩa nhúc
+nhích theo hướng tốt. Giả thuyết: dư dả thì nói được mà không chết đói, vì tiếng gọi tốn năng lượng.
+
+**Độ tin.** Phần bác bỏ đất: bốn thế giới mỗi nhánh, hướng nhất quán, dấu hiệu mạnh. Phần thức ăn tạo nhịp:
+**có bằng chứng** cho chiều mọc nhanh, khoảng tin cậy không chứa 0; chiều mọc chậm còn lẫn với hiệu ứng
+dân số nhỏ. Vòng tiêu thụ tài nguyên là lời giải thích tốt nhất hiện có cho việc xã hội ở đây không tìm
+được cân bằng.
 
 ## Những câu hỏi mở
 
